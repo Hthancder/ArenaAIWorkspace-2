@@ -27,10 +27,10 @@ jobs:
           SDK_REPO="$RUNNER_TEMP/theos-sdks"
           git clone --filter=blob:none --no-checkout https://github.com/theos/sdks.git "$SDK_REPO"
           git -C "$SDK_REPO" sparse-checkout init --cone
-          git -C "$SDK_REPO" sparse-checkout set iPhoneOS15.5.sdk
+          git -C "$SDK_REPO" sparse-checkout set iPhoneOS15.6.sdk
           git -C "$SDK_REPO" checkout
           mkdir -p "$THEOS_DIR/sdks"
-          cp -R "$SDK_REPO/iPhoneOS15.5.sdk" "$THEOS_DIR/sdks/"
+          cp -R "$SDK_REPO/iPhoneOS15.6.sdk" "$THEOS_DIR/sdks/"
           echo "THEOS=$THEOS_DIR" >> "$GITHUB_ENV"
           echo "$THEOS_DIR/bin" >> "$GITHUB_PATH"
 
