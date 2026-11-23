@@ -1,0 +1,29 @@
+name: iOS build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build iOS simulator app
+        run: >-
+          xcodebuild
+          -project AssistantApp.xcodeproj
+          -scheme Assistant
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/AssistantDerivedData"
+          CODE_SIGNING_ALLOWED=NO
+          build
