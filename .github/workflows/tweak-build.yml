@@ -1,0 +1,59 @@
+name: RootHide tweak build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-roothide-tweak:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: brew install ldid xz dpkg
+
+      - name: Set up RootHide Theos and iOS SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          THEOS_DIR="$RUNNER_TEMP/theos"
+          git clone --depth 1 --recurse-submodules https://github.com/roothide/theos.git "$THEOS_DIR"
+          SDK_REPO="$RUNNER_TEMP/theos-sdks"
+          git clone --filter=blob:none --no-checkout https://github.com/theos/sdks.git "$SDK_REPO"
+          git -C "$SDK_REPO" sparse-checkout init --cone
+          git -C "$SDK_REPO" sparse-checkout set iPhoneOS15.5.sdk
+          git -C "$SDK_REPO" checkout
+          mkdir -p "$THEOS_DIR/sdks"
+          cp -R "$SDK_REPO/iPhoneOS15.5.sdk" "$THEOS_DIR/sdks/"
+          echo "THEOS=$THEOS_DIR" >> "$GITHUB_ENV"
+          echo "$THEOS_DIR/bin" >> "$GITHUB_PATH"
+
+      - name: Build RootHide package for arm64 device
+        run: make -C Tweak clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide ARCHS=arm64
+
+      - name: Verify package contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEB=$(find Tweak/packages -maxdepth 1 -name '*.deb' -print -quit)
+          test -n "$DEB"
+          dpkg-deb --info "$DEB"
+          dpkg-deb --contents "$DEB"
+          mkdir -p "$RUNNER_TEMP/deb-check"
+          dpkg-deb -x "$DEB" "$RUNNER_TEMP/deb-check"
+          test -f "$RUNNER_TEMP/deb-check/Library/MobileSubstrate/DynamicLibraries/ArenaSiriBridge.dylib"
+          test -f "$RUNNER_TEMP/deb-check/Library/MobileSubstrate/DynamicLibraries/ArenaSiriBridge.plist"
+
+      - name: Upload installable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: arena-siri-bridge-roothide-arm64
+          path: Tweak/packages/*.deb
+          if-no-files-found: error
+          retention-days: 7

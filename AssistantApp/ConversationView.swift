@@ -95,6 +95,10 @@ struct ConversationView: View {
             .sheet(isPresented: $showingSettings) { SettingsView().environmentObject(store) }
         }
         .navigationViewStyle(StackNavigationViewStyle())
+        .onOpenURL { url in
+            guard url.scheme == "arenaassistant", url.host == "activate" else { return }
+            store.startListening()
+        }
     }
 }
 

@@ -1,0 +1,9 @@
+Package: com.arena.siribridge
+Name: Arena Siri Bridge
+Version: 0.1.0
+Architecture: iphoneos-arm64e
+Description: Routes SpringBoard assistant activation to the Arena Assistant app.
+Maintainer: Arena AI
+Author: Arena AI
+Section: Tweaks
+Depends: mobilesubstrate, firmware (>= 15.0)

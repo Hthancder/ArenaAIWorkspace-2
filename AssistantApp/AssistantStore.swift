@@ -63,9 +63,15 @@ final class AssistantStore: ObservableObject {
         if isListening {
             speech.stop()
         } else {
-            transcript = ""
-            speech.start(localeIdentifier: Locale.current.identifier.replacingOccurrences(of: "_", with: "-"))
+            startListening()
         }
+    }
+
+    func startListening() {
+        guard !isListening else { return }
+        transcript = ""
+        status = "Starting speech recognition…"
+        speech.start(localeIdentifier: Locale.current.identifier.replacingOccurrences(of: "_", with: "-"))
     }
 
     func sendDraft() {

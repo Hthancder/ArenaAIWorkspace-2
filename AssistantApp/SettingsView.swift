@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var apiKey = ""
     @State private var notice = ""
     @State private var isKeyVisible = false
+    @AppStorage("replaceSystemAssistant") private var replaceSystemAssistant = true
 
     var body: some View {
         NavigationView {
@@ -36,6 +37,10 @@ struct SettingsView: View {
                     }
                     Button("Save API key") { saveKey() }
                     Button("Delete saved API key", role: .destructive) { deleteKey() }
+                }
+
+                Section(header: Text("Siri integration"), footer: Text("When the bridge tweak is installed and its SpringBoard hook is available, assistant activation opens this app and starts voice input.")) {
+                    Toggle("Redirect Siri activation", isOn: $replaceSystemAssistant)
                 }
 
                 Section {
