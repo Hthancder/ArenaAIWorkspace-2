@@ -9,21 +9,6 @@ permissions:
   contents: read
 
 jobs:
-  build-simulator:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build iOS simulator app
-        run: >-
-          xcodebuild
-          -project AssistantApp.xcodeproj
-          -scheme Assistant
-          -sdk iphonesimulator
-          -destination 'generic/platform=iOS Simulator'
-          -derivedDataPath "$RUNNER_TEMP/AssistantSimulator"
-          CODE_SIGNING_ALLOWED=NO
-          build
-
   build-device-ipa:
     runs-on: macos-latest
     timeout-minutes: 20
