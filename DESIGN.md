@@ -150,3 +150,7 @@ Web search, calendar/contact/call tools, pasteboard, Shortcuts, multi-provider s
 ### Target now confirmed
 
 The user has confirmed the exact target OS as **iOS 15.8.3** on iPhone 7 Plus. Do not ask again for the iOS minor/build or installed RootHide app version. This is A10/arm64. The official RootHide Dopamine repo's 3.x branch tracks current Dopamine 3; its release history adds A9–A10 support on iOS 15.8.7 in a specific release. The available official README does not state whether the same A10 path covers 15.8.3. Treat jailbreak compatibility for this exact combo as **not yet proven**, not automatically unsupported; confirm against the source/release matrix or device. The design's next work is now implementation planning/core coding, not further user questionnaires.
+
+## Implementation packaging update
+
+User requested the companion app and SpringBoard tweak be installed together. The current RootHide CI package now stages the iPhoneOS-built `ArenaAssistant.app` under `Applications/` in the same `.deb` as `ArenaSiriBridge.dylib`, then validates both payloads and uploads one package artifact. App Settings are in the app's gear screen; no separate PreferenceLoader pane is included. The app is the feature-bearing process (permission UX, STT and chat); the tweak is only the activation redirect. TTS is not implemented. The combined package build must be checked in GitHub Actions before it is presented as a passing artifact.

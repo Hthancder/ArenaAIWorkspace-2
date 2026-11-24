@@ -1,4 +1,4 @@
-name: RootHide tweak build
+name: RootHide assistant package
 
 on:
   push:
@@ -9,14 +9,36 @@ permissions:
   contents: read
 
 jobs:
-  build-roothide-tweak:
+  build-combined-package:
     runs-on: macos-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Install build tools
         run: brew install ldid xz dpkg
+
+      - name: Build companion app for iPhone
+        run: >-
+          xcodebuild
+          -project AssistantApp.xcodeproj
+          -scheme Assistant
+          -configuration Release
+          -sdk iphoneos
+          -destination 'generic/platform=iOS'
+          -derivedDataPath "$RUNNER_TEMP/AssistantDevice"
+          CODE_SIGNING_ALLOWED=NO
+          build
+
+      - name: Ad-hoc sign and stage app inside package
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/AssistantDevice/Build/Products/Release-iphoneos/Assistant.app"
+          test -d "$APP"
+          codesign --force --deep --sign - "$APP"
+          mkdir -p Tweak/layout/Applications/ArenaAssistant.app
+          ditto "$APP" Tweak/layout/Applications/ArenaAssistant.app
 
       - name: Set up RootHide Theos and iOS SDK
         shell: bash
@@ -34,26 +56,28 @@ jobs:
           echo "THEOS=$THEOS_DIR" >> "$GITHUB_ENV"
           echo "$THEOS_DIR/bin" >> "$GITHUB_PATH"
 
-      - name: Build RootHide package for arm64 device
+      - name: Build combined RootHide deb for arm64 device
         run: make -C Tweak clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide ARCHS=arm64
 
-      - name: Verify package contents
+      - name: Verify package contains tweak and app
         shell: bash
         run: |
           set -euo pipefail
           DEB=$(find Tweak/packages -maxdepth 1 -name '*.deb' -print -quit)
           test -n "$DEB"
           dpkg-deb --info "$DEB"
-          dpkg-deb --contents "$DEB"
           mkdir -p "$RUNNER_TEMP/deb-check"
           dpkg-deb -x "$DEB" "$RUNNER_TEMP/deb-check"
           test -f "$RUNNER_TEMP/deb-check/Library/MobileSubstrate/DynamicLibraries/ArenaSiriBridge.dylib"
           test -f "$RUNNER_TEMP/deb-check/Library/MobileSubstrate/DynamicLibraries/ArenaSiriBridge.plist"
+          test -f "$RUNNER_TEMP/deb-check/Applications/ArenaAssistant.app/Info.plist"
+          test -f "$RUNNER_TEMP/deb-check/Applications/ArenaAssistant.app/Assistant"
+          echo "Combined package verified: SpringBoard bridge + companion app" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload installable package
+      - name: Upload single combined installable package
         uses: actions/upload-artifact@v4
         with:
-          name: arena-siri-bridge-roothide-arm64
+          name: arena-assistant-roothide-combined-arm64
           path: Tweak/packages/*.deb
           if-no-files-found: error
           retention-days: 7

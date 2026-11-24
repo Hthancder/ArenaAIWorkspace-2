@@ -1,19 +1,17 @@
-# Assistant app core
+# Arena Assistant app
 
-Companion-app implementation for iOS 15.0+, with on-demand Speech framework transcription, editable transcript/chat composer, OpenAI Chat Completions-compatible streaming, and Keychain API-key storage. This app does not yet replace Siri or provide spoken TTS; the system activation tweak and Siri-voice feasibility are separate gates.
+Companion app included in the combined RootHide package. It provides on-demand Speech framework transcription, editable transcript/chat composer, OpenAI Chat Completions-compatible streaming, Keychain API-key storage and an in-app Settings screen (gear button). Its Settings include a `Redirect Siri activation` switch read by the SpringBoard bridge tweak; there is no separate PreferenceLoader page in Settings.app.
 
-## Open/build
+## Build/package
 
-Open `AssistantApp.xcodeproj` in Xcode 14 or newer and run the `Assistant` scheme on a physical iPhone. The app requires microphone and Speech permissions. First launch, enter an HTTPS endpoint, model and API key in Settings. The default endpoint/model are OpenAI Chat Completions-compatible; a provider must support streaming responses with `data:` SSE records and the `choices[].delta.content` shape.
+The combined package workflow is `.github/workflows/tweak-build.yml`. It builds the iPhoneOS app, ad-hoc signs it for jailbroken-device use, stages it with the SpringBoard bridge, builds one RootHide `.deb`, verifies both payloads, and uploads a single artifact. It does not put build products in Git. Xcode can also open `AssistantApp.xcodeproj` for local app development.
 
-GitHub Actions workflow `.github/workflows/ios-build.yml` builds both a simulator target and an iPhoneOS device target. The device build is packaged as an **unsigned IPA** artifact (`arena-assistant-unsigned-ipa`) for sideloading/signing; the workflow does not commit build output into the repository. Unsigned IPA is not an App Store install package and requires a compatible sideload/install method. Build success does not prove microphone behavior on iPhone, jailbreak injection, or Siri voice.
+The companion app's purpose is to own microphone/Speech permissions, audio capture, transcription, chat UI, provider settings, API key management and the URL activation handoff. The SpringBoard dylib is deliberately a small redirect shim; it does not do speech recognition or network work.
 
-For Vietnamese, the recognizer uses the device's current locale. Check `SFSpeechRecognizer.supportedLocales()` and actual recognizer availability on the target. Current implementation does not force on-device recognition because locale/device support varies; the UI warns that recognized text is sent to the configured provider when submitted.
+## Runtime behavior and limitations
 
-## Current limitations
-
-- Not compiled or device-tested in this environment (no Xcode/iOS SDK is installed here).
-- Uses the OpenAI Chat Completions streaming wire format; Anthropic/Gemini need separate adapters.
-- No conversation persistence, tools, TTS, Siri activation interception, cross-app overlay or managed backend.
-- Uses bearer-key auth; some custom endpoints need another auth scheme.
-- Error responses are surfaced in the conversation; do not paste production secrets into logs/issues.
+- First launch, enter an HTTPS endpoint, model and API key. The default is OpenAI Chat Completions-compatible; custom providers must support the SSE `choices[].delta.content` shape.
+- For Vietnamese, Speech uses the device's current locale. Actual locale support and availability must be checked on-device. This build doesn't force on-device recognition; recognized text is sent to the configured provider after submission.
+- Chat history is in memory only. This first build has no model tools, spoken TTS, web search, managed backend or cross-app overlay.
+- The activation hook is a private SpringBoard selector guarded at runtime. CI confirms build/package contents only, not that the selector is reached or that recording/permissions work on a physical iPhone 7 Plus.
+- The Siri-voice TTS request is not implemented yet; this app currently returns text responses.
