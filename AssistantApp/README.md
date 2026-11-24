@@ -6,7 +6,7 @@ Companion-app implementation for iOS 15.0+, with on-demand Speech framework tran
 
 Open `AssistantApp.xcodeproj` in Xcode 14 or newer and run the `Assistant` scheme on a physical iPhone. The app requires microphone and Speech permissions. First launch, enter an HTTPS endpoint, model and API key in Settings. The default endpoint/model are OpenAI Chat Completions-compatible; a provider must support streaming responses with `data:` SSE records and the `choices[].delta.content` shape.
 
-GitHub Actions workflow `.github/workflows/ios-build.yml` builds the app for the generic iOS Simulator with code signing disabled. It stores DerivedData only in the ephemeral runner temp directory and uploads no build artifacts. This checks compilation, not microphone behavior on iPhone, jailbreak injection, or the Siri voice.
+GitHub Actions workflow `.github/workflows/ios-build.yml` builds both a simulator target and an iPhoneOS device target. The device build is packaged as an **unsigned IPA** artifact (`arena-assistant-unsigned-ipa`) for sideloading/signing; the workflow does not commit build output into the repository. Unsigned IPA is not an App Store install package and requires a compatible sideload/install method. Build success does not prove microphone behavior on iPhone, jailbreak injection, or Siri voice.
 
 For Vietnamese, the recognizer uses the device's current locale. Check `SFSpeechRecognizer.supportedLocales()` and actual recognizer availability on the target. Current implementation does not force on-device recognition because locale/device support varies; the UI warns that recognized text is sent to the configured provider when submitted.
 
