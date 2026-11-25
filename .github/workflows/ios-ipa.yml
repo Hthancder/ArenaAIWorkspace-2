@@ -22,6 +22,12 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Select newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | grep -v -i beta | sort -V | tail -n 1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          echo "::notice title=Xcode::$(xcodebuild -version | tr '\n' ' ') ($XCODE)"
+
       - name: Install npm dependencies
         run: npm ci
 
@@ -40,6 +46,7 @@ jobs:
       - name: Compile Unsigned Release iOS App
         working-directory: ios
         run: |
+          set -o pipefail
           WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
           SCHEME="${WORKSPACE%.xcworkspace}"
           xcodebuild \
@@ -47,11 +54,28 @@ jobs:
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build 2>&1 | tee xcodebuild.log | grep -E "error:|warning: .*deprecated|BUILD (SUCCEEDED|FAILED)" || true
+          if ! grep -q "BUILD SUCCEEDED" xcodebuild.log; then
+            grep -E "error:|fatal error|Error:" xcodebuild.log | sort -u | head -25 | while IFS= read -r line; do
+              echo "::error title=xcodebuild::${line:0:900}"
+            done
+            tail -40 xcodebuild.log | while IFS= read -r line; do echo "::warning title=xcodebuild tail::${line:0:500}"; done
+            exit 1
+          fi
+
+      - name: Upload xcodebuild log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: ios/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Package MochyMusic-iOS.ipa
         run: |
