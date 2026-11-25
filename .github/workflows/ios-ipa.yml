@@ -3,6 +3,8 @@ name: Build iOS IPA (Unsigned for AltStore / SideStore / TrollStore)
 on:
   workflow_dispatch:
   push:
+    branches:
+      - 'arena/af5aae1b-arenaaiworkspace-2'
     tags:
       - 'v*'
 
