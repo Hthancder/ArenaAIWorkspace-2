@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "Mochy Music",
+    "slug": "mochy-music-ios",
+    "version": "1.0.0-beta.1",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "mochymusic",
+    "newArchEnabled": true,
+    "backgroundColor": "#000000",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0B0F"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mochyy.mochymusic.ios",
+      "buildNumber": "1",
+      "userInterfaceStyle": "dark",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio",
+          "fetch"
+        ],
+        "UIStatusBarStyle": "UIStatusBarStyleLightContent",
+        "UIViewControllerBasedStatusBarAppearance": true,
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
+        "NSMicrophoneUsageDescription": "Mochy Music only requests audio access when optional visualizer sampling is enabled."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#141417"
+      },
+      "package": "com.mochyy.mochymusic.rn"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "name": "Mochy Music",
+      "shortName": "Mochy",
+      "backgroundColor": "#000000",
+      "themeColor": "#000000",
+      "display": "standalone",
+      "orientation": "portrait"
+    },
+    "plugins": [
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true,
+          "microphonePermission": "Allow Mochy Music to analyze audio for optional visualizers."
+        }
+      ]
+    ]
+  }
+}

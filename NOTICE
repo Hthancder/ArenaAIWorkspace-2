@@ -1,0 +1,23 @@
+# NOTICE & CREDITS — Mochy Music (iOS Port)
+
+This project is an iOS / React Native (Expo) port built directly from **Mochy Music** by **realidkroo**:
+- Original Repository: https://github.com/realidkroo/Mochy-Music
+- License: GNU General Public License v3.0 (GPL-3.0) — free & open source forever, zero paywalls, zero ads, zero telemetry.
+
+## Upstream Projects & Open-Source Attributions
+
+Mochy Music stands on the shoulders of these open-source projects and services:
+
+- **Mochy Music** by [realidkroo](https://github.com/realidkroo) — https://github.com/realidkroo/Mochy-Music (Original Android app, design language, player presets, Audio Lab, Monochrome & JioSaavn modules, and Mochy mark)
+- **ViviMusic** by [vivizzz007Z](https://github.com/vivizzz007/vivi-music) — Base app from which Mochy Music was forked
+- **Metrolist** by [Mostafa Alagamy](https://github.com/mostafaalagamy/Metrolist) — Base framework
+- **SimpMusic** by [maxrave-dev](https://github.com/maxrave-dev/SimpMusic) — Lyrics API provider
+- **ArchiveTune** by [Rukamori](https://github.com/rukamori/ArchiveTune) — Design & architectural inspiration
+- **RiMusic / InnerTube** by [fast4x](https://github.com/fast4x/RiMusic) — YouTube Music InnerTube API service wrapper
+- **InnertubeX** by [nyxiereal](https://github.com/metrolistGroup/innertubex) — YouTube stream extraction library
+- **LRCLib** by [tranxuanthang](https://github.com/tranxuanthang/lrclib) (https://lrclib.net/) — Synchronized LRC lyrics provider
+- **Monochrome Music** by [monochrome-music](https://github.com/monochrome-music/monochrome) (https://monochrome.st) — Lossless FLAC stream ecosystem
+- **AutoEq** (https://autoeq.app) — Headphone equalizer preset database
+- **lrc.red** (https://lrc.red) — Word-timed lyrics
+- **LyricsPlus / YouLyPlus** by [Ibra Al Tabian](https://github.com/ibratabian17/LyricsPlus) — Word/syllable-timed lyrics API
+- **Better Lyrics API** by [Boidushya](https://github.com/better-lyrics/api) & **Unison Lyrics** (https://github.com/better-lyrics/unison) — TTML & syllable lyrics

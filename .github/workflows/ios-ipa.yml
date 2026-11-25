@@ -1,0 +1,67 @@
+name: Build iOS IPA (Unsigned for AltStore / SideStore / TrollStore)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-ios-ipa:
+    name: Build Mochy Music iOS (.ipa)
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Typecheck TypeScript
+        run: npm run typecheck
+
+      - name: Generate native iOS Xcode project (Expo Prebuild)
+        env:
+          CI: '1'
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Install CocoaPods
+        working-directory: ios
+        run: pod install
+
+      - name: Compile Unsigned Release iOS App
+        working-directory: ios
+        run: |
+          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package MochyMusic-iOS.ipa
+        run: |
+          mkdir -p Payload
+          APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
+          cp -R "$APP_PATH" Payload/
+          zip -qry MochyMusic-iOS-Unsigned.ipa Payload
+          ls -lh MochyMusic-iOS-Unsigned.ipa
+
+      - name: Upload MochyMusic-iOS-Unsigned.ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MochyMusic-iOS-Unsigned-IPA
+          path: MochyMusic-iOS-Unsigned.ipa
+          retention-days: 30
