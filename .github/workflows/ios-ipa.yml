@@ -11,7 +11,7 @@ on:
 jobs:
   build-ios-ipa:
     name: Build Mochy Music iOS (.ipa)
-    runs-on: macos-15
+    runs-on: xcode-27
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
