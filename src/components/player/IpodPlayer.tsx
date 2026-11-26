@@ -2,7 +2,14 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { ArtworkImage } from '../ArtworkImage';
 import { IpodTheme } from '../../constants/preferences';
 import { useMochy } from '../../context/MochyContext';
 import { formatTimeSec } from '../MochyIcons';
@@ -168,7 +175,7 @@ export const IpodClassicView: React.FC = () => {
           ) : (
             <View style={styles.lcdBody}>
               <View style={styles.lcdMainRow}>
-                <Image
+                <ArtworkImage
                   source={{ uri: currentTrack.artworkUrl }}
                   style={styles.lcdArt}
                 />

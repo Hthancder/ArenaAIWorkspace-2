@@ -24,11 +24,15 @@ async function fetchTimeout(url: string, init: RequestInit = {}, timeoutMs = 450
  * Direct YouTube InnerTube iOS / visionOS player extraction on Native iOS devices
  * (ported from YouTubeClient.IPADOS & YouTubeClient.VISIONOS in realidkroo/Mochy-Music)
  */
-async function extractInnerTubeIosStream(videoId: string): Promise<{
+export interface InnerTubeStreamCandidate {
   url: string;
   qualityLabel: string;
   codec: string;
-} | null> {
+  headers?: Record<string, string>;
+}
+
+async function extractInnerTubeIosStreams(videoId: string): Promise<InnerTubeStreamCandidate[]> {
+  const out: InnerTubeStreamCandidate[] = [];
   const clients = [
     {
       clientName: 'IOS',
@@ -85,33 +89,42 @@ async function extractInnerTubeIosStream(videoId: string): Promise<{
 
       if (!res.ok) continue;
       const data = await res.json();
+      const status = data?.playabilityStatus?.status;
+      if (status && status !== 'OK') continue;
+
+      // googlevideo validates the User-Agent of the client that requested the stream,
+      // so AVPlayer must send the same UA (forwarded through AVURLAssetHTTPHeaderFieldsKey).
+      const headers = { 'User-Agent': c.userAgent };
       const adaptive: any[] = data?.streamingData?.adaptiveFormats || [];
-      // Prefer audio/mp4 (AAC M4A itag 140/141) because iOS AVPlayer decodes M4A natively in hardware
+      // Prefer audio/mp4 (AAC M4A itag 140/141) — AVPlayer decodes it natively in hardware
       const mp4Audios = adaptive
         .filter((f) => String(f?.mimeType || '').startsWith('audio/mp4') && f?.url)
         .sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
 
       if (mp4Audios[0]?.url) {
         const kbps = Math.round((Number(mp4Audios[0].bitrate) || 130000) / 1000);
-        return {
+        out.push({
           url: mp4Audios[0].url,
           qualityLabel: `AAC ${kbps} kbps · InnerTube ${c.clientName}`,
           codec: 'AAC',
-        };
+          headers,
+        });
       }
 
       if (data?.streamingData?.hlsManifestUrl) {
-        return {
+        out.push({
           url: data.streamingData.hlsManifestUrl,
-          qualityLabel: `HLS Audio · InnerTube ${c.clientName}`,
+          qualityLabel: `HLS · InnerTube ${c.clientName}`,
           codec: 'HLS/AAC',
-        };
+          headers,
+        });
       }
+      if (out.length > 0) return out;
     } catch {
       // try next client
     }
   }
-  return null;
+  return out;
 }
 
 export async function searchInnerTubeTracks(query: string, limit = 12): Promise<Track[]> {
@@ -231,7 +244,7 @@ export async function searchInnerTubeTracks(query: string, limit = 12): Promise<
 export async function resolveInnerTubeStream(
   query: TrackQueryInput,
   onStep: (step: DiagnosticStep) => void
-): Promise<{ url: string; qualityLabel: string; codec: string } | null> {
+): Promise<InnerTubeStreamCandidate[]> {
   const t0 = Date.now();
   let targetVideoId = query.videoId;
 
@@ -257,25 +270,26 @@ export async function resolveInnerTubeStream(
       detail: Platform.OS === 'web' ? 'Skipped on browser CORS' : 'No matching videoId',
       latencyMs: Date.now() - t0,
     });
-    return null;
+    return [];
   }
 
+  const candidates: InnerTubeStreamCandidate[] = [];
   if (Platform.OS !== 'web') {
-    const nativeStream = await extractInnerTubeIosStream(targetVideoId);
-    if (nativeStream) {
+    const nativeStreams = await extractInnerTubeIosStreams(targetVideoId);
+    if (nativeStreams.length > 0) {
       onStep({
         module: 'InnerTube',
         step: 'iOS/visionOS Player stream',
         ok: true,
-        detail: nativeStream.qualityLabel,
+        detail: nativeStreams.map((n) => n.codec).join(' + '),
         latencyMs: Date.now() - t0,
       });
-      return nativeStream;
+      candidates.push(...nativeStreams);
     }
   }
 
-  // Try Piped stream endpoint (works on Web & iOS when instance is online)
-  for (const base of PIPED_INSTANCES) {
+  // Piped stream endpoint (Web, or iOS when direct InnerTube extraction returned nothing)
+  for (const base of candidates.length > 0 ? [] : PIPED_INSTANCES) {
     try {
       const res = await fetchTimeout(`${base}/streams/${targetVideoId}`, {}, 3600);
       if (!res.ok) continue;
@@ -284,7 +298,8 @@ export async function resolveInnerTubeStream(
       const m4a = audioStreams
         .filter((s) => String(s?.mimeType || '').includes('mp4') && s?.url)
         .sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
-      const picked = m4a[0] || audioStreams[0];
+      // AVPlayer cannot decode WebM/Opus, so only accept M4A on native iOS
+      const picked = m4a[0] || (Platform.OS === 'web' ? audioStreams[0] : undefined);
       if (picked?.url) {
         const kbps = Math.round((Number(picked.bitrate) || 128000) / 1000);
         onStep({
@@ -294,23 +309,26 @@ export async function resolveInnerTubeStream(
           detail: `AAC ${kbps} kbps`,
           latencyMs: Date.now() - t0,
         });
-        return {
+        candidates.push({
           url: picked.url,
-          qualityLabel: `AAC ${kbps} kbps · InnerTube`,
+          qualityLabel: `AAC ${kbps} kbps · Piped`,
           codec: 'AAC',
-        };
+        });
+        break;
       }
     } catch {
       // next instance
     }
   }
 
-  onStep({
-    module: 'InnerTube',
-    step: 'Stream extraction',
-    ok: false,
-    detail: 'All InnerTube/Piped relays unavailable',
-    latencyMs: Date.now() - t0,
-  });
-  return null;
+  if (candidates.length === 0) {
+    onStep({
+      module: 'InnerTube',
+      step: 'Stream extraction',
+      ok: false,
+      detail: 'All InnerTube/Piped relays unavailable',
+      latencyMs: Date.now() - t0,
+    });
+  }
+  return candidates;
 }

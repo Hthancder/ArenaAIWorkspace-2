@@ -115,7 +115,8 @@ export const StorageService = {
   downloadTrackFile: async (
     track: Track,
     streamUrl: string,
-    qualityLabel: string
+    qualityLabel: string,
+    headers?: Record<string, string>
   ): Promise<DownloadedTrackMeta> => {
     const safeId = track.id.replace(/[^a-zA-Z0-9_-]/g, '_');
 
@@ -126,7 +127,10 @@ export const StorageService = {
       }
       const ext = qualityLabel.toLowerCase().includes('flac') ? 'flac' : 'm4a';
       const targetFile = new File(offlineDir, `${safeId}.${ext}`);
-      const downloaded = await File.downloadFileAsync(streamUrl, targetFile, { idempotent: true });
+      const downloaded = await File.downloadFileAsync(streamUrl, targetFile, {
+        idempotent: true,
+        ...(headers ? { headers } : {}),
+      });
       return {
         track,
         localUri: downloaded.uri,

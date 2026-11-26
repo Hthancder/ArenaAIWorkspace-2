@@ -4,12 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { ArtworkImage } from './ArtworkImage';
 import { MOCHY_COLORS, resolveFontFamily } from '../constants/theme';
 import { useMochy } from '../context/MochyContext';
 import { GlassSurface } from './GlassSurface';
@@ -54,7 +54,7 @@ export const MiniPlayer: React.FC = () => {
         style={[styles.card, { borderColor: palette.accent + '2E' }]}
       >
         <View style={styles.row}>
-          <Image source={{ uri: currentTrack.artworkUrl }} style={styles.cover} />
+          <ArtworkImage source={{ uri: currentTrack.artworkUrl }} style={styles.cover} />
 
           <View style={styles.meta}>
             <Text numberOfLines={1} style={[styles.title, { fontFamily }]}>

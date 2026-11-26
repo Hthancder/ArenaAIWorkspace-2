@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import React, { useState } from 'react';
 import {
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -13,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { ArtworkImage } from './ArtworkImage';
 import { MOCHY_COLORS } from '../constants/theme';
 import { useMochy } from '../context/MochyContext';
 import { GlassSurface } from './GlassSurface';
@@ -65,7 +65,7 @@ export const TrackActionSheet: React.FC = () => {
 
             {/* Header */}
             <View style={styles.header}>
-              <Image source={{ uri: actionTrack.artworkUrl }} style={styles.art} />
+              <ArtworkImage source={{ uri: actionTrack.artworkUrl }} style={styles.art} />
               <View style={{ flex: 1 }}>
                 <Text numberOfLines={1} style={styles.title}>
                   {actionTrack.title}

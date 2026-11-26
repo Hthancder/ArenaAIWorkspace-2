@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useMemo, useState } from 'react';
 import {
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -12,6 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { ArtworkImage } from '../ArtworkImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MOCHY_COLORS } from '../../constants/theme';
 import { useMochy } from '../../context/MochyContext';
@@ -191,7 +191,7 @@ export const RecapModal: React.FC = () => {
             stats.topSongs.map((s, idx) => (
               <View key={idx} style={styles.rankRow}>
                 <Text style={[styles.rankNum, { color: palette.accent }]}>#{idx + 1}</Text>
-                <Image source={{ uri: s.art }} style={styles.rankArt} />
+                <ArtworkImage source={{ uri: s.art }} style={styles.rankArt} />
                 <View style={{ flex: 1 }}>
                   <Text numberOfLines={1} style={styles.rankTitle}>
                     {s.title}
@@ -216,7 +216,7 @@ export const RecapModal: React.FC = () => {
                   <Text style={[styles.rankNum, { color: palette.accent }]}>
                     #{idx + 1}
                   </Text>
-                  <Image source={{ uri: info.art }} style={[styles.rankArt, { borderRadius: 22 }]} />
+                  <ArtworkImage source={{ uri: info.art }} style={[styles.rankArt, { borderRadius: 22 }]} />
                   <Text style={[styles.rankTitle, { flex: 1 }]}>{artistName}</Text>
                   <Text style={styles.rankCount}>{info.count} plays</Text>
                 </View>

@@ -2,7 +2,13 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { ArtworkImage } from './ArtworkImage';
 import { MOCHY_COLORS, resolveFontFamily } from '../constants/theme';
 import { useMochy } from '../context/MochyContext';
 import { Track } from '../types/music';
@@ -73,7 +79,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
       )}
 
       <View style={styles.artWrap}>
-        <Image source={{ uri: track.artworkUrl }} style={styles.art} />
+        <ArtworkImage source={{ uri: track.artworkUrl }} style={styles.art} />
         {active && (
           <View style={styles.playingOverlay}>
             <Ionicons

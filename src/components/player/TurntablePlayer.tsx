@@ -1,7 +1,14 @@
 // Mochy Turntable Player Look — Spinning Vinyl LP Record + Pivoted Tonearm Seek Indicator
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { ArtworkImage } from '../ArtworkImage';
 import { useMochy } from '../../context/MochyContext';
 
 export const TurntableVinylStage: React.FC = () => {
@@ -56,7 +63,7 @@ export const TurntableVinylStage: React.FC = () => {
 
           {/* Center Artwork Label */}
           <View style={[styles.centerLabel, { borderColor: palette.accent }]}>
-            <Image source={{ uri: currentTrack.artworkUrl }} style={styles.labelArt} />
+            <ArtworkImage source={{ uri: currentTrack.artworkUrl }} style={styles.labelArt} />
             <View style={styles.spindleHole} />
           </View>
         </Animated.View>

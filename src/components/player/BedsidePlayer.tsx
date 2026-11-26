@@ -3,7 +3,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useKeepAwake } from 'expo-keep-awake';
 import React, { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { ArtworkImage } from '../ArtworkImage';
 import { BedsideClockFace, BedsideNightTint } from '../../constants/preferences';
 import { useMochy } from '../../context/MochyContext';
 
@@ -87,7 +93,7 @@ export const BedsideClockView: React.FC = () => {
       {/* Quiet Music Tile */}
       <View style={[styles.musicTile, { borderColor: tintColor + '28' }]}>
         <View style={styles.musicHeader}>
-          <Image source={{ uri: currentTrack.artworkUrl }} style={styles.miniArt} />
+          <ArtworkImage source={{ uri: currentTrack.artworkUrl }} style={styles.miniArt} />
           <View style={{ flex: 1 }}>
             <Text numberOfLines={1} style={[styles.songTitle, { color: tintColor }]}>
               {currentTrack.title}

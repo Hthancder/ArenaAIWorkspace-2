@@ -5,13 +5,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
 import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useMochy } from '../../context/MochyContext';
@@ -246,7 +246,7 @@ export const HomeScreen: React.FC = () => {
                 }
                 style={styles.squareCard}
               >
-                <Image
+                <ArtworkImage
                   source={{ uri: ev.track.artworkUrl }}
                   style={styles.squareArt}
                 />
@@ -281,7 +281,7 @@ export const HomeScreen: React.FC = () => {
                 onPress={() => openCollection({ kind: 'album', id: alb.id, summary: alb })}
                 style={styles.squareCard}
               >
-                <Image source={{ uri: alb.artworkUrl }} style={styles.squareArt} />
+                <ArtworkImage source={{ uri: alb.artworkUrl }} style={styles.squareArt} />
                 <Text numberOfLines={1} style={[styles.squareTitle, { fontFamily }]}>
                   {alb.title}
                 </Text>

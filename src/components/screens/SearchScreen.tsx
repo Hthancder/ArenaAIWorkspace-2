@@ -5,7 +5,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
 import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useMochy } from '../../context/MochyContext';
@@ -178,7 +178,7 @@ export const SearchScreen: React.FC = () => {
                       }
                       style={styles.albumCard}
                     >
-                      <Image source={{ uri: alb.artworkUrl }} style={styles.albumArt} />
+                      <ArtworkImage source={{ uri: alb.artworkUrl }} style={styles.albumArt} />
                       <Text numberOfLines={1} style={styles.albumTitle}>
                         {alb.title}
                       </Text>
@@ -320,7 +320,7 @@ export const SearchScreen: React.FC = () => {
                       }
                       style={styles.albumCard}
                     >
-                      <Image source={{ uri: alb.artworkUrl }} style={styles.albumArt} />
+                      <ArtworkImage source={{ uri: alb.artworkUrl }} style={styles.albumArt} />
                       <Text numberOfLines={1} style={styles.albumTitle}>
                         {alb.title}
                       </Text>

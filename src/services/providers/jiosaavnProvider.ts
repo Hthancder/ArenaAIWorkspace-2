@@ -101,7 +101,7 @@ export async function searchJioSaavnTracks(
           artist,
           artists: artistList,
           album: item?.album?.name ? unescapeHtml(String(item.album.name)) : undefined,
-          artworkUrl: bestImg || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80',
+          artworkUrl: bestImg,
           durationSec: Number(item?.duration) || 200,
           explicit: Boolean(item?.explicitContent),
           streamUrl: picked.url,

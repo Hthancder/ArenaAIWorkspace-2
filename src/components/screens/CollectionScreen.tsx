@@ -5,7 +5,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -13,6 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { ArtworkImage } from '../ArtworkImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '../../constants/i18n';
 import { buildArtworkPalette, MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
@@ -159,7 +159,7 @@ export const CollectionModal: React.FC = () => {
 
             <View style={styles.heroContent}>
               {artworkUrl ? (
-                <Image source={{ uri: artworkUrl }} style={styles.heroCover} />
+                <ArtworkImage source={{ uri: artworkUrl }} style={styles.heroCover} />
               ) : (
                 <View
                   style={[
@@ -252,7 +252,7 @@ export const CollectionModal: React.FC = () => {
                       }
                       style={{ width: 136 }}
                     >
-                      <Image
+                      <ArtworkImage
                         source={{ uri: alb.artworkUrl }}
                         style={{ width: 136, height: 136, borderRadius: 16, marginBottom: 6 }}
                       />

@@ -34,7 +34,7 @@ import {
   searchMonochromeCatalog,
   verifyMonochromeServer,
 } from '../services/providers/monochromeProvider';
-import { resolvePlayableStream } from '../services/providers/streamResolver';
+import { createStreamCandidateQueue } from '../services/providers/streamResolver';
 import { DEFAULT_AUDIO_LAB, StorageService } from '../services/storage/storageService';
 import {
   AlbumSummary,
@@ -383,39 +383,117 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return active;
   }, [lyrics, positionSec]);
 
-  const internalStartTrack = useCallback(async (track: Track) => {
-    setCurrentTrack(track);
-    setPositionSec(0);
-    setDurationSec(track.durationSec || 180);
-    setIsBuffering(true);
+  const playTokenRef = useRef(0);
 
-    const offlineMeta = downloadsRef.current[track.id];
-    const stream = await resolvePlayableStream(
-      track,
-      prefsRef.current,
-      serversRef.current,
-      offlineMeta?.localUri
-    );
-    setResolvedStream(stream);
+  const internalStartTrack = useCallback(
+    async (track: Track) => {
+      const token = ++playTokenRef.current;
+      const isCurrent = () => token === playTokenRef.current;
+      const vi = prefsRef.current.language === 'vi';
 
-    await audioEngine.loadAndPlay(stream.url, track, volumeRef.current);
+      setCurrentTrack(track);
+      setPositionSec(0);
+      setDurationSec(track.durationSec || 180);
+      setIsPlaying(false);
+      setIsBuffering(true);
+      setResolvedStream(null);
 
-    // Log listening event for Mochy Recap & History
-    setHistory((prev) => {
-      const event: ListeningEvent = {
-        id: `ev-${Date.now()}-${track.id}`,
+      const offlineMeta = downloadsRef.current[track.id];
+      const queue = createStreamCandidateQueue(
         track,
-        playedAt: Date.now(),
-        listenedSec: Math.min(track.durationSec || 180, 180),
-      };
-      const updated = [event, ...prev.filter((e) => e.track.id !== track.id || Date.now() - e.playedAt > 60000)].slice(
-        0,
-        200
+        prefsRef.current,
+        serversRef.current,
+        offlineMeta?.localUri
       );
-      StorageService.saveHistory(updated);
-      return updated;
-    });
-  }, []);
+
+      let played: ResolvedStream | null = null;
+      let lastTried: ResolvedStream | null = null;
+
+      try {
+        // Try every candidate in priority order until one actually produces audio
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const cand = await queue.next();
+          if (!isCurrent()) return;
+          if (!cand) break;
+
+          lastTried = cand;
+          setResolvedStream(cand);
+          await audioEngine.loadAndPlay(cand.url, track, volumeRef.current, cand.headers);
+          if (!isCurrent()) return;
+
+          const local = cand.isOffline || cand.source === 'synth';
+          const timeoutMs = local ? 7000 : 12000;
+          const result = await audioEngine.waitUntilAudible(timeoutMs);
+          if (!isCurrent() || result === 'superseded') return;
+
+          if (result === 'ok') {
+            queue.diagnostics.push({
+              module: cand.sourceLabel,
+              step: 'Playback started',
+              ok: true,
+              detail: cand.qualityLabel,
+            });
+            played = { ...cand, diagnostics: [...queue.diagnostics] };
+            setResolvedStream(played);
+            break;
+          }
+
+          queue.diagnostics.push({
+            module: cand.sourceLabel,
+            step: 'Player check',
+            ok: false,
+            detail:
+              result === 'timeout'
+                ? `No audio after ${Math.round(timeoutMs / 1000)}s — trying next source`
+                : 'Stream rejected by the player — trying next source',
+          });
+          setResolvedStream({ ...cand, diagnostics: [...queue.diagnostics] });
+        }
+      } catch {
+        // handled below as "no playable source"
+      }
+
+      if (!isCurrent()) return;
+
+      if (!played) {
+        audioEngine.stop();
+        setIsPlaying(false);
+        setIsBuffering(false);
+        if (lastTried) setResolvedStream({ ...lastTried, diagnostics: [...queue.diagnostics] });
+        showToast(
+          vi
+            ? 'Không phát được bài này từ nguồn nào. Thử bài khác hoặc xem "Chẩn đoán luồng" trong trình phát.'
+            : 'No source could play this track. Try another song or check Stream Diagnostics.'
+        );
+        return;
+      }
+
+      if (played.isPreview) {
+        showToast(
+          vi
+            ? 'Không tìm được bản đầy đủ — đang phát bản preview 30 giây (Apple)'
+            : 'Full track unavailable — playing 30s Apple preview'
+        );
+      }
+
+      // Log listening event for Mochy Recap & History
+      setHistory((prev) => {
+        const event: ListeningEvent = {
+          id: `ev-${Date.now()}-${track.id}`,
+          track,
+          playedAt: Date.now(),
+          listenedSec: Math.min(track.durationSec || 180, 180),
+        };
+        const updated = [
+          event,
+          ...prev.filter((e) => e.track.id !== track.id || Date.now() - e.playedAt > 60000),
+        ].slice(0, 200);
+        StorageService.saveHistory(updated);
+        return updated;
+      });
+    },
+    [showToast]
+  );
 
   const playTrack = useCallback(
     async (track: Track, newQueue?: Track[]) => {
@@ -540,7 +618,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const togglePlay = useCallback(() => {
     triggerHaptic('light');
     if (!currentTrack) return;
-    if (!resolvedStream) {
+    if (!resolvedStream || !audioEngine.hasActiveSource()) {
       internalStartTrack(currentTrack);
       return;
     }
@@ -898,11 +976,21 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       triggerHaptic('medium');
       setDownloadingIds((prev) => ({ ...prev, [track.id]: true }));
       try {
-        const stream = await resolvePlayableStream(track, prefs, monochromeServers);
+        // Pick the first downloadable candidate (skip HLS manifests, previews & synth)
+        const queue = createStreamCandidateQueue(track, prefs, monochromeServers);
+        let stream = await queue.next();
+        while (
+          stream &&
+          (stream.isPreview || stream.source === 'synth' || stream.codec.startsWith('HLS'))
+        ) {
+          stream = await queue.next();
+        }
+        if (!stream) throw new Error('No downloadable source');
         const meta = await StorageService.downloadTrackFile(
           track,
           stream.url,
-          stream.qualityLabel
+          stream.qualityLabel,
+          stream.headers
         );
         setDownloads((prev) => {
           const next = { ...prev, [track.id]: meta };

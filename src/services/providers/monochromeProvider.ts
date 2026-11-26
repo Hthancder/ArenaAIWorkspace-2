@@ -91,10 +91,22 @@ function parseStreamerTracks(json: any): CatalogCandidate[] {
       album: t?.albumTitle || t?.album || undefined,
       durationSec,
       isrc: t?.isrc || undefined,
-      artworkUrl: t?.coverUrl || t?.albumCover || undefined,
+      artworkUrl: resolveCoverUrl(t?.coverUrl || t?.albumCover || t?.cover || t?.album?.cover),
     });
   }
   return out;
+}
+
+/** Accepts full URLs or bare TIDAL-style cover UUIDs and returns a loadable https URL. */
+function resolveCoverUrl(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== 'string') return undefined;
+  const v = raw.trim();
+  if (/^https?:\/\//i.test(v)) return v;
+  if (v.startsWith('//')) return `https:${v}`;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) {
+    return `https://resources.tidal.com/images/${v.replace(/-/g, '/')}/640x640.jpg`;
+  }
+  return undefined;
 }
 
 function parseRelayTracks(json: any): CatalogCandidate[] {
@@ -112,6 +124,7 @@ function parseRelayTracks(json: any): CatalogCandidate[] {
       artist,
       album: t?.album || undefined,
       durationSec: rawDur > 2000 ? Math.round(rawDur / 1000) : rawDur > 0 ? rawDur : undefined,
+      artworkUrl: resolveCoverUrl(t?.cover || t?.coverUrl || t?.albumCover || t?.artwork),
     });
   }
   return out;
@@ -172,9 +185,7 @@ export async function searchMonochromeCatalog(
           artist: c.artist,
           artists: c.artist.split(/,\s*/),
           album: c.album,
-          artworkUrl:
-            c.artworkUrl ||
-            'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&q=80',
+          artworkUrl: c.artworkUrl || '',
           durationSec: c.durationSec || 210,
           isrc: c.isrc,
           streamUrl: srv.kind === 'streamer' ? `${base}/track/${c.id}` : undefined,

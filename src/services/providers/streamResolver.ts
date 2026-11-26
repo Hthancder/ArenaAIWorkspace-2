@@ -1,4 +1,9 @@
 // Multi-Module Priority Stream Resolver — inspired by Mochy Music's SourceModule pipeline
+//
+// Produces an ordered queue of playable stream candidates. Every enabled module starts resolving
+// concurrently (so total latency ≈ the slowest module instead of the sum of all of them), but
+// candidates are handed out strictly in the user's Module Priority order. The player tries each
+// candidate and falls through to the next one if AVPlayer / HTML5 Audio cannot start it.
 
 import { MochyPreferences } from '../../constants/preferences';
 import { getOrCreateSynthWavUri } from '../../data/curatedCatalog';
@@ -9,14 +14,24 @@ import { searchItunesTracks } from './itunesProvider';
 import { resolveJioSaavnStream } from './jiosaavnProvider';
 import { resolveMonochromeStream } from './monochromeProvider';
 
-export async function resolvePlayableStream(
+type Candidate = Omit<ResolvedStream, 'diagnostics'>;
+
+export interface StreamCandidateQueue {
+  /** Shared, growing diagnostics log for this playback attempt */
+  diagnostics: DiagnosticStep[];
+  /** Next candidate in priority order, or null when every module is exhausted */
+  next(): Promise<ResolvedStream | null>;
+}
+
+export function createStreamCandidateQueue(
   track: Track,
   prefs: MochyPreferences,
   monochromeServers: ModuleServerConfig[],
   offlineUri?: string
-): Promise<ResolvedStream> {
+): StreamCandidateQueue {
   const diagnostics: DiagnosticStep[] = [];
   const pushStep = (step: DiagnosticStep) => diagnostics.push(step);
+  const producers: Promise<Candidate[]>[] = [];
 
   // 1. Offline downloaded file takes highest priority
   if (offlineUri) {
@@ -27,38 +42,48 @@ export async function resolvePlayableStream(
       detail: 'Playing directly from device storage',
       latencyMs: 1,
     });
-    return {
-      url: offlineUri,
-      source: 'offline',
-      sourceLabel: 'Offline Cache',
-      qualityLabel: track.qualityBadge || 'Offline · Cached',
-      codec: 'Local',
-      isOffline: true,
-      diagnostics,
-    };
+    producers.push(
+      Promise.resolve([
+        {
+          url: offlineUri,
+          source: 'offline',
+          sourceLabel: 'Offline Cache',
+          qualityLabel: track.qualityBadge || 'Offline · Cached',
+          codec: 'Local',
+          isOffline: true,
+        },
+      ])
+    );
   }
 
-  // 2. Built-in synth showcase track
+  // 2. Built-in Mochy Sound Lab showcase track (synthesized locally, no network)
   if (track.source === 'synth' || track.synthPreset) {
-    const wavUri = getOrCreateSynthWavUri(track.synthPreset || 'dreamy', track.durationSec || 32);
-    pushStep({
-      module: 'Mochy Sound Lab',
-      step: 'Synthesize stereo PCM',
-      ok: true,
-      detail: 'PCM 16-bit · 22.05 kHz stereo engine',
-      latencyMs: 4,
-    });
-    return {
-      url: wavUri,
-      source: 'synth',
-      sourceLabel: 'Mochy Sound Lab',
-      qualityLabel: 'PCM 16-bit · Stereo',
-      codec: 'WAV',
-      diagnostics,
-    };
+    producers.push(
+      Promise.resolve().then(() => {
+        const t0 = Date.now();
+        const wavUri = getOrCreateSynthWavUri(track.synthPreset || 'dreamy', track.durationSec || 32);
+        pushStep({
+          module: 'Mochy Sound Lab',
+          step: 'Synthesize stereo PCM',
+          ok: true,
+          detail: 'PCM 16-bit · 22.05 kHz stereo',
+          latencyMs: Date.now() - t0,
+        });
+        return [
+          {
+            url: wavUri,
+            source: 'synth',
+            sourceLabel: 'Mochy Sound Lab',
+            qualityLabel: 'PCM 16-bit · Stereo',
+            codec: 'WAV',
+          } as Candidate,
+        ];
+      })
+    );
+    return makeQueue(producers, diagnostics);
   }
 
-  // If track already came from JioSaavn with a direct full-length AAC stream, play immediately!
+  // 3. JioSaavn catalog tracks already carry a direct full-length AAC stream
   if (track.source === 'jiosaavn' && track.streamUrl) {
     pushStep({
       module: 'JioSaavn',
@@ -67,14 +92,17 @@ export async function resolvePlayableStream(
       detail: track.qualityBadge || 'AAC 320 kbps',
       latencyMs: 2,
     });
-    return {
-      url: track.streamUrl,
-      source: 'jiosaavn',
-      sourceLabel: 'JioSaavn',
-      qualityLabel: track.qualityBadge || 'AAC 320 kbps',
-      codec: 'AAC',
-      diagnostics,
-    };
+    producers.push(
+      Promise.resolve([
+        {
+          url: track.streamUrl,
+          source: 'jiosaavn',
+          sourceLabel: 'JioSaavn',
+          qualityLabel: track.qualityBadge || 'AAC 320 kbps',
+          codec: 'AAC',
+        },
+      ])
+    );
   }
 
   const query: TrackQueryInput = {
@@ -86,119 +114,174 @@ export async function resolvePlayableStream(
     videoId: track.videoId,
   };
 
-  // 3. Walk user's configured Module Priority Order
+  const safe = (p: Promise<Candidate[]>): Promise<Candidate[]> => p.catch(() => []);
+
+  // 4. Every enabled module starts now (in parallel); results are consumed in priority order
   for (const modId of prefs.moduleOrder) {
     if (!prefs.enabledModules[modId]) continue;
 
     if (modId === 'monochrome') {
-      const mono = await resolveMonochromeStream(query, monochromeServers, pushStep);
-      if (mono) {
-        return {
-          url: mono.url,
-          source: 'monochrome',
-          sourceLabel: 'Monochrome',
-          qualityLabel: mono.qualityLabel,
-          codec: 'FLAC',
-          sampleRateHz: mono.sampleRateHz,
-          diagnostics,
-        };
-      }
+      producers.push(
+        safe(
+          resolveMonochromeStream(query, monochromeServers, pushStep).then((mono) =>
+            mono
+              ? [
+                  {
+                    url: mono.url,
+                    source: 'monochrome',
+                    sourceLabel: 'Monochrome',
+                    qualityLabel: mono.qualityLabel,
+                    codec: 'FLAC',
+                    sampleRateHz: mono.sampleRateHz,
+                  } as Candidate,
+                ]
+              : []
+          )
+        )
+      );
     }
 
     if (modId === 'jiosaavn') {
-      const saavn = await resolveJioSaavnStream(query, prefs.preferredJioSaavnQuality, pushStep);
-      if (saavn) {
-        return {
-          url: saavn.url,
-          source: 'jiosaavn',
-          sourceLabel: 'JioSaavn',
-          qualityLabel: saavn.qualityLabel,
-          codec: 'AAC',
-          diagnostics,
-        };
-      }
+      producers.push(
+        safe(
+          resolveJioSaavnStream(query, prefs.preferredJioSaavnQuality, pushStep).then((saavn) =>
+            saavn
+              ? [
+                  {
+                    url: saavn.url,
+                    source: 'jiosaavn',
+                    sourceLabel: 'JioSaavn',
+                    qualityLabel: saavn.qualityLabel,
+                    codec: 'AAC',
+                  } as Candidate,
+                ]
+              : []
+          )
+        )
+      );
     }
 
     if (modId === 'innertube') {
-      const yt = await resolveInnerTubeStream(query, pushStep);
-      if (yt) {
-        return {
-          url: yt.url,
-          source: 'innertube',
-          sourceLabel: 'InnerTube',
-          qualityLabel: yt.qualityLabel,
-          codec: yt.codec,
-          diagnostics,
-        };
-      }
+      producers.push(
+        safe(
+          resolveInnerTubeStream(query, pushStep).then((list) =>
+            list.map(
+              (yt) =>
+                ({
+                  url: yt.url,
+                  source: 'innertube',
+                  sourceLabel: 'YouTube Music',
+                  qualityLabel: yt.qualityLabel,
+                  codec: yt.codec,
+                  headers: yt.headers,
+                }) as Candidate
+            )
+          )
+        )
+      );
     }
 
     if (modId === 'itunes') {
-      if (track.streamUrl && track.streamUrl.startsWith('http')) {
-        pushStep({
-          module: 'Apple Stream',
-          step: 'Direct CDN AAC',
-          ok: true,
-          detail: 'AAC 256 kbps · Apple CDN',
-          latencyMs: 2,
-        });
-        return {
-          url: track.streamUrl,
-          source: 'itunes',
-          sourceLabel: 'Apple CDN',
-          qualityLabel: 'AAC 256 kbps',
-          codec: 'AAC',
-          isPreview: true,
-          diagnostics,
-        };
-      }
-      const itunesLookup = await searchItunesTracks(`${track.artist} ${track.title}`, 4, 'VN');
-      const hit = itunesLookup.find((c) => c.streamUrl);
-      if (hit?.streamUrl) {
-        pushStep({
-          module: 'Apple Stream',
-          step: 'Matched CDN AAC',
-          ok: true,
-          detail: `${hit.title} · AAC 256 kbps`,
-        });
-        return {
-          url: hit.streamUrl,
-          source: 'itunes',
-          sourceLabel: 'Apple CDN',
-          qualityLabel: 'AAC 256 kbps',
-          codec: 'AAC',
-          isPreview: true,
-          diagnostics,
-        };
-      }
+      producers.push(
+        safe(
+          (async (): Promise<Candidate[]> => {
+            if (track.source === 'itunes' && track.streamUrl?.startsWith('http')) {
+              pushStep({
+                module: 'Apple Preview',
+                step: 'Direct CDN AAC',
+                ok: true,
+                detail: 'AAC · 30s preview',
+                latencyMs: 2,
+              });
+              return [
+                {
+                  url: track.streamUrl,
+                  source: 'itunes',
+                  sourceLabel: 'Apple Preview',
+                  qualityLabel: 'AAC · 30s preview',
+                  codec: 'AAC',
+                  isPreview: true,
+                },
+              ];
+            }
+            const t0 = Date.now();
+            const itunesLookup = await searchItunesTracks(`${track.artist} ${track.title}`, 4, 'VN');
+            const hit = itunesLookup.find((c) => c.streamUrl);
+            pushStep({
+              module: 'Apple Preview',
+              step: 'Catalog match',
+              ok: !!hit?.streamUrl,
+              detail: hit ? `${hit.title} · 30s preview` : 'No preview available',
+              latencyMs: Date.now() - t0,
+            });
+            return hit?.streamUrl
+              ? [
+                  {
+                    url: hit.streamUrl,
+                    source: 'itunes',
+                    sourceLabel: 'Apple Preview',
+                    qualityLabel: 'AAC · 30s preview',
+                    codec: 'AAC',
+                    isPreview: true,
+                  },
+                ]
+              : [];
+          })()
+        )
+      );
     }
   }
 
-  // 4. Guaranteed playable fallback so playback NEVER errors out even offline
-  if (track.streamUrl) {
-    return {
-      url: track.streamUrl,
-      source: track.source,
-      sourceLabel: 'Direct Stream',
-      qualityLabel: track.qualityBadge || 'AAC Stream',
-      codec: 'AAC',
-      diagnostics,
-    };
+  // 5. Whatever direct URL the catalog item carried (e.g. a Monochrome streamer URL)
+  if (track.streamUrl && track.source !== 'jiosaavn') {
+    producers.push(
+      Promise.resolve([
+        {
+          url: track.streamUrl,
+          source: track.source,
+          sourceLabel: 'Direct Stream',
+          qualityLabel: track.qualityBadge || 'Direct Stream',
+          codec: 'AAC',
+          isPreview: track.source === 'itunes',
+        },
+      ])
+    );
   }
 
-  const fallbackWav = getOrCreateSynthWavUri('dreamy', 32);
-  pushStep({
-    module: 'Mochy Offline Fallback',
-    step: 'Synthesize ambient fallback',
-    ok: true,
-    detail: 'Network unreachable — playing Mochy Ambient Synth',
-  });
+  return makeQueue(producers, diagnostics);
+}
+
+function makeQueue(producers: Promise<Candidate[]>[], diagnostics: DiagnosticStep[]): StreamCandidateQueue {
+  const pending = [...producers];
+  const buffer: Candidate[] = [];
+  const seen = new Set<string>();
+
   return {
-    url: fallbackWav,
-    source: 'synth',
-    sourceLabel: 'Mochy Synth Fallback',
-    qualityLabel: 'PCM 16-bit · Offline Synth',
-    codec: 'WAV',
     diagnostics,
+    async next() {
+      while (buffer.length === 0 && pending.length > 0) {
+        const list = await pending.shift()!;
+        for (const c of list) {
+          if (!c.url || seen.has(c.url)) continue;
+          seen.add(c.url);
+          buffer.push(c);
+        }
+      }
+      const c = buffer.shift();
+      return c ? { ...c, diagnostics: [...diagnostics] } : null;
+    },
   };
+}
+
+/**
+ * Convenience: first candidate only (used by the offline downloader).
+ * Returns null when nothing could be resolved.
+ */
+export async function resolvePlayableStream(
+  track: Track,
+  prefs: MochyPreferences,
+  monochromeServers: ModuleServerConfig[],
+  offlineUri?: string
+): Promise<ResolvedStream | null> {
+  return createStreamCandidateQueue(track, prefs, monochromeServers, offlineUri).next();
 }

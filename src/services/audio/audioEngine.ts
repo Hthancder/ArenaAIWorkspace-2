@@ -37,6 +37,8 @@ class MochyAudioEngine {
   private remoteActionListener: RemoteActionCallback | null = null;
   private currentLab: AudioLabSettings | null = null;
   private initializedMode = false;
+  private loadSeq = 0;
+  private nativeSub: { remove: () => void } | null = null;
 
   async ensureInitialized(): Promise<void> {
     if (this.initializedMode) return;
@@ -72,66 +74,161 @@ class MochyAudioEngine {
     this.statusListeners.forEach((cb) => cb(status));
   }
 
-  async loadAndPlay(url: string, track: Track, volume = 1.0): Promise<void> {
+  /**
+   * Loads a stream and starts playback. Optional HTTP headers (e.g. the InnerTube iOS User-Agent)
+   * are forwarded to AVURLAsset on iOS.
+   */
+  async loadAndPlay(
+    url: string,
+    track: Track,
+    volume = 1.0,
+    headers?: Record<string, string>
+  ): Promise<void> {
     await this.ensureInitialized();
+    this.loadSeq += 1;
 
     if (Platform.OS !== 'web') {
-      await this.loadNative(url, track, volume);
+      await this.loadNative(url, track, volume, headers);
     } else {
       await this.loadWeb(url, track, volume);
     }
   }
 
-  private async loadNative(url: string, track: Track, volume: number): Promise<void> {
-    try {
-      if (!this.nativePlayer) {
-        this.nativePlayer = createAudioPlayer(url, {
-          updateInterval: 200,
-          keepAudioSessionActive: true,
-          preferredForwardBufferDuration: 12,
-        });
-        this.nativePlayer.addListener('playbackStatusUpdate', (st) => {
-          this.emit({
-            isPlaying: st.playing,
-            isBuffering: st.isBuffering,
-            currentTimeSec: st.currentTime || 0,
-            durationSec: st.duration > 0 ? st.duration : track.durationSec || 0,
-            didJustFinish: st.didJustFinish,
-            error:
-              st.playbackState === 'failed' || st.playbackState === 'error'
-                ? 'Native playback failed'
-                : null,
-          });
-        });
-      } else {
-        this.nativePlayer.replace(url);
-      }
-
-      this.nativePlayer.volume = Math.max(0, Math.min(1, volume));
-      if (this.currentLab) {
-        this.nativePlayer.shouldCorrectPitch = this.currentLab.preservePitch;
-        this.nativePlayer.setPlaybackRate(
-          this.currentLab.playbackRate || 1.0,
-          'high'
-        );
-      }
-
-      this.nativePlayer.setActiveForLockScreen(
-        true,
-        {
-          title: track.title,
-          artist: track.artist,
-          albumTitle: track.album || 'Mochy Music',
-          artworkUrl: track.artworkUrl.startsWith('http') ? track.artworkUrl : undefined,
-        },
-        {
-          // expo-audio SDK 55 (iOS 15.1+) exposes seek forward/backward lock-screen buttons
-          showSeekForward: true,
-          showSeekBackward: true,
+  /**
+   * Resolves once audio is actually progressing ('ok'), the engine reports an error ('error'),
+   * a newer load supersedes this one ('superseded'), or the timeout elapses ('timeout').
+   *
+   * Needed because AVPlayer never surfaces AVPlayerItem failures (HTTP 403, unsupported codec,
+   * data: URIs...) through expo-audio — without this the UI would spin forever.
+   */
+  waitUntilAudible(timeoutMs: number): Promise<'ok' | 'error' | 'timeout' | 'superseded'> {
+    const seq = this.loadSeq;
+    return new Promise((resolve) => {
+      let done = false;
+      let firstTime: number | null = null;
+      const finish = (r: 'ok' | 'error' | 'timeout' | 'superseded') => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        clearInterval(seqWatch);
+        unsub();
+        resolve(r);
+      };
+      const unsub = this.onStatus((st) => {
+        if (seq !== this.loadSeq) return finish('superseded');
+        if (st.error) return finish('error');
+        if (st.currentTimeSec > 0) {
+          if (firstTime === null) firstTime = st.currentTimeSec;
+          if (st.currentTimeSec - firstTime > 0.2 || st.currentTimeSec > 0.6) finish('ok');
         }
-      );
+      });
+      const seqWatch = setInterval(() => {
+        if (seq !== this.loadSeq) finish('superseded');
+      }, 250);
+      const timer = setTimeout(() => finish('timeout'), timeoutMs);
+    });
+  }
 
-      this.nativePlayer.play();
+  /** True when a player with a loaded source exists (false after stop() or before first load). */
+  hasActiveSource(): boolean {
+    return Platform.OS !== 'web' ? !!this.nativePlayer : !!this.webAudio;
+  }
+
+  /** Stops and tears down the current player (used when every stream candidate failed). */
+  stop(): void {
+    this.loadSeq += 1;
+    if (Platform.OS !== 'web') {
+      this.releaseNativePlayer();
+    } else if (this.webAudio) {
+      this.webAudio.pause();
+      this.webAudio.removeAttribute('src');
+      this.webAudio = null;
+      if (this.webPollTimer) {
+        clearInterval(this.webPollTimer);
+        this.webPollTimer = null;
+      }
+    }
+  }
+
+  private releaseNativePlayer(): void {
+    try {
+      this.nativeSub?.remove();
+    } catch {
+      // ignore
+    }
+    this.nativeSub = null;
+    if (this.nativePlayer) {
+      const old = this.nativePlayer;
+      this.nativePlayer = null;
+      try {
+        old.pause();
+      } catch {
+        // ignore
+      }
+      try {
+        old.remove();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  private async loadNative(
+    url: string,
+    track: Track,
+    volume: number,
+    headers?: Record<string, string>
+  ): Promise<void> {
+    try {
+      // A fresh AVPlayer per track guarantees status events never leak from the previous item.
+      this.releaseNativePlayer();
+      const seq = this.loadSeq;
+
+      const source = headers && Object.keys(headers).length > 0 ? { uri: url, headers } : { uri: url };
+      const player = createAudioPlayer(source, {
+        updateInterval: 250,
+        keepAudioSessionActive: true,
+        preferredForwardBufferDuration: 10,
+      });
+      this.nativePlayer = player;
+
+      this.nativeSub = player.addListener('playbackStatusUpdate', (st) => {
+        if (seq !== this.loadSeq || this.nativePlayer !== player) return;
+        this.emit({
+          isPlaying: st.playing,
+          isBuffering: st.isBuffering || (!st.isLoaded && st.playing),
+          currentTimeSec: st.currentTime || 0,
+          durationSec: st.duration > 0 ? st.duration : track.durationSec || 0,
+          didJustFinish: st.didJustFinish,
+          error: st.playbackState === 'failed' ? 'Native playback failed' : null,
+        });
+      });
+
+      player.volume = Math.max(0, Math.min(1, volume));
+      if (this.currentLab) {
+        player.shouldCorrectPitch = this.currentLab.preservePitch;
+        player.setPlaybackRate(this.currentLab.enabled ? this.currentLab.playbackRate || 1.0 : 1.0, 'high');
+      }
+
+      try {
+        player.setActiveForLockScreen(
+          true,
+          {
+            title: track.title,
+            artist: track.artist,
+            albumTitle: track.album || 'Mochy Music',
+            artworkUrl: track.artworkUrl.startsWith('http') ? track.artworkUrl : undefined,
+          },
+          {
+            showSeekForward: true,
+            showSeekBackward: true,
+          }
+        );
+      } catch {
+        // Lock screen metadata is best-effort
+      }
+
+      player.play();
     } catch (err: any) {
       this.emit({
         isPlaying: false,
@@ -314,23 +411,12 @@ class MochyAudioEngine {
     el.addEventListener('waiting', () => pushCurrent(false));
     el.addEventListener('ended', () => pushCurrent(true));
     el.addEventListener('error', () => {
-      // Retry without crossOrigin if a CDN rejected anonymous CORS
+      // Retry on the same element without crossOrigin if a CDN rejected anonymous CORS
       if (el.crossOrigin) {
         el.crossOrigin = null;
-        const retry = new Audio(url);
-        retry.volume = el.volume;
-        this.webAudio = retry;
-        retry.addEventListener('ended', () =>
-          this.emit({
-            isPlaying: false,
-            isBuffering: false,
-            currentTimeSec: retry.duration || 0,
-            durationSec: retry.duration || track.durationSec || 0,
-            didJustFinish: true,
-            error: null,
-          })
-        );
-        retry.play().catch(() => {});
+        el.src = url;
+        el.load();
+        el.play().catch(() => {});
         return;
       }
       pushCurrent(false, 'Audio stream unavailable');

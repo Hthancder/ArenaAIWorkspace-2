@@ -1,5 +1,7 @@
 // Curated seed catalog, Moods & Genres, and AutoEQ Headphone Presets for Mochy Music iOS
 
+import { File, Paths } from 'expo-file-system';
+import { Platform } from 'react-native';
 import { EqualizerBand, LyricLine, Track } from '../types/music';
 
 export interface MoodCategory {
@@ -56,14 +58,16 @@ export const AUTO_EQ_PRESETS: AutoEqPreset[] = [
 ];
 
 function makeCoverDataSvg(title: string, sub: string, c1: string, c2: string): string {
+  // Unique gradient id per cover — identical ids collide when several SVGs share one document
+  const gid = `mg${title.replace(/[^a-zA-Z0-9]/g, '')}`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
     <defs>
-      <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <linearGradient id="${gid}" x1="0%" y1="0%" x2="100%" y2="100%">
         <stop offset="0%" stop-color="${c1}"/>
         <stop offset="100%" stop-color="${c2}"/>
       </linearGradient>
     </defs>
-    <rect width="600" height="600" fill="url(#g)"/>
+    <rect width="600" height="600" fill="url(#${gid})"/>
     <circle cx="460" cy="140" r="190" fill="rgba(255,255,255,0.10)"/>
     <circle cx="130" cy="480" r="220" fill="rgba(0,0,0,0.24)"/>
     <text x="48" y="470" fill="#ffffff" font-family="-apple-system, Inter, sans-serif" font-size="44" font-weight="700">${title}</text>
@@ -179,13 +183,38 @@ export const BUILTIN_LYRICS_MAP: Record<string, LyricLine[]> = {
 };
 
 /**
- * Generates an in-memory stereo 22.05kHz 16-bit PCM WAV data URI for offline/fallback playback
- * so audio ALWAYS plays cleanly on both iOS AVPlayer and Web HTML5 Audio even when offline.
+ * Generates a stereo 22.05kHz 16-bit PCM WAV for offline/fallback playback.
+ * - iOS / Android: written to a real file in the cache directory (AVPlayer cannot play `data:` URIs).
+ * - Web: returned as a `data:audio/wav;base64` URI for HTML5 Audio.
  */
 const wavCache: Record<string, string> = {};
 
 export function getOrCreateSynthWavUri(preset = 'dreamy', durationSec = 32): string {
-  if (wavCache[preset]) return wavCache[preset];
+  const cacheKey = `${preset}-${durationSec}`;
+  if (wavCache[cacheKey]) return wavCache[cacheKey];
+
+  if (Platform.OS !== 'web') {
+    try {
+      const file = new File(Paths.cache, `mochy-synth-${cacheKey}-v2.wav`);
+      if (!file.exists || (file.size ?? 0) < 1024) {
+        if (file.exists) file.delete();
+        file.create();
+        file.write(buildSynthWavBytes(preset, durationSec));
+      }
+      wavCache[cacheKey] = file.uri;
+      return file.uri;
+    } catch {
+      // fall through to data URI as a last resort
+    }
+  }
+
+  const bytes = buildSynthWavBytes(preset, durationSec);
+  const uri = `data:audio/wav;base64,${bytesToBase64(bytes)}`;
+  wavCache[cacheKey] = uri;
+  return uri;
+}
+
+function buildSynthWavBytes(preset: string, durationSec: number): Uint8Array {
 
   const sampleRate = 22050;
   const numChannels = 2;
@@ -278,7 +307,10 @@ export function getOrCreateSynthWavUri(preset = 'dreamy', durationSec = 32): str
     offset += 4;
   }
 
-  const bytes = new Uint8Array(buffer);
+  return new Uint8Array(buffer);
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   const chunks: string[] = [];
   for (let i = 0; i < bytes.length; i += 3) {
@@ -292,7 +324,5 @@ export function getOrCreateSynthWavUri(preset = 'dreamy', durationSec = 32): str
       (i + 2 < bytes.length ? chars[b3 & 63] : '=')
     );
   }
-  const uri = `data:audio/wav;base64,${chunks.join('')}`;
-  wavCache[preset] = uri;
-  return uri;
+  return chunks.join('');
 }

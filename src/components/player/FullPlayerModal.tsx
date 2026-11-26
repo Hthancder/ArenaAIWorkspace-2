@@ -5,7 +5,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   LayoutChangeEvent,
   Modal,
   Pressable,
@@ -14,6 +13,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { ArtworkImage } from '../ArtworkImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PLAYER_STYLE_META, PlayerStyle } from '../../constants/preferences';
 import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
@@ -368,7 +368,7 @@ export const FullPlayerModal: React.FC = () => {
                   !isPlaying && { transform: [{ scale: 0.94 }] },
                 ]}
               >
-                <Image source={{ uri: currentTrack.artworkUrl }} style={styles.coverImage} />
+                <ArtworkImage source={{ uri: currentTrack.artworkUrl }} style={styles.coverImage} />
                 {prefs.playerStyle === 'POSTER' && (
                   <View style={styles.posterVisualizerRow}>
                     {[0.4, 0.85, 0.6, 1.0, 0.72, 0.92, 0.5, 0.88, 0.65, 0.45, 0.78, 0.55].map(

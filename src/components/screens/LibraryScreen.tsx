@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -13,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
 import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useMochy } from '../../context/MochyContext';
@@ -161,7 +161,7 @@ export const LibraryScreen: React.FC = () => {
                 style={styles.playlistCard}
               >
                 {pl.coverUrl || pl.tracks[0]?.artworkUrl ? (
-                  <Image
+                  <ArtworkImage
                     source={{ uri: pl.coverUrl || pl.tracks[0]?.artworkUrl }}
                     style={styles.plCover}
                   />

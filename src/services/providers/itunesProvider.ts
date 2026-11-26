@@ -4,7 +4,7 @@
 import { AlbumSummary, ArtistSummary, Track } from '../../types/music';
 
 function upgradeArtwork(url?: string, size = 600): string {
-  if (!url) return 'https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/00/00/00/placeholder/600x600bb.jpg';
+  if (!url) return '';
   return url.replace(/\/\d+x\d+bb\.(jpg|png)/i, `/${size}x${size}bb.$1`);
 }
 
