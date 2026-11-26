@@ -10,14 +10,17 @@
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~55.0.12",
-    "@expo/vector-icons": "^15.0.2",
+    "@expo/vector-icons": "~15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~55.0.32",
+    "expo-asset": "~55.0.20",
     "expo-audio": "~55.0.18",
     "expo-blur": "~55.0.18",
     "expo-build-properties": "~55.0.18",
     "expo-clipboard": "~55.0.17",
+    "expo-constants": "~55.0.17",
     "expo-file-system": "~55.0.26",
+    "expo-font": "~55.0.8",
     "expo-haptics": "~55.0.18",
     "expo-keep-awake": "~55.0.8",
     "expo-linear-gradient": "~55.0.18",
@@ -42,5 +45,10 @@
     "prebuild:ios": "expo prebuild --platform ios --clean",
     "typecheck": "tsc --noEmit"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "expo-asset": "~55.0.20",
+    "expo-font": "~55.0.8",
+    "expo-constants": "~55.0.17"
+  }
 }
