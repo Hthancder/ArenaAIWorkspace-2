@@ -4,6 +4,8 @@
 // <LocalOverlayHost/> (mounted above the dock) so nothing gets covered.
 
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
@@ -54,6 +56,7 @@ type Overlay =
     }
   | { type: 'confirm'; title: string; message: string; confirm: string; onConfirm: () => void }
   | { type: 'move'; paths: string[]; onDone?: () => void }
+  | { type: 'cover'; dir: string }
   | { type: 'help' };
 
 let overlay: Overlay | null = null;
@@ -390,6 +393,15 @@ export const LocalLibraryScreen: React.FC = () => {
                 label: vi ? 'Thêm bài từ ứng dụng Tệp vào đây' : 'Add songs from Files here',
                 onPress: () => importHere(currentDir),
               },
+              ...(!atRoot
+                ? [
+                    {
+                      icon: 'image-outline' as const,
+                      label: vi ? 'Ảnh bìa thư mục…' : 'Folder cover…',
+                      onPress: () => setOverlay({ type: 'cover', dir: currentDir }),
+                    },
+                  ]
+                : []),
             ]
           : []),
         {
@@ -482,6 +494,11 @@ export const LocalLibraryScreen: React.FC = () => {
                 await LocalLibrary.rename(f.path, v);
               },
             }),
+        },
+        {
+          icon: 'image-outline',
+          label: vi ? 'Ảnh bìa thư mục…' : 'Folder cover…',
+          onPress: () => setOverlay({ type: 'cover', dir: f.path }),
         },
         {
           icon: 'arrow-redo-outline',
@@ -714,7 +731,23 @@ export const LocalLibraryScreen: React.FC = () => {
   const header = (
     <View>
       <View style={styles.hero}>
-        {cover ? (
+        {nav.kind === 'folder' && !atRoot && !selecting ? (
+          <Pressable
+            onPress={() => setOverlay({ type: 'cover', dir: currentDir })}
+            accessibilityLabel={vi ? 'Đổi ảnh bìa thư mục' : 'Change folder cover'}
+          >
+            {cover ? (
+              <ArtworkImage source={{ uri: cover }} style={styles.heroArt} fallbackSeed={title} />
+            ) : (
+              <LinearGradient colors={[palette.accent, palette.container]} style={styles.heroArt}>
+                <Ionicons name="folder-open" size={38} color={palette.onAccent} />
+              </LinearGradient>
+            )}
+            <View style={styles.heroEdit}>
+              <Ionicons name="camera" size={13} color="#FFFFFF" />
+            </View>
+          </Pressable>
+        ) : cover ? (
           <ArtworkImage source={{ uri: cover }} style={styles.heroArt} fallbackSeed={title} />
         ) : (
           <LinearGradient colors={[palette.accent, palette.container]} style={styles.heroArt}>
@@ -1141,11 +1174,11 @@ const HelpCard: React.FC<{
       vi
         ? [
             'images-outline',
-            'Tên bài, nghệ sĩ, album và ảnh bìa đọc từ thẻ trong tệp; thư mục có cover.jpg / folder.jpg sẽ dùng làm ảnh bìa.',
+            'Tên bài, nghệ sĩ, album và ảnh bìa đọc từ thẻ trong tệp. Ảnh bìa thư mục: chạm vào ảnh ở đầu thư mục (hoặc ⋯ → Ảnh bìa thư mục), hay thả cover.jpg vào thư mục.',
           ]
         : [
             'images-outline',
-            'Title, artist, album and cover come from the file’s tags; a cover.jpg / folder.jpg in a folder is used as its artwork.',
+            'Title, artist, album and cover come from the file’s tags. Folder cover: tap the artwork at the top of a folder (or ⋯ → Folder cover), or drop a cover.jpg into it.',
           ],
     ].map(([icon, text]) => (
       <View key={text} style={styles.helpRow}>
@@ -1279,6 +1312,17 @@ export const LocalOverlayHost: React.FC = () => {
               showToast={showToast}
             />
           )}
+          {o.type === 'cover' && (
+            <CoverPicker
+              o={o}
+              close={close}
+              vi={vi}
+              accent={palette.accent}
+              onAccent={palette.onAccent}
+              container={palette.container}
+              showToast={showToast}
+            />
+          )}
           {o.type === 'help' && (
             <>
               <Text style={styles.sheetTitle}>
@@ -1303,6 +1347,157 @@ export const LocalOverlayHost: React.FC = () => {
     </View>
   );
 };
+
+/** Folder cover: from Photos (square crop), from Files, or reuse a song's embedded cover. */
+const CoverPicker: React.FC<{
+  o: Extract<Overlay, { type: 'cover' }>;
+  close: () => void;
+  vi: boolean;
+  accent: string;
+  onAccent: string;
+  container: string;
+  showToast: (m: string) => void;
+}> = ({ o, close, vi, accent, onAccent, container, showToast }) => {
+  useLocalLibrary(); // re-render after the rescan
+  const folder = LocalLibrary.folder(o.dir);
+  const [busy, setBusy] = useState(false);
+  const songCovers = useMemo(() => LocalLibrary.embeddedCoversIn(o.dir), [o.dir, folder?.total]);
+  const apply = async (fn: () => Promise<unknown>, done: string) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fn();
+      showToast(done);
+      close();
+    } catch (e: any) {
+      showToast((vi ? 'Không đặt được ảnh bìa: ' : 'Could not set cover: ') + (e?.message || e));
+      setBusy(false);
+    }
+  };
+  const set = (uri: string, resize = true) =>
+    apply(
+      () => LocalLibrary.setFolderCover(o.dir, uri, { resize }),
+      vi ? 'Đã đổi ảnh bìa thư mục' : 'Folder cover updated'
+    );
+  const fromPhotos = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true, // iOS crops to a square
+      aspect: [1, 1],
+      quality: 1,
+    });
+    if (!res.canceled && res.assets?.[0]?.uri) set(res.assets[0].uri);
+  };
+  const fromFiles = async () => {
+    const res = await DocumentPicker.getDocumentAsync({
+      type: ['image/*'],
+      copyToCacheDirectory: true,
+    });
+    if (!res.canceled && res.assets?.[0]?.uri) set(res.assets[0].uri);
+  };
+  if (!folder) return null;
+  return (
+    <>
+      <View style={styles.coverHead}>
+        {folder.coverUri ? (
+          <ArtworkImage
+            source={{ uri: folder.coverUri }}
+            style={styles.coverBig}
+            fallbackSeed={folder.name}
+          />
+        ) : (
+          <LinearGradient colors={[accent, container]} style={styles.coverBig}>
+            <Ionicons name="folder-open" size={40} color={onAccent} />
+          </LinearGradient>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sheetTitle} numberOfLines={2}>
+            {folder.name}
+          </Text>
+          <Text style={styles.sheetSub}>
+            {folder.coverPath
+              ? (vi ? 'Ảnh bìa riêng · ' : 'Own cover · ') + baseName(folder.coverPath)
+              : folder.coverUri
+                ? vi
+                  ? 'Đang mượn ảnh bìa của một bài bên trong'
+                  : 'Borrowing a song’s cover'
+                : vi
+                  ? 'Chưa có ảnh bìa'
+                  : 'No cover yet'}
+          </Text>
+          {busy && (
+            <ActivityIndicator color={accent} style={{ alignSelf: 'flex-start', marginTop: 8 }} />
+          )}
+        </View>
+      </View>
+      <View style={styles.coverBtns}>
+        <Pressable
+          disabled={busy}
+          onPress={fromPhotos}
+          style={[styles.coverBtn, { backgroundColor: accent }]}
+        >
+          <Ionicons name="images" size={18} color={onAccent} />
+          <Text style={[styles.coverBtnText, { color: onAccent }]}>
+            {vi ? 'Chọn từ Ảnh' : 'From Photos'}
+          </Text>
+        </Pressable>
+        <Pressable disabled={busy} onPress={fromFiles} style={styles.coverBtn}>
+          <Ionicons name="document-outline" size={18} color="#FFFFFF" />
+          <Text style={styles.coverBtnText}>{vi ? 'Từ Tệp' : 'From Files'}</Text>
+        </Pressable>
+      </View>
+      {songCovers.length > 0 && (
+        <>
+          <Text style={styles.coverSection}>
+            {vi ? 'Dùng ảnh bìa của bài hát' : 'Use a song’s cover'}
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {songCovers.map((c) => (
+                <Pressable
+                  key={c.uri}
+                  disabled={busy}
+                  onPress={() => set(c.uri, false)}
+                  accessibilityLabel={(vi ? 'Ảnh bìa ' : 'Cover of ') + c.title}
+                >
+                  <ArtworkImage
+                    source={{ uri: c.uri }}
+                    style={styles.coverThumb}
+                    fallbackSeed={c.title}
+                  />
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+        </>
+      )}
+      {folder.coverPath ? (
+        <Pressable
+          disabled={busy}
+          onPress={() =>
+            apply(
+              () => LocalLibrary.removeFolderCover(o.dir),
+              vi ? 'Đã xoá ảnh bìa thư mục' : 'Folder cover removed'
+            )
+          }
+          style={[styles.sheetItem, { marginTop: 10 }]}
+        >
+          <Ionicons name="trash-outline" size={20} color="#F87171" />
+          <Text style={[styles.sheetLabel, { color: '#F87171' }]}>
+            {vi ? 'Xoá ảnh bìa' : 'Remove cover'}
+          </Text>
+        </Pressable>
+      ) : null}
+      <Text style={[styles.sheetSub, { marginTop: 12 }]}>
+        {vi
+          ? 'Ảnh được lưu thành cover.jpg trong thư mục — thấy được cả trong ứng dụng Tệp. Bài không có ảnh bìa riêng sẽ dùng ảnh này.'
+          : 'Saved as cover.jpg inside the folder (visible in Files too). Songs without their own art use it.'}
+      </Text>
+    </>
+  );
+};
+
+const baseName = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 
 const PromptBody: React.FC<{
   o: Extract<Overlay, { type: 'prompt' }>;
@@ -1507,6 +1702,50 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  heroEdit: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(20,20,28,0.92)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverBig: {
+    width: 112,
+    height: 112,
+    borderRadius: 18,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverHead: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 14 },
+  coverBtns: { flexDirection: 'row', gap: 10 },
+  coverBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+  },
+  coverBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  coverSection: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginTop: 18,
+    marginBottom: 10,
+  },
+  coverThumb: { width: 68, height: 68, borderRadius: 12, overflow: 'hidden' },
   heroTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '900' },
   heroSub: { color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 4, fontWeight: '600' },
   scanRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },

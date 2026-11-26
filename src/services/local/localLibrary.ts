@@ -46,6 +46,8 @@ export interface FolderNode {
   total: number;
   totalSec: number;
   coverUri?: string;
+  /** the folder's own cover file (cover.jpg, folder.png…), if it has one */
+  coverPath?: string;
   mtime: number;
 }
 
@@ -89,6 +91,10 @@ interface Backend {
   importAsset(asset: DocumentPicker.DocumentPickerAsset, toRel: string): Promise<void>;
   writeArt(name: string, data: Uint8Array): void;
   artUri(name: string): string | undefined;
+  /** display URI for a folder cover that changes whenever the file changes (image caches) */
+  coverUri(rel: string, e: Entry): string | undefined;
+  /** copy an image (picker/cache URI) to a file in the library */
+  writeFromUri(uri: string, toRel: string): Promise<void>;
 }
 
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
@@ -188,6 +194,23 @@ function nativeBackend(): Backend {
       const f = new File(Paths.cache, ART_DIR, name);
       return f.exists ? f.uri : undefined;
     },
+    coverUri(rel, e) {
+      // a cache copy named after size+mtime: a replaced cover.jpg gets a new URI, so it shows at once
+      const ext = rel.match(/\.(png|jpe?g)$/i)?.[1].toLowerCase() || 'jpg';
+      const name = `fc-${hash(rel + e.size + e.mtime)}.${ext}`;
+      try {
+        const cached = new File(artDir(), name);
+        if (!cached.exists) fileFor(rel).copy(cached);
+        return cached.uri;
+      } catch {
+        return fileFor(rel).uri;
+      }
+    },
+    async writeFromUri(uri, toRel) {
+      const dst = fileFor(toRel);
+      if (dst.exists) dst.delete();
+      new File(uri).copy(dst);
+    },
   };
 }
 
@@ -262,6 +285,15 @@ function webBackend(): Backend {
       art.set(name, URL.createObjectURL(new Blob([data as unknown as BlobPart], { type: mime })));
     },
     artUri: (name) => art.get(name),
+    coverUri(rel) {
+      return fs.has(rel) ? this.uri(rel) : undefined;
+    },
+    async writeFromUri(uri, toRel) {
+      const blob = await (await fetch(uri)).blob();
+      const old = fs.get(toRel);
+      if (old?.url) URL.revokeObjectURL(old.url);
+      fs.set(toRel, { isDir: false, blob, mtime: Date.now() });
+    },
   };
 }
 
@@ -276,6 +308,24 @@ function hash(s: string): string {
     h2 = Math.imul(h2 ^ c, 0x5bd1e995);
   }
   return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36);
+}
+
+/** Downscale an image to fit `max` px (JPEG). Returns undefined if it is already small enough. */
+async function shrinkImage(uri: string, max: number): Promise<string | undefined> {
+  const { ImageManipulator, SaveFormat } = await import('expo-image-manipulator');
+  const probe = await ImageManipulator.manipulate(uri).renderAsync();
+  const { width, height } = probe;
+  if (Math.max(width, height) <= max && !/\.(heic|heif|webp)($|\?)/i.test(uri)) {
+    probe.release?.();
+    return undefined;
+  }
+  const ctx = ImageManipulator.manipulate(uri);
+  if (Math.max(width, height) > max) ctx.resize(width >= height ? { width: max } : { height: max });
+  const img = await ctx.renderAsync();
+  const saved = await img.saveAsync({ format: SaveFormat.JPEG, compress: 0.86 });
+  probe.release?.();
+  img.release?.();
+  return saved.uri;
 }
 
 export function titleFromFileName(name: string): {
@@ -461,7 +511,14 @@ class LocalLibraryStore {
     await this.loadMeta();
     this.set({ scanning: true, error: undefined });
     // 1) walk the tree
-    type RawDir = { path: string; files: Entry[]; dirs: RawDir[]; cover?: string; mtime: number };
+    type RawDir = {
+      path: string;
+      files: Entry[];
+      dirs: RawDir[];
+      cover?: string;
+      coverEntry?: Entry;
+      mtime: number;
+    };
     const walk = async (rel: string, depth: number): Promise<RawDir> => {
       const entries = await this.backend.list(rel);
       const node: RawDir = { path: rel, files: [], dirs: [], mtime: 0 };
@@ -471,7 +528,10 @@ class LocalLibraryStore {
           if (depth === 0 && INTERNAL_DIRS.has(e.name)) continue;
           if (depth < 12) node.dirs.push(await walk(join(rel, e.name), depth + 1));
         } else if (AUDIO_EXT.test(e.name)) node.files.push(e);
-        else if (COVER_NAME.test(e.name) && !node.cover) node.cover = join(rel, e.name);
+        else if (COVER_NAME.test(e.name) && !node.cover) {
+          node.cover = join(rel, e.name);
+          node.coverEntry = e;
+        }
       }
       return node;
     };
@@ -536,7 +596,8 @@ class LocalLibraryStore {
     this.byName.clear();
     const files: LocalFile[] = [];
     const build = (d: RawDir, parentCover?: string): FolderNode => {
-      const coverUri = d.cover ? this.backend.uri(d.cover) : undefined;
+      const coverUri =
+        d.cover && d.coverEntry ? this.backend.coverUri(d.cover, d.coverEntry) : undefined;
       const node: FolderNode = {
         path: d.path,
         name: baseOf(d.path),
@@ -545,6 +606,7 @@ class LocalLibraryStore {
         total: 0,
         totalSec: 0,
         coverUri,
+        coverPath: d.cover,
         mtime: 0,
       };
       for (const e of d.files) {
@@ -723,6 +785,69 @@ class LocalLibraryStore {
     }
     await this.scan();
     return n;
+  }
+
+  // ---- folder covers ----
+
+  /** Every cover-named image directly inside `dir` (cover.jpg, Folder.png, …). */
+  private async coverFilesIn(dir: string): Promise<string[]> {
+    const entries = await this.backend.list(dir);
+    return entries.filter((e) => !e.isDir && COVER_NAME.test(e.name)).map((e) => join(dir, e.name));
+  }
+
+  /**
+   * Make an image the folder's cover: saved as `cover.jpg` inside the folder (so it also shows in
+   * other players / Finder), downscaled to ≤1000 px. Songs without embedded art use it too.
+   */
+  async setFolderCover(dir: string, imageUri: string, opts: { resize?: boolean } = {}) {
+    if (!dir) throw new Error('root');
+    let src = imageUri;
+    let ext =
+      /\.png($|\?)/i.test(imageUri) || imageUri.startsWith('data:image/png') ? 'png' : 'jpg';
+    if (opts.resize !== false) {
+      try {
+        const out = await shrinkImage(imageUri, 1000);
+        if (out) {
+          src = out;
+          ext = 'jpg';
+        }
+      } catch {
+        // keep the original image
+      }
+    }
+    for (const rel of await this.coverFilesIn(dir)) {
+      try {
+        this.backend.remove(rel, false);
+      } catch {
+        // ignore
+      }
+    }
+    await this.backend.writeFromUri(src, join(dir, `cover.${ext}`));
+    await this.scan();
+  }
+
+  async removeFolderCover(dir: string): Promise<number> {
+    const covers = await this.coverFilesIn(dir);
+    for (const rel of covers) this.backend.remove(rel, false);
+    await this.scan();
+    return covers.length;
+  }
+
+  /** Distinct embedded covers of the songs in a folder's subtree (to reuse one as the folder cover). */
+  embeddedCoversIn(dir: string, max = 24): { uri: string; title: string }[] {
+    const seen = new Set<string>();
+    const out: { uri: string; title: string }[] = [];
+    const prefix = dir ? dir + '/' : '';
+    for (const f of this.state.files) {
+      if (prefix && !f.path.startsWith(prefix)) continue;
+      const art = this.metaCache[f.path]?.art;
+      const uri = art ? this.backend.artUri(art) : undefined;
+      if (!uri || seen.has(art!)) continue;
+      seen.add(art!);
+      out.push({ uri, title: f.track.album || f.track.title });
+      if (out.length >= max) break;
+    }
+    return out;
   }
 
   private applyRenames(pairs: [string, string][], remap: Record<string, Track>) {

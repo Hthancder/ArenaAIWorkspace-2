@@ -62,6 +62,14 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "HolySic uses your photos only when you pick a cover image for a music folder.",
+          "cameraPermission": false,
+          "microphonePermission": "Allow HolySic to analyze audio for optional visualizers."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "ios": {
