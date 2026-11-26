@@ -2,17 +2,12 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from './ArtworkImage';
 import { MOCHY_COLORS, resolveFontFamily } from '../constants/theme';
 import { useMochy } from '../context/MochyContext';
 import { GlassSurface } from './GlassSurface';
+import { useHoldSeek } from '../hooks/useHoldSeek';
 
 export const MiniPlayer: React.FC = () => {
   const {
@@ -30,19 +25,20 @@ export const MiniPlayer: React.FC = () => {
     activeLyricIndex,
     palette,
     prefs,
+    seekBy,
   } = useMochy();
+  const ff = useHoldSeek(seekBy, 1);
 
   if (!currentTrack) return null;
+  // OpenSpot-style floating capsule vs. Mochy card
+  const capsule = prefs.miniPlayerStyle === 'capsule';
 
   const progress = durationSec > 0 ? Math.min(1, Math.max(0, positionSec / durationSec)) : 0;
   const liked = isLiked(currentTrack.id);
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
   const activeLine =
-    prefs.showMiniLyricsTicker &&
-    lyrics &&
-    activeLyricIndex >= 0 &&
-    lyrics.lines[activeLyricIndex]
+    prefs.showMiniLyricsTicker && lyrics && activeLyricIndex >= 0 && lyrics.lines[activeLyricIndex]
       ? lyrics.lines[activeLyricIndex].text
       : null;
 
@@ -51,10 +47,22 @@ export const MiniPlayer: React.FC = () => {
       <GlassSurface
         intensity={68}
         tintColor={palette.surface + 'D8'}
-        style={[styles.card, { borderColor: palette.accent + '2E' }]}
+        style={[styles.card, capsule && styles.capsuleCard, { borderColor: palette.accent + '2E' }]}
       >
-        <View style={styles.row}>
-          <ArtworkImage source={{ uri: currentTrack.artworkUrl }} style={styles.cover} />
+        {capsule && (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.capsuleFill,
+              { width: `${progress * 100}%`, backgroundColor: palette.accent + '22' },
+            ]}
+          />
+        )}
+        <View style={[styles.row, capsule && { paddingVertical: 7 }]}>
+          <ArtworkImage
+            source={{ uri: currentTrack.artworkUrl }}
+            style={[styles.cover, capsule && styles.capsuleCover]}
+          />
 
           <View style={styles.meta}>
             <Text numberOfLines={1} style={[styles.title, { fontFamily }]}>
@@ -113,8 +121,11 @@ export const MiniPlayer: React.FC = () => {
             hitSlop={8}
             onPress={(e) => {
               e.stopPropagation?.();
-              playNext();
+              ff.guard(playNext)();
             }}
+            onLongPress={ff.onLongPress}
+            onPressOut={ff.onPressOut}
+            delayLongPress={ff.delayLongPress}
             style={styles.ctrlBtn}
           >
             <Ionicons name="play-skip-forward" size={20} color="#FFFFFF" />
@@ -122,7 +133,7 @@ export const MiniPlayer: React.FC = () => {
         </View>
 
         {/* Bottom hairline progress bar */}
-        <View style={styles.progressTrack}>
+        <View style={[styles.progressTrack, capsule && { display: 'none' }]}>
           <View
             style={[
               styles.progressFill,
@@ -143,6 +154,22 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 20,
     overflow: 'hidden',
+  },
+  capsuleCard: {
+    borderRadius: 99,
+    borderWidth: 1,
+    marginHorizontal: 14,
+  },
+  capsuleCover: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  capsuleFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
   },
   row: {
     flexDirection: 'row',

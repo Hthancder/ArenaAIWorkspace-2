@@ -2,21 +2,16 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
 import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useMochy } from '../../context/MochyContext';
 import { MOOD_CATEGORIES } from '../../data/curatedCatalog';
 import { Track } from '../../types/music';
+import { CHART_COUNTRIES, CHART_GENRES } from '../../services/discovery/chartsService';
+import { HomeSectionId } from '../../constants/preferences';
 import { MochyMarkIcon } from '../MochyIcons';
 import { TrackRow } from '../TrackRow';
 
@@ -37,7 +32,30 @@ export const HomeScreen: React.FC = () => {
     setIsAudioLabOpen,
     setIsRecapOpen,
     searchTracks,
+    fetchChart,
+    openCharts,
+    openImport,
+    importLocalFiles,
+    likedTracks,
+    downloads,
   } = useMochy();
+
+  const shown = (id: HomeSectionId) => !prefs.hiddenHomeSections.includes(id);
+  const country = CHART_COUNTRIES.find((c) => c.code === prefs.chartCountry) || CHART_COUNTRIES[0];
+  const globalCode = country.code === 'us' ? 'gb' : 'us';
+  const globalCountry = CHART_COUNTRIES.find((c) => c.code === globalCode)!;
+  const [localChart, setLocalChart] = useState<Track[]>([]);
+  const [globalChart, setGlobalChart] = useState<Track[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchChart(country.code, null).then((l) => !cancelled && setLocalChart(l));
+    fetchChart(globalCode, null).then((l) => !cancelled && setGlobalChart(l));
+    return () => {
+      cancelled = true;
+    };
+  }, [country.code, globalCode, fetchChart]);
+  const chartLocal = localChart.length > 0 ? localChart : vnTrending;
+  const chartGlobal = globalChart.length > 0 ? globalChart : globalTrending;
 
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [moodTracks, setMoodTracks] = useState<Track[] | null>(null);
@@ -93,16 +111,10 @@ export const HomeScreen: React.FC = () => {
         </View>
 
         <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => setIsAudioLabOpen(true)}
-            style={styles.headerIconBtn}
-          >
+          <Pressable onPress={() => setIsAudioLabOpen(true)} style={styles.headerIconBtn}>
             <Ionicons name="options-outline" size={20} color="#FFFFFF" />
           </Pressable>
-          <Pressable
-            onPress={() => setIsRecapOpen(true)}
-            style={styles.headerIconBtn}
-          >
+          <Pressable onPress={() => setIsRecapOpen(true)} style={styles.headerIconBtn}>
             <Ionicons name="stats-chart" size={19} color={palette.accent} />
           </Pressable>
           <Pressable onPress={refreshHomeFeeds} style={styles.headerIconBtn}>
@@ -144,41 +156,105 @@ export const HomeScreen: React.FC = () => {
         })}
       </ScrollView>
 
-      {/* Quick Picks Horizontal Multi-Row Grid */}
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { fontFamily }]}>
-          {t(prefs.language, 'quickPicks')}
-        </Text>
-        {(isLoadingHome || loadingMood) && (
-          <ActivityIndicator size="small" color={palette.accent} />
-        )}
-      </View>
+      {/* Quick Actions (OpenSpot Music) */}
+      {shown('quickActions') && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickActions}
+        >
+          {[
+            {
+              icon: 'heart',
+              tint: MOCHY_COLORS.roseLike,
+              label: vi ? 'Đã thích' : 'Liked',
+              sub: String(likedTracks.length),
+              onPress: () => openCollection({ kind: 'liked' }),
+            },
+            {
+              icon: 'arrow-down-circle',
+              tint: MOCHY_COLORS.flacEmerald,
+              label: vi ? 'Tải xuống' : 'Downloads',
+              sub: String(Object.keys(downloads).length),
+              onPress: () => openCollection({ kind: 'offline' }),
+            },
+            {
+              icon: 'link',
+              tint: '#60A5FA',
+              label: vi ? 'Dán link' : 'Paste link',
+              sub: 'YT · Spotify',
+              onPress: () => openImport('link'),
+            },
+            {
+              icon: 'list',
+              tint: '#FBBF24',
+              label: vi ? 'Tìm danh sách' : 'Search a list',
+              sub: vi ? 'Nhiều bài' : 'Batch',
+              onPress: () => openImport('list'),
+            },
+            {
+              icon: 'globe-outline',
+              tint: '#A78BFA',
+              label: vi ? 'Xếp hạng' : 'Charts',
+              sub: country.flag,
+              onPress: () => openCharts(null),
+            },
+            {
+              icon: 'folder-open-outline',
+              tint: '#F472B6',
+              label: vi ? 'Tệp' : 'Files',
+              sub: 'MP3 · FLAC',
+              onPress: () => importLocalFiles(),
+            },
+          ].map((qa) => (
+            <Pressable key={qa.label} onPress={qa.onPress} style={styles.qaCard}>
+              <View style={[styles.qaIcon, { backgroundColor: qa.tint + '22' }]}>
+                <Ionicons name={qa.icon as any} size={18} color={qa.tint} />
+              </View>
+              <View>
+                <Text numberOfLines={1} style={[styles.qaLabel, { fontFamily }]}>
+                  {qa.label}
+                </Text>
+                <Text numberOfLines={1} style={styles.qaSub}>
+                  {qa.sub}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.quickGridScroll}
-      >
-        {pickColumns.map((col, colIdx) => (
-          <View key={colIdx} style={styles.quickColumn}>
-            {col.map((song) => (
-              <TrackRow
-                key={song.id}
-                track={song}
-                queueContext={activePicks}
-                compact
-              />
-            ))}
+      {/* Quick Picks Horizontal Multi-Row Grid */}
+      {shown('quickPicks') && (
+        <>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { fontFamily }]}>
+              {t(prefs.language, 'quickPicks')}
+            </Text>
+            {(isLoadingHome || loadingMood) && (
+              <ActivityIndicator size="small" color={palette.accent} />
+            )}
           </View>
-        ))}
-      </ScrollView>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickGridScroll}
+          >
+            {pickColumns.map((col, colIdx) => (
+              <View key={colIdx} style={styles.quickColumn}>
+                {col.map((song) => (
+                  <TrackRow key={song.id} track={song} queueContext={activePicks} compact />
+                ))}
+              </View>
+            ))}
+          </ScrollView>
+        </>
+      )}
 
       {/* Mix It Instant DJ Flow + Recap Dual Feature Cards */}
       <View style={styles.dualCardsRow}>
-        <Pressable
-          onPress={() => startInstantMix()}
-          style={{ flex: 1 }}
-        >
+        <Pressable onPress={() => startInstantMix()} style={{ flex: 1 }}>
           <LinearGradient
             colors={[palette.gradient[0], '#1A1630']}
             start={{ x: 0, y: 0 }}
@@ -198,10 +274,7 @@ export const HomeScreen: React.FC = () => {
           </LinearGradient>
         </Pressable>
 
-        <Pressable
-          onPress={() => setIsRecapOpen(true)}
-          style={{ flex: 1 }}
-        >
+        <Pressable onPress={() => setIsRecapOpen(true)} style={{ flex: 1 }}>
           <LinearGradient
             colors={['#1E293B', '#0F172A']}
             start={{ x: 0, y: 0 }}
@@ -223,7 +296,7 @@ export const HomeScreen: React.FC = () => {
       </View>
 
       {/* Keep Listening (if history exists) */}
-      {history.length > 0 && (
+      {shown('recent') && history.length > 0 && (
         <>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { fontFamily }]}>
@@ -246,10 +319,7 @@ export const HomeScreen: React.FC = () => {
                 }
                 style={styles.squareCard}
               >
-                <ArtworkImage
-                  source={{ uri: ev.track.artworkUrl }}
-                  style={styles.squareArt}
-                />
+                <ArtworkImage source={{ uri: ev.track.artworkUrl }} style={styles.squareArt} />
                 <Text numberOfLines={1} style={[styles.squareTitle, { fontFamily }]}>
                   {ev.track.title}
                 </Text>
@@ -263,7 +333,7 @@ export const HomeScreen: React.FC = () => {
       )}
 
       {/* Featured Albums Shelf */}
-      {featuredAlbums.length > 0 && (
+      {shown('albums') && featuredAlbums.length > 0 && (
         <>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { fontFamily }]}>
@@ -294,62 +364,134 @@ export const HomeScreen: React.FC = () => {
         </>
       )}
 
-      {/* Vietnam Trending */}
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { fontFamily }]}>
-          {t(prefs.language, 'vnHotCharts')}
-        </Text>
-        <Pressable
-          onPress={() => {
-            if (vnTrending[0]) playTrack(vnTrending[0], vnTrending);
-          }}
-        >
-          <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
-            {t(prefs.language, 'playAll')}
-          </Text>
-        </Pressable>
-      </View>
-      <View style={styles.listCard}>
-        {vnTrending.slice(0, 6).map((song, idx) => (
-          <TrackRow
-            key={song.id}
-            track={song}
-            queueContext={vnTrending}
-            indexBadge={idx + 1}
-          />
-        ))}
-      </View>
+      {/* Charts by country (OpenSpot trending, real Apple Music charts) */}
+      {shown('charts') && (
+        <>
+          <View style={styles.sectionHeader}>
+            <Pressable
+              onPress={() => openCharts(null)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+            >
+              <Text style={[styles.sectionTitle, { fontFamily }]}>
+                {vi
+                  ? `Thịnh hành ${country.flag} ${country.vi}`
+                  : `Trending ${country.flag} ${country.en}`}
+              </Text>
+              <Ionicons name="chevron-down" size={15} color={MOCHY_COLORS.textMuted} />
+            </Pressable>
+            <Pressable onPress={() => chartLocal[0] && playTrack(chartLocal[0], chartLocal)}>
+              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
+                {t(prefs.language, 'playAll')}
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.listCard}>
+            {chartLocal.slice(0, 6).map((song, idx) => (
+              <TrackRow key={song.id} track={song} queueContext={chartLocal} indexBadge={idx + 1} />
+            ))}
+            <Pressable onPress={() => openCharts(null)} style={styles.seeAll}>
+              <Text style={{ color: palette.accent, fontWeight: '700' }}>
+                {vi ? 'Xem top 50 & đổi quốc gia' : 'See top 50 & change country'}
+              </Text>
+            </Pressable>
+          </View>
+        </>
+      )}
 
-      {/* Global Charts */}
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { fontFamily }]}>
-          {t(prefs.language, 'globalCharts')}
-        </Text>
-        <Pressable
-          onPress={() => {
-            if (globalTrending[0]) playTrack(globalTrending[0], globalTrending);
-          }}
-        >
-          <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
-            {t(prefs.language, 'playAll')}
-          </Text>
-        </Pressable>
-      </View>
-      <View style={styles.listCard}>
-        {globalTrending.slice(0, 6).map((song, idx) => (
-          <TrackRow
-            key={song.id}
-            track={song}
-            queueContext={globalTrending}
-            indexBadge={idx + 1}
-          />
-        ))}
-      </View>
+      {/* Genres & moods (Musike genre browse) */}
+      {shown('genres') && (
+        <>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { fontFamily }]}>{vi ? 'Thể loại' : 'Genres'}</Text>
+          </View>
+          <View style={styles.genreGrid}>
+            {CHART_GENRES.filter((g) => g.id !== null)
+              .slice(0, 12)
+              .map((g) => (
+                <Pressable
+                  key={String(g.id)}
+                  onPress={() => openCharts(g.id)}
+                  style={[
+                    styles.genreTile,
+                    { backgroundColor: g.tint + '26', borderColor: g.tint + '55' },
+                  ]}
+                >
+                  <Ionicons name={g.icon as any} size={18} color={g.tint} />
+                  <Text numberOfLines={1} style={[styles.genreText, { fontFamily }]}>
+                    {vi ? g.vi : g.en}
+                  </Text>
+                </Pressable>
+              ))}
+          </View>
+        </>
+      )}
+
+      {/* Global chart */}
+      {shown('global') && (
+        <>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { fontFamily }]}>
+              {t(prefs.language, 'globalCharts')} {globalCountry.flag}
+            </Text>
+            <Pressable onPress={() => chartGlobal[0] && playTrack(chartGlobal[0], chartGlobal)}>
+              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
+                {t(prefs.language, 'playAll')}
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.listCard}>
+            {chartGlobal.slice(0, 6).map((song, idx) => (
+              <TrackRow
+                key={song.id}
+                track={song}
+                queueContext={chartGlobal}
+                indexBadge={idx + 1}
+              />
+            ))}
+          </View>
+        </>
+      )}
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
+  quickActions: { gap: 10, paddingHorizontal: 16, paddingBottom: 6, paddingTop: 2 },
+  qaCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    paddingVertical: 9,
+    paddingLeft: 9,
+    paddingRight: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+  },
+  qaIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qaLabel: { color: '#FFF', fontWeight: '800', fontSize: 13 },
+  qaSub: { color: MOCHY_COLORS.textMuted, fontSize: 11, marginTop: 1 },
+  seeAll: { alignItems: 'center', paddingVertical: 12 },
+  genreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
+  genreTile: {
+    width: '31.5%',
+    flexGrow: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  genreText: { color: '#FFF', fontWeight: '700', fontSize: 13, flexShrink: 1 },
   container: {
     flex: 1,
   },

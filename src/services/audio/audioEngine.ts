@@ -86,6 +86,8 @@ class MochyAudioEngine {
   ): Promise<void> {
     await this.ensureInitialized();
     this.loadSeq += 1;
+    this.userVolume = Math.max(0, Math.min(1, volume));
+    volume = this.userVolume * this.gainMultiplier;
 
     if (Platform.OS !== 'web') {
       await this.loadNative(url, track, volume, headers);
@@ -150,6 +152,101 @@ class MochyAudioEngine {
     }
   }
 
+  // ───── Spectrum visualizer (Cog) — PCM taps on iOS, AnalyserNode on web ─────
+  private spectrumListeners = new Set<(bands: number[]) => void>();
+  private sampleSub: { remove: () => void } | null = null;
+  private analyser: AnalyserNode | null = null;
+  private spectrumTimer: ReturnType<typeof setInterval> | null = null;
+  private lastSpectrumAt = 0;
+  private static readonly SPECTRUM_FREQS = [
+    55, 110, 220, 350, 560, 900, 1400, 2200, 3500, 5600, 9000, 14000,
+  ];
+
+  /** Live 12-band spectrum (0..1). Sampling only runs while someone listens. */
+  subscribeSpectrum(cb: (bands: number[]) => void): () => void {
+    this.spectrumListeners.add(cb);
+    this.updateSampling();
+    return () => {
+      this.spectrumListeners.delete(cb);
+      this.updateSampling();
+    };
+  }
+
+  private emitSpectrum(bands: number[]): void {
+    this.spectrumListeners.forEach((l) => l(bands));
+  }
+
+  private updateSampling(): void {
+    const want = this.spectrumListeners.size > 0;
+    if (Platform.OS !== 'web') {
+      const p = this.nativePlayer;
+      if (!p) return;
+      try {
+        if (want && !this.sampleSub && p.isAudioSamplingSupported) {
+          p.setAudioSamplingEnabled(true);
+          this.sampleSub = p.addListener('audioSampleUpdate', (s) => this.onPcmSample(s.channels));
+        } else if (!want && this.sampleSub) {
+          this.sampleSub.remove();
+          this.sampleSub = null;
+          p.setAudioSamplingEnabled(false);
+        }
+      } catch {
+        this.sampleSub = null;
+      }
+      return;
+    }
+    if (want && !this.spectrumTimer) {
+      const bins = new Uint8Array(1024);
+      this.spectrumTimer = setInterval(() => {
+        const a = this.analyser;
+        const ctx = this.audioCtx;
+        if (!a || !ctx) return;
+        a.getByteFrequencyData(bins);
+        const hzPerBin = ctx.sampleRate / 2 / a.frequencyBinCount;
+        const bands = MochyAudioEngine.SPECTRUM_FREQS.map((f) => {
+          const i = Math.min(a.frequencyBinCount - 1, Math.round(f / hzPerBin));
+          const lo = Math.max(0, i - 1);
+          const v = Math.max(bins[lo], bins[i], bins[Math.min(a.frequencyBinCount - 1, i + 1)]);
+          return v / 255;
+        });
+        this.emitSpectrum(bands);
+      }, 60);
+    } else if (!want && this.spectrumTimer) {
+      clearInterval(this.spectrumTimer);
+      this.spectrumTimer = null;
+    }
+  }
+
+  /** Goertzel filters at 12 log-spaced frequencies over the latest PCM frames */
+  private onPcmSample(channels: { frames: number[] }[]): void {
+    const now = Date.now();
+    if (now - this.lastSpectrumAt < 45 || !channels?.length) return;
+    this.lastSpectrumAt = now;
+    const a = channels[0].frames;
+    const b = channels[1]?.frames;
+    const n = Math.min(a.length, 1024);
+    if (n < 64) return;
+    const sr = 44100;
+    const bands = MochyAudioEngine.SPECTRUM_FREQS.map((f) => {
+      const k = Math.round((n * f) / sr);
+      const w = (2 * Math.PI * k) / n;
+      const coeff = 2 * Math.cos(w);
+      let s1 = 0;
+      let s2 = 0;
+      for (let i = 0; i < n; i++) {
+        const x = b ? (a[i] + b[i]) * 0.5 : a[i];
+        const hann = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1));
+        const s0 = x * hann + coeff * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+      }
+      const mag = Math.sqrt(Math.max(0, s1 * s1 + s2 * s2 - coeff * s1 * s2)) / (n / 4);
+      const db = 20 * Math.log10(mag + 1e-9);
+      return Math.max(0, Math.min(1, (db + 58) / 52));
+    });
+    this.emitSpectrum(bands);
+  }
+
   private releaseNativePlayer(): void {
     try {
       this.nativeSub?.remove();
@@ -157,6 +254,12 @@ class MochyAudioEngine {
       // ignore
     }
     this.nativeSub = null;
+    try {
+      this.sampleSub?.remove();
+    } catch {
+      // ignore
+    }
+    this.sampleSub = null;
     if (this.nativePlayer) {
       const old = this.nativePlayer;
       this.nativePlayer = null;
@@ -184,7 +287,8 @@ class MochyAudioEngine {
       this.releaseNativePlayer();
       const seq = this.loadSeq;
 
-      const source = headers && Object.keys(headers).length > 0 ? { uri: url, headers } : { uri: url };
+      const source =
+        headers && Object.keys(headers).length > 0 ? { uri: url, headers } : { uri: url };
       const player = createAudioPlayer(source, {
         updateInterval: 250,
         keepAudioSessionActive: true,
@@ -205,9 +309,13 @@ class MochyAudioEngine {
       });
 
       player.volume = Math.max(0, Math.min(1, volume));
+      if (this.spectrumListeners.size > 0) this.updateSampling();
       if (this.currentLab) {
         player.shouldCorrectPitch = this.currentLab.preservePitch;
-        player.setPlaybackRate(this.currentLab.enabled ? this.currentLab.playbackRate || 1.0 : 1.0, 'high');
+        player.setPlaybackRate(
+          this.currentLab.enabled ? this.currentLab.playbackRate || 1.0 : 1.0,
+          'high'
+        );
       }
 
       try {
@@ -334,6 +442,13 @@ class MochyAudioEngine {
       }
       prev.connect(panner);
 
+      // Spectrum tap (read-only branch)
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.72;
+      panner.connect(analyser);
+      this.analyser = analyser;
+
       panner.connect(dry);
       dry.connect(ctx.destination);
 
@@ -394,8 +509,7 @@ class MochyAudioEngine {
     const pushCurrent = (didJustFinish = false, error: string | null = null) => {
       if (this.webAudio !== el) return;
       const rawDur = el.duration;
-      const durationSec =
-        Number.isFinite(rawDur) && rawDur > 0 ? rawDur : track.durationSec || 0;
+      const durationSec = Number.isFinite(rawDur) && rawDur > 0 ? rawDur : track.durationSec || 0;
       this.emit({
         isPlaying: !el.paused && !el.ended,
         isBuffering: el.readyState < 2 && !el.paused,
@@ -472,8 +586,18 @@ class MochyAudioEngine {
     }
   }
 
+  /** User volume × loudness-normalisation gain (ReplayGain-style, idea from Cog) */
+  private userVolume = 1;
+  private gainMultiplier = 1;
+
+  setGainMultiplier(mult: number): void {
+    this.gainMultiplier = Math.max(0.05, Math.min(1, Number.isFinite(mult) ? mult : 1));
+    this.setVolume(this.userVolume);
+  }
+
   setVolume(vol: number): void {
-    const v = Math.max(0, Math.min(1, vol));
+    this.userVolume = Math.max(0, Math.min(1, vol));
+    const v = this.userVolume * this.gainMultiplier;
     if (Platform.OS !== 'web') {
       if (this.nativePlayer) this.nativePlayer.volume = v;
     } else if (this.webAudio) {

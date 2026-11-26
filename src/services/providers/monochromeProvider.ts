@@ -55,8 +55,7 @@ export function parseFlacStreamInfo(bytes: Uint8Array): FlacStreamInfo | null {
 
   const hiRes = bits > 16 || sampleRate > 48000;
   const shortLabel = hiRes ? 'Hi-Res FLAC' : 'FLAC';
-  const rateKhz =
-    sampleRate % 1000 === 0 ? `${sampleRate / 1000}` : (sampleRate / 1000).toFixed(1);
+  const rateKhz = sampleRate % 1000 === 0 ? `${sampleRate / 1000}` : (sampleRate / 1000).toFixed(1);
   return {
     bitsPerSample: bits,
     sampleRate,
@@ -66,7 +65,11 @@ export function parseFlacStreamInfo(bytes: Uint8Array): FlacStreamInfo | null {
   };
 }
 
-async function fetchTimeout(url: string, init: RequestInit = {}, timeoutMs = 4200): Promise<Response> {
+async function fetchTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 4200
+): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -74,6 +77,11 @@ async function fetchTimeout(url: string, init: RequestInit = {}, timeoutMs = 420
   } finally {
     clearTimeout(timer);
   }
+}
+
+function numOrUndef(v: unknown): number | undefined {
+  const n = typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : NaN;
+  return Number.isFinite(n) ? n : undefined;
 }
 
 function parseStreamerTracks(json: any): CatalogCandidate[] {
@@ -96,7 +104,11 @@ function parseStreamerTracks(json: any): CatalogCandidate[] {
       album: t?.albumTitle || t?.album || undefined,
       durationSec,
       isrc: t?.isrc || undefined,
-      artworkUrl: resolveCoverUrl(t?.artwork || t?.coverUrl || t?.albumCover || t?.cover || t?.album?.cover),
+      replayGain: numOrUndef(t?.replayGain ?? t?.trackReplayGain ?? t?.audio?.replayGain),
+      peak: numOrUndef(t?.peak ?? t?.trackPeakAmplitude ?? t?.audio?.peak),
+      artworkUrl: resolveCoverUrl(
+        t?.artwork || t?.coverUrl || t?.albumCover || t?.cover || t?.album?.cover
+      ),
     });
   }
   return out;
@@ -144,7 +156,10 @@ export async function verifyMonochromeServer(
       server.kind === 'relay'
         ? `${base}/search?q=test&n=1`
         : `${base}/search/tracks?q=test&limit=1`;
-    const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': MONOCHROME_UA };
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'User-Agent': MONOCHROME_UA,
+    };
     if (server.kind === 'relay') headers['X-Relay-Client'] = 'relay/2';
 
     const res = await fetchTimeout(searchUrl, { headers }, 4500);
@@ -175,14 +190,16 @@ export async function searchMonochromeCatalog(
         srv.kind === 'relay'
           ? `${base}/search?q=${encoded}&n=${limit}`
           : `${base}/search/tracks?q=${encoded}&limit=${limit}`;
-      const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': MONOCHROME_UA };
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        'User-Agent': MONOCHROME_UA,
+      };
       if (srv.kind === 'relay') headers['X-Relay-Client'] = 'relay/2';
 
       const res = await fetchTimeout(url, { headers }, 3800);
       if (!res.ok) continue;
       const data = await res.json();
-      const candidates =
-        srv.kind === 'relay' ? parseRelayTracks(data) : parseStreamerTracks(data);
+      const candidates = srv.kind === 'relay' ? parseRelayTracks(data) : parseStreamerTracks(data);
       if (candidates.length > 0) {
         return candidates.map((c) => ({
           id: `mono-${c.id}`,
@@ -215,6 +232,8 @@ export async function resolveMonochromeStream(
   id: string;
   qualityLabel: string;
   sampleRateHz: number;
+  gainDb?: number;
+  peak?: number;
 } | null> {
   const list = servers.length > 0 ? servers : [DEFAULT_MONOCHROME_SERVER];
   for (const srv of list) {
@@ -236,7 +255,10 @@ export async function resolveMonochromeStream(
       srv.kind === 'relay'
         ? `${base}/search?q=${encodeURIComponent(q)}&n=8`
         : `${base}/search/tracks?q=${encodeURIComponent(q)}&limit=8`;
-    const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': MONOCHROME_UA };
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'User-Agent': MONOCHROME_UA,
+    };
     if (srv.kind === 'relay') headers['X-Relay-Client'] = 'relay/2';
 
     try {
@@ -252,8 +274,7 @@ export async function resolveMonochromeStream(
         continue;
       }
       const data = await res.json();
-      const candidates =
-        srv.kind === 'relay' ? parseRelayTracks(data) : parseStreamerTracks(data);
+      const candidates = srv.kind === 'relay' ? parseRelayTracks(data) : parseStreamerTracks(data);
       const best = rankCandidates(query, candidates)[0];
       if (!best) {
         onStep({
@@ -297,6 +318,8 @@ export async function resolveMonochromeStream(
           id: best.track.id,
           qualityLabel: flac.label,
           sampleRateHz: flac.sampleRate,
+          gainDb: best.track.replayGain,
+          peak: best.track.peak,
         };
       } else {
         const relayOpen = await fetchTimeout(
@@ -320,6 +343,8 @@ export async function resolveMonochromeStream(
             id: best.track.id,
             qualityLabel: flac?.label || 'FLAC · 16-bit / 44.1 kHz',
             sampleRateHz: flac?.sampleRate || 44100,
+            gainDb: best.track.replayGain,
+            peak: best.track.peak,
           };
         }
       }

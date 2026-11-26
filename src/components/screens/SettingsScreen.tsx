@@ -27,6 +27,7 @@ import { useMochy } from '../../context/MochyContext';
 import { StreamFileCache } from '../../services/audio/streamFileCache';
 import { SourceMemory } from '../../services/providers/sourceMemory';
 import { MochyMarkIcon } from '../MochyIcons';
+import { MergedSettings } from '../merge/MergedSettings';
 
 export const SettingsScreen: React.FC = () => {
   const {
@@ -103,19 +104,13 @@ export const SettingsScreen: React.FC = () => {
 
       {/* Quick Tools */}
       <View style={styles.quickRow}>
-        <Pressable
-          onPress={() => setIsAudioLabOpen(true)}
-          style={styles.quickToolCard}
-        >
+        <Pressable onPress={() => setIsAudioLabOpen(true)} style={styles.quickToolCard}>
           <Ionicons name="options" size={22} color={palette.accent} />
           <Text style={styles.quickToolTitle}>Audio Lab & EQ</Text>
           <Text style={styles.quickToolSub}>AutoEQ · 8D · Reverb</Text>
         </Pressable>
 
-        <Pressable
-          onPress={() => setIsRecapOpen(true)}
-          style={styles.quickToolCard}
-        >
+        <Pressable onPress={() => setIsRecapOpen(true)} style={styles.quickToolCard}>
           <Ionicons name="id-card" size={22} color="#34D399" />
           <Text style={styles.quickToolTitle}>Mochy Recap ID</Text>
           <Text style={styles.quickToolSub}>Stats & Listener Card</Text>
@@ -136,10 +131,7 @@ export const SettingsScreen: React.FC = () => {
                 haptic('selection');
                 updatePrefs({ language: lang });
               }}
-              style={[
-                styles.segmentBtn,
-                active && { backgroundColor: palette.accent },
-              ]}
+              style={[styles.segmentBtn, active && { backgroundColor: palette.accent }]}
             >
               <Text
                 style={{
@@ -177,12 +169,8 @@ export const SettingsScreen: React.FC = () => {
               ]}
             >
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>
-                  {vi ? meta.titleVi : meta.titleEn}
-                </Text>
-                <Text style={styles.rowDesc}>
-                  {vi ? meta.descVi : meta.descEn}
-                </Text>
+                <Text style={styles.rowTitle}>{vi ? meta.titleVi : meta.titleEn}</Text>
+                <Text style={styles.rowDesc}>{vi ? meta.descVi : meta.descEn}</Text>
               </View>
               <Ionicons
                 name={active ? 'checkmark-circle' : 'ellipse-outline'}
@@ -266,10 +254,7 @@ export const SettingsScreen: React.FC = () => {
                 <Pressable
                   key={id}
                   onPress={() => updatePrefs({ playerBackground: id })}
-                  style={[
-                    styles.smallOptionPill,
-                    selected && { backgroundColor: palette.accent },
-                  ]}
+                  style={[styles.smallOptionPill, selected && { backgroundColor: palette.accent }]}
                 >
                   <Text
                     style={{
@@ -305,10 +290,7 @@ export const SettingsScreen: React.FC = () => {
                 <Pressable
                   key={id}
                   onPress={() => updatePrefs({ fontStyle: id })}
-                  style={[
-                    styles.smallOptionPill,
-                    selected && { backgroundColor: palette.accent },
-                  ]}
+                  style={[styles.smallOptionPill, selected && { backgroundColor: palette.accent }]}
                 >
                   <Text
                     style={{
@@ -343,7 +325,9 @@ export const SettingsScreen: React.FC = () => {
             monochrome: 'Monochrome · Lossless FLAC (16/24-bit)',
             jiosaavn: `JioSaavn · Full AAC (${prefs.preferredJioSaavnQuality} kbps)`,
             innertube: 'YouTube Music InnerTube (iOS / visionOS)',
-            itunes: vi ? 'Apple · Preview 30s (chỉ khi cho phép)' : 'Apple · 30s preview (only if allowed)',
+            itunes: vi
+              ? 'Apple · Preview 30s (chỉ khi cho phép)'
+              : 'Apple · 30s preview (only if allowed)',
           };
           return (
             <View key={modId} style={styles.moduleRow}>
@@ -391,9 +375,7 @@ export const SettingsScreen: React.FC = () => {
 
         <View style={styles.switchRow}>
           <View style={{ flex: 1, paddingRight: 10 }}>
-            <Text style={styles.rowTitle}>
-              {vi ? 'Ưu tiên phát ngay' : 'Prefer instant start'}
-            </Text>
+            <Text style={styles.rowTitle}>{vi ? 'Ưu tiên phát ngay' : 'Prefer instant start'}</Text>
             <Text style={styles.rowDesc}>
               {vi
                 ? 'Trên iPhone, FLAC Monochrome phải tải về 1 lần (~30 MB) mới phát được, nên chỉ dùng khi nguồn phát ngay (YouTube / JioSaavn) không có. Tắt nếu luôn muốn lossless.'
@@ -440,9 +422,7 @@ export const SettingsScreen: React.FC = () => {
         </Pressable>
 
         {/* JioSaavn Bitrate Choice */}
-        <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>
-          JioSaavn Stream Bitrate
-        </Text>
+        <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>JioSaavn Stream Bitrate</Text>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
           {(['320', '160', '96'] as JioSaavnQuality[]).map((q) => {
             const active = prefs.preferredJioSaavnQuality === q;
@@ -450,10 +430,7 @@ export const SettingsScreen: React.FC = () => {
               <Pressable
                 key={q}
                 onPress={() => updatePrefs({ preferredJioSaavnQuality: q })}
-                style={[
-                  styles.smallOptionPill,
-                  active && { backgroundColor: palette.accent },
-                ]}
+                style={[styles.smallOptionPill, active && { backgroundColor: palette.accent }]}
               >
                 <Text
                   style={{
@@ -534,9 +511,7 @@ export const SettingsScreen: React.FC = () => {
               style={styles.srvInput}
             />
             <Pressable
-              onPress={() =>
-                setNewServerKind((k) => (k === 'relay' ? 'streamer' : 'relay'))
-              }
+              onPress={() => setNewServerKind((k) => (k === 'relay' ? 'streamer' : 'relay'))}
               style={styles.kindToggle}
             >
               <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>
@@ -556,6 +531,9 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </View>
       </View>
+
+      {/* Merged features: Spotube · OpenSpot Music · Musike · Cog */}
+      <MergedSettings />
 
       {/* iOS Installation Guide Card */}
       <Text style={[styles.sectionTitle, { fontFamily }]}>
@@ -608,13 +586,9 @@ export const SettingsScreen: React.FC = () => {
             <View style={{ flex: 1 }}>
               <Text style={styles.creditTitle}>
                 {credit.name}{' '}
-                <Text style={{ color: palette.accent, fontWeight: '600' }}>
-                  by {credit.author}
-                </Text>
+                <Text style={{ color: palette.accent, fontWeight: '600' }}>by {credit.author}</Text>
               </Text>
-              <Text style={styles.creditDesc}>
-                {vi ? credit.roleVi : credit.roleEn}
-              </Text>
+              <Text style={styles.creditDesc}>{vi ? credit.roleVi : credit.roleEn}</Text>
             </View>
             <Ionicons name="open-outline" size={17} color={MOCHY_COLORS.textSecondary} />
           </Pressable>

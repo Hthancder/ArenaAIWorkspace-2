@@ -2,19 +2,10 @@
 
 export type MainTab = 'home' | 'search' | 'library' | 'settings';
 
-export type PlayerStyle =
-  | 'FLAGSHIP'
-  | 'TURNTABLE'
-  | 'IPOD'
-  | 'POSTER'
-  | 'BEDSIDE';
+export type PlayerStyle = 'FLAGSHIP' | 'TURNTABLE' | 'IPOD' | 'POSTER' | 'BEDSIDE';
 
 export type PlayerBackgroundStyle =
-  | 'APPLE_MUSIC'
-  | 'COVER_GRADIENT'
-  | 'AMBIENT'
-  | 'DARK_GRADIENT'
-  | 'SOLID';
+  'APPLE_MUSIC' | 'COVER_GRADIENT' | 'AMBIENT' | 'DARK_GRADIENT' | 'SOLID';
 
 export type IpodTheme = 'SILVER' | 'BLACK' | 'U2' | 'TRUE_DARK';
 
@@ -31,7 +22,53 @@ export type AppFontStyle = 'inter' | 'system' | 'rounded' | 'mono' | 'serif';
 
 export type JioSaavnQuality = '320' | '160' | '96';
 
+export type HomeSectionId =
+  | 'greeting'
+  | 'quickActions'
+  | 'quickPicks'
+  | 'charts'
+  | 'vn'
+  | 'global'
+  | 'albums'
+  | 'recent'
+  | 'genres';
+
+export interface BlacklistPref {
+  artists: string[];
+  tracks: { id: string; title: string; artist: string }[];
+}
+
+/** Accent presets (Musike: 8 presets + custom). 'dynamic' = Mochy's colours from the artwork */
+export const ACCENT_PRESETS: { id: string; color: string; vi: string; en: string }[] = [
+  { id: 'dynamic', color: 'dynamic', vi: 'Theo bìa', en: 'From artwork' },
+  { id: 'rose', color: '#FB7185', vi: 'Hồng', en: 'Rose' },
+  { id: 'violet', color: '#A78BFA', vi: 'Tím', en: 'Violet' },
+  { id: 'sky', color: '#38BDF8', vi: 'Xanh trời', en: 'Sky' },
+  { id: 'emerald', color: '#34D399', vi: 'Ngọc lục bảo', en: 'Emerald' },
+  { id: 'lime', color: '#A3E635', vi: 'Chanh', en: 'Lime' },
+  { id: 'amber', color: '#FBBF24', vi: 'Hổ phách', en: 'Amber' },
+  { id: 'orange', color: '#FB923C', vi: 'Cam', en: 'Orange' },
+  { id: 'spotify', color: '#1ED760', vi: 'Xanh lá', en: 'Green' },
+];
+
 export interface MochyPreferences {
+  /** 'dynamic' or a #RRGGBB colour (readability is auto-adjusted for the dark UI) */
+  accentColor: string;
+  hiddenHomeSections: HomeSectionId[];
+  /** Loudness normalisation from source ReplayGain / loudness data, with clipping prevention */
+  normalizeVolume: boolean;
+  /** Restore the last queue & position on launch (paused) */
+  resumeQueue: boolean;
+  /** Songs & artists never played in mixes, charts, search or autoplay */
+  blacklist: BlacklistPref;
+  /** Country for the charts / trending section */
+  chartCountry: string;
+  /** Live search suggestions while typing */
+  searchSuggestions: boolean;
+  /** Welcome tour finished */
+  onboarded: boolean;
+  /** Mini player look: Mochy card or OpenSpot-style floating capsule */
+  miniPlayerStyle: 'card' | 'capsule';
   language: AppLanguage;
   pureBlack: boolean;
   enableBlur: boolean;
@@ -63,6 +100,15 @@ export interface MochyPreferences {
 }
 
 export const DEFAULT_PREFERENCES: MochyPreferences = {
+  accentColor: 'dynamic',
+  hiddenHomeSections: [],
+  normalizeVolume: true,
+  resumeQueue: true,
+  blacklist: { artists: [], tracks: [] },
+  chartCountry: 'vn',
+  searchSuggestions: true,
+  onboarded: false,
+  miniPlayerStyle: 'card',
   language: 'vi',
   pureBlack: false,
   enableBlur: true,

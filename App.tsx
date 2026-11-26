@@ -21,6 +21,9 @@ import { RecapModal } from './src/components/screens/RecapModal';
 import { SearchScreen } from './src/components/screens/SearchScreen';
 import { SettingsScreen } from './src/components/screens/SettingsScreen';
 import { TrackActionSheet } from './src/components/TrackActionSheet';
+import { ChartsModal } from './src/components/merge/ChartsModal';
+import { ImportModal } from './src/components/merge/ImportModal';
+import { WelcomeModal } from './src/components/merge/WelcomeModal';
 import { t } from './src/constants/i18n';
 import { MainTab } from './src/constants/preferences';
 import { MOCHY_COLORS, resolveFontFamily } from './src/constants/theme';
@@ -28,7 +31,19 @@ import { MochyProvider, useMochy } from './src/context/MochyContext';
 
 const MochyShell: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { activeTab, setActiveTab, prefs, palette, toastMessage, haptic } = useMochy();
+  const {
+    activeTab,
+    setActiveTab,
+    prefs,
+    palette,
+    toastMessage,
+    haptic,
+    isOnline,
+    importSheet,
+    closeImport,
+    chartsSheet,
+    closeCharts,
+  } = useMochy();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
   const bg = prefs.pureBlack ? MOCHY_COLORS.pureBlack : MOCHY_COLORS.obsidian;
@@ -79,6 +94,17 @@ const MochyShell: React.FC = () => {
           },
         ]}
       >
+        {/* Offline banner (OpenSpot Music) — downloads & Files imports still play */}
+        {!isOnline && (
+          <View style={styles.offlineBanner}>
+            <Ionicons name="cloud-offline-outline" size={15} color="#0A0A0E" />
+            <Text style={styles.offlineText}>
+              {prefs.language === 'vi'
+                ? 'Đang ngoại tuyến · chỉ phát được bài đã tải & tệp trên máy'
+                : 'Offline · only downloads & local files can play'}
+            </Text>
+          </View>
+        )}
         <View style={{ flex: 1 }}>
           {activeTab === 'home' && <HomeScreen />}
           {activeTab === 'search' && <SearchScreen />}
@@ -87,19 +113,10 @@ const MochyShell: React.FC = () => {
         </View>
 
         {/* Floating Dock: MiniPlayer + iOS Translucent Bottom Tab Bar */}
-        <View
-          style={[
-            styles.bottomDock,
-            { paddingBottom: Math.max(insets.bottom, 10) },
-          ]}
-        >
+        <View style={[styles.bottomDock, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <MiniPlayer />
 
-          <GlassSurface
-            intensity={65}
-            tintColor="rgba(14, 14, 20, 0.84)"
-            style={styles.tabBar}
-          >
+          <GlassSurface intensity={65} tintColor="rgba(14, 14, 20, 0.84)" style={styles.tabBar}>
             {tabs.map((tab) => {
               const selected = activeTab === tab.id;
               const tint = selected ? palette.accent : MOCHY_COLORS.textMuted;
@@ -115,11 +132,7 @@ const MochyShell: React.FC = () => {
                   {tab.isMochyMark ? (
                     <MochyMarkIcon size={23} color={tint} filled={selected} />
                   ) : (
-                    <Ionicons
-                      name={selected ? tab.iconActive : tab.icon}
-                      size={22}
-                      color={tint}
-                    />
+                    <Ionicons name={selected ? tab.iconActive : tab.icon} size={22} color={tint} />
                   )}
                   <Text
                     style={[
@@ -155,6 +168,18 @@ const MochyShell: React.FC = () => {
         <AudioLabModal />
         <RecapModal />
         <TrackActionSheet />
+        <ImportModal
+          visible={!!importSheet}
+          onClose={closeImport}
+          initialMode={importSheet?.mode}
+          initialText={importSheet?.text}
+        />
+        <ChartsModal
+          visible={!!chartsSheet}
+          onClose={closeCharts}
+          initialGenre={chartsSheet?.genre ?? null}
+        />
+        <WelcomeModal />
       </View>
     </View>
   );
@@ -181,6 +206,22 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: Platform.OS === 'web' ? 520 : undefined,
     position: 'relative',
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginHorizontal: 12,
+    marginBottom: 6,
+    paddingVertical: 6,
+    borderRadius: 99,
+    backgroundColor: '#FBBF24',
+  },
+  offlineText: {
+    color: '#0A0A0E',
+    fontWeight: '700',
+    fontSize: 12.5,
   },
   bottomDock: {
     position: 'absolute',

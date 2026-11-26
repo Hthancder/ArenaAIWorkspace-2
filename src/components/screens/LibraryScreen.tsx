@@ -29,18 +29,16 @@ export const LibraryScreen: React.FC = () => {
     downloads,
     history,
     createPlaylist,
-    importPlaylistText,
+    openImport,
+    importLocalFiles,
     openCollection,
     setIsRecapOpen,
   } = useMochy();
 
   const [tab, setTab] = useState<LibFilter>('playlists');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
   const [plName, setPlName] = useState('');
   const [plDesc, setPlDesc] = useState('');
-  const [importText, setImportText] = useState('');
-  const [importing, setImporting] = useState(false);
 
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -50,18 +48,18 @@ export const LibraryScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.pageTitle, { fontFamily }]}>
-          {t(prefs.language, 'library')}
-        </Text>
+        <Text style={[styles.pageTitle, { fontFamily }]}>{t(prefs.language, 'library')}</Text>
         <View style={styles.headerRight}>
           <Pressable
-            onPress={() => setShowImportModal(true)}
+            onPress={() => importLocalFiles()}
             style={styles.actionPill}
+            accessibilityLabel={vi ? 'Nhập tệp từ ứng dụng Tệp' : 'Import from Files'}
           >
+            <Ionicons name="folder-open-outline" size={16} color="#FFFFFF" />
+          </Pressable>
+          <Pressable onPress={() => openImport('link')} style={styles.actionPill}>
             <Ionicons name="cloud-upload-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.actionPillText}>
-              {vi ? 'Nhập' : 'Import'}
-            </Text>
+            <Text style={styles.actionPillText}>{vi ? 'Nhập' : 'Import'}</Text>
           </Pressable>
           <Pressable
             onPress={() => setShowCreateModal(true)}
@@ -134,12 +132,7 @@ export const LibraryScreen: React.FC = () => {
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.tabChipText,
-                  { color: active ? palette.onAccent : '#E4E4EC' },
-                ]}
-              >
+              <Text style={[styles.tabChipText, { color: active ? palette.onAccent : '#E4E4EC' }]}>
                 {item.label}
               </Text>
             </Pressable>
@@ -223,15 +216,13 @@ export const LibraryScreen: React.FC = () => {
           <>
             {history.length === 0 ? (
               <Text style={styles.emptyNote}>
-                {vi ? 'Lịch sử nghe sẽ tự động xuất hiện tại đây.' : 'Recently played songs appear here.'}
+                {vi
+                  ? 'Lịch sử nghe sẽ tự động xuất hiện tại đây.'
+                  : 'Recently played songs appear here.'}
               </Text>
             ) : (
               history.map((ev) => (
-                <TrackRow
-                  key={ev.id}
-                  track={ev.track}
-                  queueContext={history.map((h) => h.track)}
-                />
+                <TrackRow key={ev.id} track={ev.track} queueContext={history.map((h) => h.track)} />
               ))
             )}
           </>
@@ -245,17 +236,9 @@ export const LibraryScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setShowCreateModal(false)}
-        >
-          <Pressable
-            style={styles.modalBox}
-            onPress={(e) => e.stopPropagation?.()}
-          >
-            <Text style={styles.modalTitle}>
-              {t(prefs.language, 'createPlaylist')}
-            </Text>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowCreateModal(false)}>
+          <Pressable style={styles.modalBox} onPress={(e) => e.stopPropagation?.()}>
+            <Text style={styles.modalTitle}>{t(prefs.language, 'createPlaylist')}</Text>
             <TextInput
               value={plName}
               onChangeText={setPlName}
@@ -271,13 +254,8 @@ export const LibraryScreen: React.FC = () => {
               style={styles.modalInput}
             />
             <View style={styles.modalActions}>
-              <Pressable
-                onPress={() => setShowCreateModal(false)}
-                style={styles.cancelModalBtn}
-              >
-                <Text style={{ color: '#FFF', fontWeight: '600' }}>
-                  {vi ? 'Huỷ' : 'Cancel'}
-                </Text>
+              <Pressable onPress={() => setShowCreateModal(false)} style={styles.cancelModalBtn}>
+                <Text style={{ color: '#FFF', fontWeight: '600' }}>{vi ? 'Huỷ' : 'Cancel'}</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -292,81 +270,6 @@ export const LibraryScreen: React.FC = () => {
                 <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
                   {vi ? 'Tạo ngay' : 'Create'}
                 </Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* Import Playlist Modal (Spotify / Apple Music / M3U text list) */}
-      <Modal
-        visible={showImportModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowImportModal(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setShowImportModal(false)}
-        >
-          <Pressable
-            style={styles.modalBox}
-            onPress={(e) => e.stopPropagation?.()}
-          >
-            <Text style={styles.modalTitle}>
-              {vi ? 'Nhập Playlist từ danh sách bài hát' : 'Import Playlist from Song List'}
-            </Text>
-            <Text style={styles.modalSub}>
-              {vi
-                ? 'Dán tên các bài hát (mỗi dòng 1 bài từ Spotify / Apple Music / YouTube) — Mochy sẽ tự tìm và ghép bài:'
-                : 'Paste one song per line (e.g. exported from Spotify / Apple Music):'}
-            </Text>
-            <TextInput
-              value={plName}
-              onChangeText={setPlName}
-              placeholder={vi ? 'Tên Playlist nhập vào…' : 'Imported playlist name…'}
-              placeholderTextColor={MOCHY_COLORS.textMuted}
-              style={styles.modalInput}
-            />
-            <TextInput
-              value={importText}
-              onChangeText={setImportText}
-              multiline
-              placeholder={
-                'tlinh - nếu lúc đó\nVũ. - Lạ Lùng\nThe Weeknd - Blinding Lights'
-              }
-              placeholderTextColor={MOCHY_COLORS.textMuted}
-              style={[styles.modalInput, { height: 110, textAlignVertical: 'top' }]}
-            />
-            <View style={styles.modalActions}>
-              <Pressable
-                onPress={() => setShowImportModal(false)}
-                style={styles.cancelModalBtn}
-              >
-                <Text style={{ color: '#FFF', fontWeight: '600' }}>
-                  {vi ? 'Đóng' : 'Close'}
-                </Text>
-              </Pressable>
-              <Pressable
-                disabled={importing}
-                onPress={async () => {
-                  if (!importText.trim()) return;
-                  setImporting(true);
-                  await importPlaylistText(plName || 'Mochy Imported', importText);
-                  setImporting(false);
-                  setPlName('');
-                  setImportText('');
-                  setShowImportModal(false);
-                }}
-                style={[styles.confirmModalBtn, { backgroundColor: palette.accent }]}
-              >
-                {importing ? (
-                  <ActivityIndicator size="small" color={palette.onAccent} />
-                ) : (
-                  <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
-                    {vi ? 'Ghép & Nhập' : 'Match & Import'}
-                  </Text>
-                )}
               </Pressable>
             </View>
           </Pressable>

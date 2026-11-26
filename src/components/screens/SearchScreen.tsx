@@ -16,6 +16,7 @@ import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
 import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useMochy } from '../../context/MochyContext';
+import { looksLikeLink } from '../../services/import/linkImport';
 import { MOOD_CATEGORIES } from '../../data/curatedCatalog';
 import { AlbumSummary, MusicSourceId, Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
@@ -49,20 +50,61 @@ export const SearchScreen: React.FC = () => {
     clearSearchHistory,
     featuredAlbums,
     openCollection,
+    openMusicLink,
+    openImport,
+    searchSuggestions,
   } = useMochy();
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkMsg, setLinkMsg] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'all' | MusicSourceId>('all');
   const [results, setResults] = useState<Track[]>([]);
   const [albumResults, setAlbumResults] = useState<AlbumSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const isLink = looksLikeLink(query);
+  const listCount =
+    !isLink && /[,;\n]/.test(query)
+      ? query.split(/[,;\n]/).filter((x) => x.trim().length > 1).length
+      : 0;
 
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
+  // Suggestions as you type (Musike)
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2 || isLink || listCount > 1) {
+      setSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      searchSuggestions(q).then((s) => {
+        if (!cancelled)
+          setSuggestions(s.filter((x) => x.toLowerCase() !== q.toLowerCase()).slice(0, 6));
+      });
+    }, 180);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query, isLink, listCount, searchSuggestions]);
+
+  const runLink = async () => {
+    setLinkBusy(true);
+    setLinkMsg(null);
+    const res = await openMusicLink(query.trim());
+    setLinkBusy(false);
+    if (res.kind === 'playlist') openCollection({ kind: 'playlist', playlistId: res.playlist.id });
+    else if (res.kind === 'none') setLinkMsg(res.message);
+    else setQuery('');
+  };
+
   useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed) {
+    if (!trimmed || looksLikeLink(trimmed)) {
       setResults([]);
       setAlbumResults([]);
       setLoading(false);
@@ -89,9 +131,7 @@ export const SearchScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Sticky Search Input */}
       <View style={styles.searchHeader}>
-        <Text style={[styles.pageTitle, { fontFamily }]}>
-          {t(prefs.language, 'search')}
-        </Text>
+        <Text style={[styles.pageTitle, { fontFamily }]}>{t(prefs.language, 'search')}</Text>
 
         <View style={[styles.searchBox, { borderColor: palette.accent + '35' }]}>
           <Ionicons name="search" size={19} color={MOCHY_COLORS.textSecondary} />
@@ -110,6 +150,75 @@ export const SearchScreen: React.FC = () => {
             </Pressable>
           )}
         </View>
+
+        {/* Paste a link (Musike / OpenSpot) */}
+        {isLink && (
+          <View style={styles.linkCard}>
+            <Ionicons name="link" size={20} color={palette.accent} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#FFF', fontWeight: '800' }}>
+                {vi ? 'Liên kết nhạc' : 'Music link'}
+              </Text>
+              <Text
+                style={{ color: linkMsg ? '#FCA5A5' : MOCHY_COLORS.textMuted, fontSize: 12 }}
+                numberOfLines={2}
+              >
+                {linkMsg ||
+                  (vi
+                    ? 'Bài hát sẽ phát ngay; playlist/album được nhập vào Thư viện'
+                    : 'Songs play now; playlists/albums are imported')}
+              </Text>
+            </View>
+            <Pressable
+              onPress={runLink}
+              disabled={linkBusy}
+              style={[styles.linkBtn, { backgroundColor: palette.accent }]}
+            >
+              {linkBusy ? (
+                <ActivityIndicator size="small" color={palette.onAccent} />
+              ) : (
+                <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
+                  {vi ? 'Mở' : 'Open'}
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        )}
+
+        {/* Several songs typed at once → "Search a list" */}
+        {listCount > 1 && (
+          <Pressable onPress={() => openImport('list', query)} style={styles.linkCard}>
+            <Ionicons name="list" size={20} color="#FBBF24" />
+            <Text style={{ color: '#FFF', fontWeight: '700', flex: 1 }}>
+              {vi
+                ? `Tìm từng bài trong danh sách (${listCount})`
+                : `Search each song in the list (${listCount})`}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={MOCHY_COLORS.textMuted} />
+          </Pressable>
+        )}
+
+        {/* Suggestions while typing */}
+        {suggestions.length > 0 && (
+          <View style={styles.suggestBox}>
+            {suggestions.map((s) => (
+              <Pressable key={s} onPress={() => submitQuery(s)} style={styles.suggestRow}>
+                <Ionicons name="search-outline" size={14} color={MOCHY_COLORS.textMuted} />
+                <Text numberOfLines={1} style={{ color: '#E4E4EC', flex: 1, fontSize: 14 }}>
+                  {s}
+                </Text>
+                <Pressable hitSlop={8} onPress={() => setQuery(s + ' ')}>
+                  <Ionicons
+                    name="arrow-up-outline"
+                    size={14}
+                    color={MOCHY_COLORS.textMuted}
+                    style={{ transform: [{ rotate: '-45deg' }] }}
+                  />
+                </Pressable>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         {/* Source Filter Pills */}
         <ScrollView
@@ -132,10 +241,7 @@ export const SearchScreen: React.FC = () => {
                 ]}
               >
                 <Text
-                  style={[
-                    styles.filterPillText,
-                    { color: active ? palette.onAccent : '#E4E4EC' },
-                  ]}
+                  style={[styles.filterPillText, { color: active ? palette.onAccent : '#E4E4EC' }]}
                 >
                   {f.label}
                 </Text>
@@ -173,9 +279,7 @@ export const SearchScreen: React.FC = () => {
                   {albumResults.map((alb) => (
                     <Pressable
                       key={alb.id}
-                      onPress={() =>
-                        openCollection({ kind: 'album', id: alb.id, summary: alb })
-                      }
+                      onPress={() => openCollection({ kind: 'album', id: alb.id, summary: alb })}
                       style={styles.albumCard}
                     >
                       <ArtworkImage source={{ uri: alb.artworkUrl }} style={styles.albumArt} />
@@ -252,12 +356,12 @@ export const SearchScreen: React.FC = () => {
               {FEATURED_ARTISTS.map((art) => (
                 <Pressable
                   key={art.name}
-                  onPress={() =>
-                    openCollection({ kind: 'artist', id: art.name, name: art.name })
-                  }
+                  onPress={() => openCollection({ kind: 'artist', id: art.name, name: art.name })}
                   style={styles.artistPillCard}
                 >
-                  <View style={[styles.artistInitialCircle, { backgroundColor: palette.container }]}>
+                  <View
+                    style={[styles.artistInitialCircle, { backgroundColor: palette.container }]}
+                  >
                     <Text style={[styles.artistInitial, { color: palette.accent }]}>
                       {art.name.slice(0, 1).toUpperCase()}
                     </Text>
@@ -289,11 +393,7 @@ export const SearchScreen: React.FC = () => {
                     end={{ x: 1, y: 1 }}
                     style={styles.genreGradient}
                   >
-                    <Ionicons
-                      name={cat.icon as any}
-                      size={22}
-                      color="rgba(255,255,255,0.85)"
-                    />
+                    <Ionicons name={cat.icon as any} size={22} color="rgba(255,255,255,0.85)" />
                     <Text style={[styles.genreTitle, { fontFamily }]}>
                       {vi ? cat.labelVi : cat.labelEn}
                     </Text>
@@ -315,9 +415,7 @@ export const SearchScreen: React.FC = () => {
                   {featuredAlbums.map((alb) => (
                     <Pressable
                       key={alb.id}
-                      onPress={() =>
-                        openCollection({ kind: 'album', id: alb.id, summary: alb })
-                      }
+                      onPress={() => openCollection({ kind: 'album', id: alb.id, summary: alb })}
                       style={styles.albumCard}
                     >
                       <ArtworkImage source={{ uri: alb.artworkUrl }} style={styles.albumArt} />
@@ -340,6 +438,41 @@ export const SearchScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  linkCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    marginHorizontal: 16,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  linkBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 99,
+    minWidth: 58,
+    alignItems: 'center',
+  },
+  suggestBox: {
+    marginTop: 8,
+    marginHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    overflow: 'hidden',
+  },
+  suggestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
   container: {
     flex: 1,
   },

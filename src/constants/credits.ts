@@ -22,6 +22,45 @@ export const UPSTREAM_CREDITS: CreditProject[] = [
     highlight: true,
   },
   {
+    name: 'Spotube',
+    author: 'KRTirtho',
+    roleVi:
+      'Ý tưởng: danh sách chặn, scrobble, màn hình chào mừng (AGPL-3.0, viết lại, không chép mã)',
+    roleEn: 'Ideas: blacklist, scrobbling, welcome flow (AGPL-3.0, reimplemented, no code copied)',
+    url: 'https://github.com/KRTirtho/spotube',
+    highlight: true,
+  },
+  {
+    name: 'OpenSpot Music',
+    author: 'BlackHatDevX',
+    roleVi:
+      'Ý tưởng: nhập playlist Spotify, thịnh hành theo quốc gia, MiniPlayer viên nang, lối tắt, banner ngoại tuyến (MIT)',
+    roleEn:
+      'Ideas: Spotify playlist import, trending by country, capsule mini player, quick actions, offline banner (MIT)',
+    url: 'https://github.com/BlackHatDevX/openspot-music-app',
+    highlight: true,
+  },
+  {
+    name: 'Musike',
+    author: 'Ernani1234',
+    roleVi:
+      'Ý tưởng: tìm theo danh sách, dán link YouTube, gợi ý khi gõ, chọn nhiều, sao lưu gộp/thay thế, màu nhấn, cấu hình client từ xa (MIT)',
+    roleEn:
+      'Ideas: search a list, paste YouTube link, live suggestions, multi-select, merge/replace backup, accent colours, remote client config (MIT)',
+    url: 'https://github.com/Ernani1234/musike',
+    highlight: true,
+  },
+  {
+    name: 'Cog',
+    author: 'Christopher Snowhill (kode54) & contributors',
+    roleVi:
+      'Ý tưởng: ReplayGain chống vỡ tiếng, phổ âm thanh, scrobble Last.fm/ListenBrainz, mở tệp từ ứng dụng Tệp, giữ nút để tua (GPL-2.0, viết lại)',
+    roleEn:
+      'Ideas: ReplayGain with clipping prevention, spectrum visualizer, Last.fm/ListenBrainz scrobbling, Files app playback, hold-to-seek (GPL-2.0, reimplemented)',
+    url: 'https://github.com/losnoco/Cog',
+    highlight: true,
+  },
+  {
     name: 'ViviMusic',
     author: 'vivizzz007Z',
     roleVi: 'Nền tảng gốc mà Mochy Music được fork và phát triển từ đó',

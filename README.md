@@ -52,6 +52,16 @@
 
 ---
 
+### 🧩 Gộp từ Spotube · OpenSpot · Musike · Cog / Merged features
+- **Dán link là nghe:** YouTube/YouTube Music, Spotify, Apple Music. Nhập cả playlist Spotify/YouTube, bài hát được ghép với nguồn đầy đủ *(OpenSpot, Musike)*
+- **Tìm theo danh sách:** chọn bản khớp nhất cho từng bài, đổi được bản khác, rồi phát / thích / lưu playlist *(Musike)*
+- **Thịnh hành ở 60 quốc gia + 16 thể loại**, dữ liệu từ bảng xếp hạng Apple Music *(OpenSpot, Musike)*
+- **Chuẩn hoá âm lượng** kiểu ReplayGain, chống vỡ tiếng; **phổ âm thanh thật**; **giữ ⏭/⏮ để tua** *(Cog)*
+- **Scrobble Last.fm & ListenBrainz** *(Cog, Spotube)* · **nhập tệp từ ứng dụng Tệp** *(Cog)*
+- **Danh sách chặn** bài/nghệ sĩ · **màn hình chào mừng** *(Spotube)*
+- **Sao lưu/khôi phục** (gộp hoặc thay thế, xem trước) · **chọn nhiều bài** · **gợi ý khi gõ** · **tự phát bài tương tự** · **khôi phục hàng chờ** · **chuẩn bị sẵn bài kế** *(Musike)*
+- **Màu nhấn** (8 màu + tự chọn) · ẩn/hiện mục Trang chủ *(Musike)* · **MiniPlayer viên nang** · lối tắt · banner ngoại tuyến *(OpenSpot)*
+
 ## 🚀 Cài đặt / Installation
 
 ### 1. Expo Go (nhanh nhất / fastest)

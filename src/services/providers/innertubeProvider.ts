@@ -5,12 +5,13 @@ import { Platform } from 'react-native';
 import { DiagnosticStep, Track } from '../../types/music';
 import { CatalogCandidate, coreTitle, rankCandidates, TrackQueryInput } from '../trackMatcher';
 
-const PIPED_INSTANCES = [
-  'https://pipedapi.kavin.rocks',
-  'https://api.piped.private.coffee',
-];
+const PIPED_INSTANCES = ['https://pipedapi.kavin.rocks', 'https://api.piped.private.coffee'];
 
-async function fetchTimeout(url: string, init: RequestInit = {}, timeoutMs = 4500): Promise<Response> {
+async function fetchTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 4500
+): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -36,6 +37,8 @@ export interface InnerTubeStreamCandidate {
   qualityLabel: string;
   codec: string;
   headers?: Record<string, string>;
+  /** -loudnessDb from playerConfig.audioConfig (YouTube's own loudness measurement) */
+  gainDb?: number;
 }
 
 interface YtClient {
@@ -59,7 +62,8 @@ const VISIONOS: YtClient = {
   clientName: 'VISIONOS',
   clientVersion: '1.04',
   clientId: '101',
-  userAgent: 'com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; US)',
+  userAgent:
+    'com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; US)',
   osName: 'visionOS',
   osVersion: '26.6.0.23O770',
   deviceMake: 'Apple',
@@ -138,7 +142,11 @@ async function mintVisitorId(c: YtClient, force = false): Promise<string | undef
   try {
     const res = await fetchTimeout(
       'https://www.youtube.com/youtubei/v1/visitor_id?prettyPrint=false',
-      { method: 'POST', headers: clientHeaders(c), body: JSON.stringify({ context: clientContext(c) }) },
+      {
+        method: 'POST',
+        headers: clientHeaders(c),
+        body: JSON.stringify({ context: clientContext(c) }),
+      },
       3500
     );
     if (!res.ok) return undefined;
@@ -183,9 +191,14 @@ async function validateStream(
   headers: Record<string, string>,
   contentLength?: number
 ): Promise<boolean> {
-  const offset = contentLength && contentLength > 1 ? contentLength - 1 : UNTOKENED_WINDOW_PROBE_BYTE;
+  const offset =
+    contentLength && contentLength > 1 ? contentLength - 1 : UNTOKENED_WINDOW_PROBE_BYTE;
   try {
-    const res = await fetchTimeout(url, { headers: { ...headers, Range: `bytes=${offset}-${offset}` } }, 4000);
+    const res = await fetchTimeout(
+      url,
+      { headers: { ...headers, Range: `bytes=${offset}-${offset}` } },
+      4000
+    );
     return res.ok || res.status === 206 || (res.status === 416 && !contentLength);
   } catch {
     return false;
@@ -221,7 +234,12 @@ async function extractInnerTubeIosStreams(
 ): Promise<InnerTubeStreamCandidate[]> {
   for (const c of STREAM_CLIENTS) {
     if (c === VISIONOS && Date.now() < visionRestingUntil) {
-      onStep({ module: 'InnerTube', step: 'visionOS', ok: false, detail: 'Resting after bot checks' });
+      onStep({
+        module: 'InnerTube',
+        step: 'visionOS',
+        ok: false,
+        detail: 'Resting after bot checks',
+      });
       continue;
     }
     const t0 = Date.now();
@@ -251,6 +269,8 @@ async function extractInnerTubeIosStreams(
       // so AVPlayer sends the same UA (forwarded through AVURLAssetHTTPHeaderFieldsKey).
       const headers = { 'User-Agent': c.userAgent, Accept: '*/*' };
       const adaptive: any[] = data?.streamingData?.adaptiveFormats || [];
+      const loud = Number(data?.playerConfig?.audioConfig?.loudnessDb);
+      const gainDb = Number.isFinite(loud) ? -loud : undefined;
       // AVPlayer decodes AAC in MP4 natively (itag 140/139); WebM/Opus is not playable on iOS 15
       const mp4Audios = adaptive
         .filter((f) => String(f?.mimeType || '').startsWith('audio/mp4') && f?.url)
@@ -261,13 +281,25 @@ async function extractInnerTubeIosStreams(
         const ok = await validateStream(f.url, headers, Number(f.contentLength) || undefined);
         if (!ok) continue;
         const kbps = Math.round((Number(f.bitrate) || 130000) / 1000);
-        out.push({ url: f.url, qualityLabel: `AAC ${kbps} kbps · YouTube ${c.name}`, codec: 'AAC', headers });
+        out.push({
+          url: f.url,
+          qualityLabel: `AAC ${kbps} kbps · YouTube ${c.name}`,
+          codec: 'AAC',
+          headers,
+          gainDb,
+        });
         break;
       }
 
       const hls = data?.streamingData?.hlsManifestUrl;
       if (out.length === 0 && hls && (await validateHls(hls, headers))) {
-        out.push({ url: hls, qualityLabel: `HLS · YouTube ${c.name}`, codec: 'HLS/AAC', headers });
+        out.push({
+          url: hls,
+          qualityLabel: `HLS · YouTube ${c.name}`,
+          codec: 'HLS/AAC',
+          headers,
+          gainDb,
+        });
       }
 
       onStep({
@@ -292,6 +324,131 @@ async function extractInnerTubeIosStreams(
     }
   }
   return [];
+}
+
+/** Walks any YouTube Music response (search, playlist, album) for song rows */
+export function parseMusicListItems(root: any, limit = 200): Track[] {
+  const tracks: Track[] = [];
+  const seen = new Set<string>();
+  const walk = (node: any) => {
+    if (!node || typeof node !== 'object' || tracks.length >= limit) return;
+    const mrlir = node.musicResponsiveListItemRenderer;
+    if (mrlir) {
+      const vid =
+        mrlir?.playlistItemData?.videoId ||
+        mrlir?.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer
+          ?.playNavigationEndpoint?.watchEndpoint?.videoId;
+      const cols: any[] = mrlir?.flexColumns || [];
+      const titleRuns = cols[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+      const subRuns = cols[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+      const title = titleRuns[0]?.text;
+      const artist = subRuns[0]?.text || 'YouTube Music';
+      const thumbs: any[] = mrlir?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
+      const art = thumbs[thumbs.length - 1]?.url || '';
+      const durText: string =
+        mrlir?.fixedColumns?.[0]?.musicResponsiveListItemFixedColumnRenderer?.text?.runs?.[0]
+          ?.text || '';
+      const durParts = durText.split(':').map((x) => Number(x));
+      const dur =
+        durParts.every((n) => Number.isFinite(n)) && durParts.length >= 2
+          ? durParts.reduce((acc, n) => acc * 60 + n, 0)
+          : 210;
+      if (vid && title && !seen.has(vid)) {
+        seen.add(vid);
+        tracks.push({
+          id: `yt-${vid}`,
+          videoId: vid,
+          title,
+          artist,
+          artists: [artist],
+          artworkUrl: art.replace(/=w\d+-h\d+/g, '=w600-h600'),
+          durationSec: dur || 210,
+          source: 'innertube',
+          qualityBadge: 'InnerTube AAC',
+        });
+      }
+    }
+    for (const k of Object.keys(node)) walk(node[k]);
+  };
+  walk(root);
+  return tracks;
+}
+
+/** A public YouTube / YouTube Music playlist (native iOS — the browse API has no CORS) */
+export async function fetchYouTubeMusicPlaylist(
+  playlistId: string
+): Promise<{ name: string; tracks: Track[] } | null> {
+  try {
+    const res = await fetchTimeout(
+      'https://music.youtube.com/youtubei/v1/browse?prettyPrint=false',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://music.youtube.com',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0',
+        },
+        body: JSON.stringify({
+          browseId: playlistId.startsWith('VL') ? playlistId : `VL${playlistId}`,
+          context: {
+            client: {
+              clientName: 'WEB_REMIX',
+              clientVersion: '1.20260707.12.00',
+              hl: 'vi',
+              gl: 'VN',
+            },
+          },
+        }),
+      },
+      9000
+    );
+    if (!res.ok) return null;
+    const root = await res.json();
+    const name =
+      root?.header?.musicDetailHeaderRenderer?.title?.runs?.[0]?.text ||
+      root?.header?.musicResponsiveHeaderRenderer?.title?.runs?.[0]?.text ||
+      root?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content
+        ?.sectionListRenderer?.contents?.[0]?.musicResponsiveHeaderRenderer?.title?.runs?.[0]
+        ?.text ||
+      'YouTube Music playlist';
+    return { name, tracks: parseMusicListItems(root, 300) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Remote client list (Musike's streaming.json idea): when YouTube changes which clients serve full
+ * tracks, the order can be updated from the repository without shipping a new IPA.
+ */
+const REMOTE_CLIENTS_URLS = [
+  'https://raw.githubusercontent.com/Hthancder/ArenaAIWorkspace-2/main/config/streaming.json',
+  'https://raw.githubusercontent.com/Hthancder/ArenaAIWorkspace-2/refs/heads/arena/af5aae1b-arenaaiworkspace-2/config/streaming.json',
+];
+let remoteClientsLoaded = false;
+export async function refreshRemoteStreamClients(): Promise<string[] | null> {
+  if (remoteClientsLoaded) return null;
+  remoteClientsLoaded = true;
+  for (const url of REMOTE_CLIENTS_URLS) {
+    try {
+      const res = await fetchTimeout(url, {}, 5000);
+      if (!res.ok) continue;
+      const j = await res.json();
+      const list: unknown = j?.ios;
+      if (Array.isArray(list) && list.every((x) => typeof x === 'string')) {
+        const byName: Record<string, YtClient> = { VISIONOS, ANDROID_VR, IPADOS, IOS: IPADOS };
+        const next = (list as string[]).map((n) => byName[n]).filter(Boolean) as YtClient[];
+        if (next.length > 0) {
+          STREAM_CLIENTS.splice(0, STREAM_CLIENTS.length, ...Array.from(new Set(next)));
+          return list as string[];
+        }
+      }
+    } catch {
+      // keep the built-in order
+    }
+  }
+  return null;
 }
 
 export async function searchInnerTubeTracks(query: string, limit = 12): Promise<Track[]> {
@@ -328,44 +485,7 @@ export async function searchInnerTubeTracks(query: string, limit = 12): Promise<
 
       if (res.ok) {
         const root = await res.json();
-        const tracks: Track[] = [];
-        const walk = (node: any) => {
-          if (!node || typeof node !== 'object' || tracks.length >= limit) return;
-          const mrlir = node.musicResponsiveListItemRenderer;
-          if (mrlir) {
-            const vid =
-              mrlir?.playlistItemData?.videoId ||
-              mrlir?.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer
-                ?.playNavigationEndpoint?.watchEndpoint?.videoId;
-            const cols: any[] = mrlir?.flexColumns || [];
-            const titleRuns =
-              cols[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
-            const subRuns =
-              cols[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
-            const title = titleRuns[0]?.text;
-            const artist = subRuns[0]?.text || 'YouTube Music';
-            const thumbs: any[] =
-              mrlir?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
-            const art = thumbs[thumbs.length - 1]?.url || '';
-            if (vid && title) {
-              tracks.push({
-                id: `yt-${vid}`,
-                videoId: vid,
-                title,
-                artist,
-                artists: [artist],
-                artworkUrl: art.replace(/=w\d+-h\d+/g, '=w600-h600'),
-                durationSec: 210,
-                source: 'innertube',
-                qualityBadge: 'InnerTube AAC',
-              });
-            }
-          }
-          for (const k of Object.keys(node)) {
-            walk(node[k]);
-          }
-        };
-        walk(root);
+        const tracks = parseMusicListItems(root, limit);
         if (tracks.length > 0) return tracks;
       }
     } catch {
@@ -491,4 +611,51 @@ export async function resolveInnerTubeStream(
     });
   }
   return candidates;
+}
+
+/** Search-as-you-type suggestions from YouTube Music (Musike); native only — no CORS on web */
+export async function fetchInnerTubeSuggestions(input: string): Promise<string[]> {
+  if (Platform.OS === 'web' || input.trim().length < 2) return [];
+  try {
+    const res = await fetchTimeout(
+      'https://music.youtube.com/youtubei/v1/music/get_search_suggestions?prettyPrint=false',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://music.youtube.com',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0',
+        },
+        body: JSON.stringify({
+          input,
+          context: {
+            client: {
+              clientName: 'WEB_REMIX',
+              clientVersion: '1.20260707.12.00',
+              hl: 'vi',
+              gl: 'VN',
+            },
+          },
+        }),
+      },
+      2500
+    );
+    if (!res.ok) return [];
+    const root = await res.json();
+    const out: string[] = [];
+    const walk = (n: any) => {
+      if (!n || typeof n !== 'object' || out.length >= 8) return;
+      const runs = n.searchSuggestionRenderer?.suggestion?.runs;
+      if (Array.isArray(runs)) {
+        out.push(runs.map((r: any) => r?.text || '').join(''));
+        return;
+      }
+      for (const k of Object.keys(n)) walk(n[k]);
+    };
+    walk(root);
+    return out.filter(Boolean);
+  } catch {
+    return [];
+  }
 }

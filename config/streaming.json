@@ -1,0 +1,4 @@
+{
+  "_comment": "YouTube InnerTube client order used by Mochy iOS (refreshed at launch). Known: VISIONOS, ANDROID_VR, IPADOS. Idea from Musike (MIT).",
+  "ios": ["VISIONOS", "ANDROID_VR", "IPADOS"]
+}

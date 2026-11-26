@@ -21,6 +21,9 @@ export interface CatalogCandidate {
   encryptedUrl?: string;
   has320?: boolean;
   downloadUrls?: { quality: string; url: string }[];
+  /** TIDAL-style track ReplayGain (dB) & peak, when the catalog provides them */
+  replayGain?: number;
+  peak?: number;
 }
 
 const VERSION_WORDS = [
@@ -119,7 +122,10 @@ export function scoreTrackMatch(query: TrackQueryInput, song: CatalogCandidate):
   }
   const penalty = 0.25 * mismatchCount;
 
-  return Math.max(0, Math.min(1, 0.5 * titleScore + 0.3 * artistScore + 0.2 * durationScore - penalty));
+  return Math.max(
+    0,
+    Math.min(1, 0.5 * titleScore + 0.3 * artistScore + 0.2 * durationScore - penalty)
+  );
 }
 
 export function rankCandidates<T extends CatalogCandidate>(

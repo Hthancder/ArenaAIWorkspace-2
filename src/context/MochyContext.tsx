@@ -17,12 +17,43 @@ import {
   MochyPreferences,
   RepeatMode,
 } from '../constants/preferences';
-import { ArtworkPalette, buildArtworkPalette } from '../constants/theme';
+import { ArtworkPalette, buildArtworkPalette, hexToHue } from '../constants/theme';
+import { fetchTopSongs } from '../services/discovery/chartsService';
+import {
+  fetchSpotifyEntity,
+  fetchYouTubePlaylist,
+  matchTextItems,
+  parseMusicLink,
+  parseTextList,
+  TextItem,
+  youtubeVideoTrack,
+} from '../services/import/linkImport';
+import {
+  BackupPreview,
+  buildBackup,
+  exportBackupFile,
+  filterBlacklisted,
+  importLocalAudioFiles,
+  isBlacklisted,
+  LibraryBackup,
+  mergeLibrary,
+  parseBackup,
+  pickBackupFile,
+  previewBackup,
+  rebaseDocumentUri,
+} from '../services/library/libraryTools';
+import { Loudness } from '../services/audio/loudness';
+import { ScrobbleSettings, Scrobbler } from '../services/scrobble/scrobbler';
+import { useConnectivity } from '../services/net/connectivity';
 import { AUTO_EQ_PRESETS, OFFLINE_SHOWCASE_TRACKS } from '../data/curatedCatalog';
 import { audioEngine } from '../services/audio/audioEngine';
 import { StreamFileCache } from '../services/audio/streamFileCache';
 import { fetchLyricsForTrack } from '../services/lyrics/lyricsService';
-import { searchInnerTubeTracks } from '../services/providers/innertubeProvider';
+import {
+  fetchInnerTubeSuggestions,
+  refreshRemoteStreamClients,
+  searchInnerTubeTracks,
+} from '../services/providers/innertubeProvider';
 import {
   fetchAlbumDetails,
   fetchArtistDetails,
@@ -36,6 +67,7 @@ import {
   verifyMonochromeServer,
 } from '../services/providers/monochromeProvider';
 import { SourceMemory } from '../services/providers/sourceMemory';
+import { resolvePlayableStream } from '../services/providers/streamResolver';
 import { createStreamCandidateQueue } from '../services/providers/streamResolver';
 import { DEFAULT_AUDIO_LAB, StorageService } from '../services/storage/storageService';
 import {
@@ -59,7 +91,77 @@ export type CollectionTarget =
   | { kind: 'liked' }
   | { kind: 'offline' };
 
-interface MochyContextValue {
+export type LinkResult =
+  | { kind: 'played'; title: string }
+  | { kind: 'playlist'; playlist: Playlist }
+  | { kind: 'none'; message: string };
+
+/** Features merged from Spotube, OpenSpot Music, Musike and Cog (see NOTICE) */
+interface MochyExtras {
+  isOnline: boolean;
+  importSheet: { mode: 'link' | 'list'; text: string } | null;
+  openImport: (mode: 'link' | 'list', text?: string) => void;
+  closeImport: () => void;
+  chartsSheet: { genre: number | null } | null;
+  openCharts: (genre?: number | null) => void;
+  closeCharts: () => void;
+  /** Charts by country & genre (OpenSpot trending + Musike genre browse) */
+  fetchChart: (country: string, genreId: number | null) => Promise<Track[]>;
+  /** Paste a link: YouTube video plays; YouTube / Spotify playlist or album becomes a playlist */
+  openMusicLink: (
+    text: string,
+    onProgress?: (done: number, total: number) => void
+  ) => Promise<LinkResult>;
+  /** "Search a list" (Musike): best match per line, returns tracks for review */
+  matchSongList: (
+    raw: string | TextItem[],
+    onProgress?: (done: number, total: number) => void
+  ) => Promise<Track[]>;
+  savePlaylistFromTracks: (
+    name: string,
+    tracks: Track[],
+    description?: string,
+    coverUrl?: string
+  ) => Playlist;
+  searchSuggestions: (q: string) => Promise<string[]>;
+  // multi-select bulk actions (Musike)
+  addTracksToPlaylist: (playlistId: string, tracks: Track[]) => void;
+  likeTracks: (tracks: Track[]) => void;
+  queueTracks: (tracks: Track[], playNext?: boolean) => void;
+  removeTracksFromPlaylist: (playlistId: string, trackIds: string[]) => void;
+  // blacklist (Spotube)
+  isBlocked: (track: Track) => boolean;
+  blockTrack: (track: Track) => void;
+  blockArtist: (name: string) => void;
+  unblockTrack: (id: string) => void;
+  unblockArtist: (name: string) => void;
+  // backup (Musike)
+  exportLibrary: () => Promise<void>;
+  pickLibraryBackup: () => Promise<{ backup: LibraryBackup; preview: BackupPreview } | null>;
+  applyLibraryBackup: (
+    backup: LibraryBackup,
+    mode: 'merge' | 'replace',
+    includeSettings: boolean
+  ) => void;
+  // Files app (Cog)
+  importLocalFiles: () => Promise<number>;
+  // scrobbling (Cog / Spotube)
+  scrobble: ScrobbleSettings;
+  connectLastfm: (
+    apiKey: string,
+    secret: string,
+    user: string,
+    password: string
+  ) => Promise<string>;
+  connectListenBrainz: (token: string) => Promise<string>;
+  disconnectScrobbler: (service: 'lastfm' | 'listenbrainz') => Promise<void>;
+  setScrobbleEnabled: (enabled: boolean) => void;
+  // playback extras
+  seekBy: (deltaSec: number) => void;
+  loudnessLabel: string | null;
+}
+
+interface MochyContextValue extends MochyExtras {
   // Navigation & UI overlays
   activeTab: MainTab;
   setActiveTab: (tab: MainTab) => void;
@@ -240,6 +342,22 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const serversRef = useRef(monochromeServers);
   const downloadsRef = useRef(downloads);
   const volumeRef = useRef(volume);
+  const resumeAtRef = useRef(0);
+  const sessionRestoredRef = useRef(false);
+  const hydratedRef = useRef(false);
+  const [scrobbleState, setScrobbleState] = useState<ScrobbleSettings>(Scrobbler.get());
+  /** Listening tracker for scrobbles: wall-clock listened seconds of the current play */
+  const playLogRef = useRef<{
+    track: Track;
+    startedAt: number;
+    listened: number;
+    lastPos: number;
+    scrobbled: boolean;
+  } | null>(null);
+  /** Next-track preload (Musike): a resolved stream ready before the current song ends */
+  const preloadRef = useRef<{ trackId: string; stream: ResolvedStream; at: number } | null>(null);
+  const preloadingRef = useRef<string | null>(null);
+  const isOnline = useConnectivity();
 
   queueRef.current = queue;
   queueIndexRef.current = queueIndex;
@@ -257,13 +375,16 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     toastTimerRef.current = setTimeout(() => setToastMessage(null), 2600);
   }, []);
 
-  const palette = useMemo(
-    () =>
-      buildArtworkPalette(
-        currentTrack ? `${currentTrack.title}-${currentTrack.artist}` : 'mochy-default'
-      ),
-    [currentTrack]
-  );
+  const palette = useMemo(() => {
+    const seed = currentTrack ? `${currentTrack.title}-${currentTrack.artist}` : 'mochy-default';
+    // Fixed accent (Musike-style presets / custom colour): the hue is kept, lightness is
+    // re-derived by the tonal palette so text on it always stays readable on the dark UI
+    const hue =
+      prefs.accentColor && prefs.accentColor !== 'dynamic'
+        ? hexToHue(prefs.accentColor)
+        : undefined;
+    return buildArtworkPalette(seed, hue ?? undefined);
+  }, [currentTrack, prefs.accentColor]);
 
   // Hydrate persistent storage
   useEffect(() => {
@@ -287,7 +408,13 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         StorageService.loadMonochromeServers(),
         StorageService.loadSearchHistory(),
         SourceMemory.load(),
+        Loudness.load(),
       ]);
+      Scrobbler.load().then((s) => {
+        setScrobbleState(s);
+        Scrobbler.flush().catch(() => undefined);
+      });
+      refreshRemoteStreamClients().catch(() => undefined);
 
       setPrefs(savedPrefs);
       setLikedTracks(savedLiked);
@@ -307,7 +434,30 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setPlaylists([starter]);
       }
       setHistory(savedHistory);
-      setDownloads(savedDownloads);
+      // iOS gives the app a new container path on every IPA update — re-point saved files
+      const rebased: Record<string, DownloadedTrackMeta> = {};
+      for (const [k, m] of Object.entries(savedDownloads))
+        rebased[k] = { ...m, localUri: rebaseDocumentUri(m.localUri) };
+      setDownloads(rebased);
+
+      // Resume the last queue (Musike), paused at the saved position
+      if (savedPrefs.resumeQueue) {
+        const session = await StorageService.loadSession();
+        if (session && session.queue.length > 0) {
+          const idx = Math.max(0, Math.min(session.index, session.queue.length - 1));
+          const t = session.queue[idx];
+          setQueue(session.queue);
+          setQueueIndex(idx);
+          setCurrentTrack(t);
+          setDurationSec(t.durationSec || 180);
+          setPositionSec(session.positionSec || 0);
+          setShuffle(session.shuffle);
+          setRepeatMode(session.repeat);
+          resumeAtRef.current = session.positionSec > 5 ? session.positionSec : 0;
+          sessionRestoredRef.current = true;
+        }
+      }
+      hydratedRef.current = true;
       setAudioLab(savedLab);
       audioEngine.applyAudioLab(savedLab);
       setMonochromeServers(savedServers);
@@ -325,14 +475,23 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         searchItunesAlbums('V-Pop Indie Chill R&B', 10, 'VN'),
       ]);
 
+      const bl = prefsRef.current.blacklist;
       if (picksSongs.length > 0) {
-        setQuickPicks([...picksSongs.slice(0, 10), ...OFFLINE_SHOWCASE_TRACKS]);
+        setQuickPicks([
+          ...filterBlacklisted(picksSongs, bl).slice(0, 10),
+          ...OFFLINE_SHOWCASE_TRACKS,
+        ]);
       }
-      if (vnSongs.length > 0) setVnTrending(vnSongs);
-      if (globalSongs.length > 0) setGlobalTrending(globalSongs);
+      if (vnSongs.length > 0) setVnTrending(filterBlacklisted(vnSongs, bl));
+      if (globalSongs.length > 0) setGlobalTrending(filterBlacklisted(globalSongs, bl));
       if (albums.length > 0) setFeaturedAlbums(albums);
 
-      if (picksSongs.length > 0 && currentTrack?.id === OFFLINE_SHOWCASE_TRACKS[0].id && !isPlaying) {
+      if (
+        picksSongs.length > 0 &&
+        !sessionRestoredRef.current &&
+        currentTrack?.id === OFFLINE_SHOWCASE_TRACKS[0].id &&
+        !isPlaying
+      ) {
         setCurrentTrack(picksSongs[0]);
         setDurationSec(picksSongs[0].durationSec);
         setQueue([...picksSongs.slice(0, 10), ...OFFLINE_SHOWCASE_TRACKS]);
@@ -389,8 +548,9 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const playTokenRef = useRef(0);
 
   const internalStartTrack = useCallback(
-    async (track: Track) => {
+    async (track: Track, startAtSec = 0) => {
       const token = ++playTokenRef.current;
+      playLogRef.current = null;
       const isCurrent = () => token === playTokenRef.current;
       const vi = prefsRef.current.language === 'vi';
 
@@ -405,12 +565,37 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!isCurrent()) return;
 
       const offlineMeta = downloadsRef.current[track.id];
-      const queue = createStreamCandidateQueue(
+      const baseQueue = createStreamCandidateQueue(
         track,
         prefsRef.current,
         serversRef.current,
         offlineMeta?.localUri
       );
+      // A stream preloaded while the previous song played goes first (unless offline exists)
+      const pre = preloadRef.current;
+      let preloaded: ResolvedStream | null =
+        !offlineMeta && pre && pre.trackId === track.id && Date.now() - pre.at < 20 * 60 * 1000
+          ? pre.stream
+          : null;
+      if (preloaded) preloadRef.current = null;
+      const queue = {
+        diagnostics: baseQueue.diagnostics,
+        async next(): Promise<ResolvedStream | null> {
+          if (preloaded) {
+            const p = preloaded;
+            preloaded = null;
+            baseQueue.diagnostics.push({
+              module: p.sourceLabel,
+              step: 'Preloaded',
+              ok: true,
+              detail: 'Resolved while the previous song was playing',
+              latencyMs: 0,
+            });
+            return { ...p, diagnostics: [...baseQueue.diagnostics] };
+          }
+          return baseQueue.next();
+        },
+      };
 
       let played: ResolvedStream | null = null;
       let lastTried: ResolvedStream | null = null;
@@ -472,6 +657,10 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
           }
 
+          // Loudness normalisation (ReplayGain-style, from Cog) — applied before audio starts
+          audioEngine.setGainMultiplier(
+            Loudness.multiplier(track, cand, prefsRef.current.normalizeVolume)
+          );
           await audioEngine.loadAndPlay(playUrl, track, volumeRef.current, playHeaders);
           if (!isCurrent()) return;
 
@@ -490,6 +679,11 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             });
             played = { ...cand, diagnostics: [...queue.diagnostics] };
             setResolvedStream(played);
+            Loudness.remember(track, cand);
+            if (startAtSec > 5) {
+              audioEngine.seekTo(startAtSec);
+              setPositionSec(startAtSec);
+            }
             if (prefsRef.current.rememberSources) {
               SourceMemory.rememberSuccess(track, cand, Date.now() - startedAt, localUri);
             }
@@ -534,6 +728,15 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             : 'Full track unavailable — playing 30s Apple preview'
         );
       }
+
+      playLogRef.current = {
+        track,
+        startedAt: Date.now(),
+        listened: 0,
+        lastPos: startAtSec,
+        scrobbled: played.isPreview === true,
+      };
+      if (!played.isPreview) Scrobbler.nowPlaying(track).catch(() => undefined);
 
       // Log listening event for Mochy Recap & History
       setHistory((prev) => {
@@ -589,18 +792,25 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
-    const nextIdx = queueIndexRef.current + 1;
+    let nextIdx = queueIndexRef.current + 1;
+    const bl = prefsRef.current.blacklist;
+    while (nextIdx < q.length && isBlacklisted(q[nextIdx], bl)) nextIdx += 1;
     if (nextIdx < q.length) {
       setQueueIndex(nextIdx);
       internalStartTrack(q[nextIdx]);
     } else if (repeatRef.current === 'ALL') {
       setQueueIndex(0);
       internalStartTrack(q[0]);
+    } else if (prefsRef.current.autoPlaySimilar && q.length > 0) {
+      // Autoplay radio (Musike): keep the music going with songs like the last one
+      const seed = q[queueIndexRef.current] || q[q.length - 1];
+      continueWithSimilarRef.current?.(seed);
     } else {
       audioEngine.pause();
       setIsPlaying(false);
     }
   }, [internalStartTrack]);
+  const continueWithSimilarRef = useRef<((seed: Track) => void) | null>(null);
 
   const playPrevious = useCallback(() => {
     triggerHaptic('light');
@@ -628,6 +838,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setIsBuffering(st.isBuffering);
       setPositionSec(st.currentTimeSec);
       if (st.durationSec > 0) setDurationSec(st.durationSec);
+      trackListeningRef.current?.(st.currentTimeSec, st.durationSec, st.isPlaying);
 
       if (st.didJustFinish) {
         if (sleepEndTrackRef.current) {
@@ -651,6 +862,83 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
     return unsub;
   }, [playNext, playPrevious, showToast]);
+
+  // Scrobble accounting + next-track preload, driven by playback status
+  const trackListeningRef = useRef<((pos: number, dur: number, playing: boolean) => void) | null>(
+    null
+  );
+  trackListeningRef.current = (pos, dur, playing) => {
+    const log = playLogRef.current;
+    if (!log) return;
+    const delta = pos - log.lastPos;
+    log.lastPos = pos;
+    // count only real forward progress (seeks jump by more than a few seconds)
+    if (playing && delta > 0 && delta < 3) log.listened += delta;
+    const total = dur > 0 ? dur : log.track.durationSec;
+    if (!log.scrobbled && Scrobbler.qualifies(total, log.listened)) {
+      log.scrobbled = true;
+      Scrobbler.scrobble({ ...log.track, durationSec: Math.round(total) }, log.startedAt).catch(
+        () => undefined
+      );
+    }
+    // preload the next song once this one is well under way
+    if (playing && log.listened > 20 && total > 0 && pos > Math.min(total * 0.5, total - 25)) {
+      const q = queueRef.current;
+      const nextTrack =
+        !shuffleRef.current && repeatRef.current !== 'ONE'
+          ? q[queueIndexRef.current + 1]
+          : undefined;
+      if (
+        nextTrack &&
+        preloadingRef.current !== nextTrack.id &&
+        !downloadsRef.current[nextTrack.id]
+      ) {
+        preloadingRef.current = nextTrack.id;
+        resolvePlayableStream(nextTrack, prefsRef.current, serversRef.current)
+          .then(async (stream) => {
+            if (!stream || stream.isPreview || stream.source === 'synth') return;
+            if (StreamFileCache.needsLocalFile(stream.codec, stream.url)) {
+              // iOS FLAC: download it now so the next song starts instantly from the cache
+              await StreamFileCache.ensureLocal(
+                stream.cacheKey || `${stream.source}-${nextTrack.id}`,
+                stream.url,
+                stream.headers,
+                180000
+              ).catch(() => undefined);
+              return;
+            }
+            preloadRef.current = { trackId: nextTrack.id, stream, at: Date.now() };
+          })
+          .catch(() => undefined);
+      }
+    }
+  };
+
+  // Persist the playback session for "resume queue" (throttled)
+  const lastSessionSaveRef = useRef(0);
+  useEffect(() => {
+    if (!hydratedRef.current || !prefs.resumeQueue) return;
+    const now = Date.now();
+    if (isPlaying && now - lastSessionSaveRef.current < 10000) return;
+    lastSessionSaveRef.current = now;
+    StorageService.saveSession({
+      queue,
+      index: queueIndex,
+      positionSec,
+      shuffle,
+      repeat: repeatMode,
+      savedAt: now,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    queue,
+    queueIndex,
+    isPlaying,
+    Math.floor(positionSec / 10),
+    shuffle,
+    repeatMode,
+    prefs.resumeQueue,
+  ]);
 
   // Sleep Timer countdown
   useEffect(() => {
@@ -678,7 +966,9 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     triggerHaptic('light');
     if (!currentTrack) return;
     if (!resolvedStream || !audioEngine.hasActiveSource()) {
-      internalStartTrack(currentTrack);
+      const at = resumeAtRef.current;
+      resumeAtRef.current = 0;
+      internalStartTrack(currentTrack, at);
       return;
     }
     if (isPlaying) {
@@ -754,10 +1044,12 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     async (seedQuery?: string) => {
       triggerHaptic('medium');
       const query =
-        seedQuery ||
-        (currentTrack ? `${currentTrack.artist} chill hits` : 'V-Pop Lo-Fi R&B hits');
+        seedQuery || (currentTrack ? `${currentTrack.artist} chill hits` : 'V-Pop Lo-Fi R&B hits');
       const results = await searchItunesTracks(query, 20, 'VN');
-      const pool = results.length > 0 ? results : [...vnTrending, ...OFFLINE_SHOWCASE_TRACKS];
+      const pool = filterBlacklisted(
+        results.length > 0 ? results : [...vnTrending, ...OFFLINE_SHOWCASE_TRACKS],
+        prefsRef.current.blacklist
+      );
       const shuffled = [...pool].sort(() => Math.random() - 0.5);
       if (shuffled.length > 0) {
         setShuffle(true);
@@ -835,16 +1127,22 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      return { tracks: merged, albums };
+      return { tracks: filterBlacklisted(merged, prefsRef.current.blacklist), albums };
     },
     [monochromeServers, prefs.enabledModules, prefs.preferredJioSaavnQuality]
   );
+
+  const searchTracksRef = useRef(searchTracks);
+  searchTracksRef.current = searchTracks;
 
   const addSearchHistory = useCallback((q: string) => {
     const trimmed = q.trim();
     if (!trimmed) return;
     setSearchHistory((prev) => {
-      const next = [trimmed, ...prev.filter((item) => item.toLowerCase() !== trimmed.toLowerCase())].slice(0, 12);
+      const next = [
+        trimmed,
+        ...prev.filter((item) => item.toLowerCase() !== trimmed.toLowerCase()),
+      ].slice(0, 12);
       StorageService.saveSearchHistory(next);
       return next;
     });
@@ -929,9 +1227,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         StorageService.savePlaylists(next);
         return next;
       });
-      showToast(
-        prefs.language === 'vi' ? `Đã tạo "${pl.name}"` : `Created "${pl.name}"`
-      );
+      showToast(prefs.language === 'vi' ? `Đã tạo "${pl.name}"` : `Created "${pl.name}"`);
       return pl;
     },
     [playlists.length, prefs.language, showToast]
@@ -988,29 +1284,37 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   }, []);
 
-  const importPlaylistText = useCallback(
-    async (name: string, rawText: string): Promise<Playlist | null> => {
-      const lines = rawText
-        .split(/\r?\n/)
-        .map((l) => l.replace(/^\d+[.)\s-]+/, '').trim())
-        .filter((l) => l.length >= 2 && !l.startsWith('#'))
-        .slice(0, 20);
-      if (lines.length === 0) return null;
+  // Best match per item across every enabled source (shared by text import, "Search a list",
+  // Spotify / YouTube playlist import)
+  const matchSongList = useCallback(
+    async (
+      raw: string | TextItem[],
+      onProgress?: (done: number, total: number) => void
+    ): Promise<Track[]> => {
+      const items = typeof raw === 'string' ? parseTextList(raw) : raw;
+      if (items.length === 0) return [];
+      const found = await matchTextItems(
+        items,
+        async (q) => (await searchTracksRef.current(q)).tracks.slice(0, 8),
+        onProgress
+      );
+      return filterBlacklisted(found, prefsRef.current.blacklist);
+    },
+    []
+  );
 
-      const matchedTracks: Track[] = [];
-      for (const line of lines) {
-        const hits = await searchItunesTracks(line, 1, 'VN');
-        if (hits[0]) matchedTracks.push(hits[0]);
-      }
-
+  const savePlaylistFromTracks = useCallback(
+    (name: string, tracks: Track[], description?: string, coverUrl?: string): Playlist => {
       const pl: Playlist = {
         id: `pl-import-${Date.now()}`,
         name: name.trim() || 'Imported Playlist',
-        description: `Imported ${matchedTracks.length} songs`,
-        coverUrl: matchedTracks[0]?.artworkUrl,
+        description:
+          description ??
+          `${tracks.length} ${prefsRef.current.language === 'vi' ? 'bài hát' : 'songs'}`,
+        coverUrl: coverUrl || tracks[0]?.artworkUrl,
         coverTint: '#10B981',
-        trackIds: matchedTracks.map((t) => t.id),
-        tracks: matchedTracks,
+        trackIds: tracks.map((t) => t.id),
+        tracks,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
@@ -1019,6 +1323,20 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         StorageService.savePlaylists(next);
         return next;
       });
+      return pl;
+    },
+    []
+  );
+
+  const importPlaylistText = useCallback(
+    async (name: string, rawText: string): Promise<Playlist | null> => {
+      const matchedTracks = await matchSongList(rawText);
+      if (matchedTracks.length === 0) return null;
+      const pl = savePlaylistFromTracks(
+        name,
+        matchedTracks,
+        `Imported ${matchedTracks.length} songs`
+      );
       showToast(
         prefs.language === 'vi'
           ? `Đã nhập ${matchedTracks.length} bài vào "${pl.name}"`
@@ -1026,7 +1344,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
       return pl;
     },
-    [prefs.language, showToast]
+    [matchSongList, prefs.language, savePlaylistFromTracks, showToast]
   );
 
   const downloadTrack = useCallback(
@@ -1071,9 +1389,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             : `Downloaded offline: ${track.title}`
         );
       } catch {
-        showToast(
-          prefs.language === 'vi' ? 'Không thể tải bài hát này' : 'Download failed'
-        );
+        showToast(prefs.language === 'vi' ? 'Không thể tải bài hát này' : 'Download failed');
       } finally {
         setDownloadingIds((prev) => {
           const copy = { ...prev };
@@ -1096,9 +1412,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         StorageService.saveDownloads(copy);
         return copy;
       });
-      showToast(
-        prefs.language === 'vi' ? 'Đã xoá bản tải ngoại tuyến' : 'Removed offline file'
-      );
+      showToast(prefs.language === 'vi' ? 'Đã xoá bản tải ngoại tuyến' : 'Removed offline file');
     },
     [downloads, prefs.language, showToast]
   );
@@ -1185,12 +1499,515 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   }, [monochromeServers, prefs.language, showToast]);
 
+  // ───────────── Merged features: Spotube · OpenSpot Music · Musike · Cog ─────────────
+
+  const fetchChart = useCallback(async (country: string, genreId: number | null) => {
+    const list = await fetchTopSongs(country, genreId, 50);
+    return filterBlacklisted(list, prefsRef.current.blacklist);
+  }, []);
+
+  // Autoplay radio: similar songs appended when the queue runs out
+  continueWithSimilarRef.current = (seed: Track) => {
+    (async () => {
+      const recent = new Set(
+        queueRef.current.slice(-60).map((t) => `${t.title}|${t.artist}`.toLowerCase())
+      );
+      const pools = await Promise.all([
+        searchItunesTracks(seed.artist, 15, 'VN'),
+        searchItunesTracks(
+          `${seed.genre || ''} ${seed.artist.split(',')[0]} similar`.trim(),
+          15,
+          'VN'
+        ),
+      ]);
+      const fresh = filterBlacklisted(
+        pools.flat().filter((t) => !recent.has(`${t.title}|${t.artist}`.toLowerCase())),
+        prefsRef.current.blacklist
+      );
+      const uniq = Array.from(new Map(fresh.map((t) => [t.id, t])).values())
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 15);
+      if (uniq.length === 0) {
+        audioEngine.pause();
+        setIsPlaying(false);
+        return;
+      }
+      const start = queueRef.current.length;
+      setQueue((prev) => [...prev, ...uniq]);
+      setQueueIndex(start);
+      internalStartTrack(uniq[0]);
+      showToast(
+        prefsRef.current.language === 'vi'
+          ? 'Tự phát tiếp: bài tương tự ♪'
+          : 'Autoplay: similar songs ♪'
+      );
+    })().catch(() => undefined);
+  };
+
+  const openMusicLink = useCallback(
+    async (
+      text: string,
+      onProgress?: (done: number, total: number) => void
+    ): Promise<LinkResult> => {
+      const link = parseMusicLink(text);
+      const isVi = prefsRef.current.language === 'vi';
+      if (!link)
+        return { kind: 'none', message: isVi ? 'Không nhận ra liên kết này' : 'Unrecognised link' };
+      if (link.kind === 'youtube-video') {
+        const t = await youtubeVideoTrack(link.id);
+        await playTrack(t, [t]);
+        setIsPlayerOpen(true);
+        return { kind: 'played', title: t.title };
+      }
+      if (link.kind === 'youtube-playlist') {
+        const pl = await fetchYouTubePlaylist(link.id);
+        if (!pl || pl.tracks.length === 0) {
+          return {
+            kind: 'none',
+            message: isVi
+              ? Platform.OS === 'web'
+                ? 'Playlist YouTube chỉ nhập được trên app iOS'
+                : 'Không đọc được playlist (riêng tư hoặc bị chặn)'
+              : 'Could not read this playlist',
+          };
+        }
+        const tracks = filterBlacklisted(pl.tracks, prefsRef.current.blacklist);
+        return {
+          kind: 'playlist',
+          playlist: savePlaylistFromTracks(pl.name, tracks, `YouTube · ${tracks.length}`),
+        };
+      }
+      if (link.kind === 'spotify') {
+        const ent = await fetchSpotifyEntity(link.type, link.id);
+        if (!ent || ent.items.length === 0) {
+          return {
+            kind: 'none',
+            message: isVi
+              ? Platform.OS === 'web' && link.type !== 'track'
+                ? 'Playlist Spotify chỉ nhập được trên app iOS (trình duyệt chặn CORS)'
+                : 'Không đọc được liên kết Spotify (playlist phải công khai)'
+              : 'Could not read this Spotify link (must be public)',
+          };
+        }
+        const tracks = await matchSongList(ent.items, onProgress);
+        if (tracks.length === 0)
+          return {
+            kind: 'none',
+            message: isVi ? 'Không tìm thấy bài nào khớp' : 'No matches found',
+          };
+        if (link.type === 'track') {
+          await playTrack(tracks[0], tracks);
+          setIsPlayerOpen(true);
+          return { kind: 'played', title: tracks[0].title };
+        }
+        return {
+          kind: 'playlist',
+          playlist: savePlaylistFromTracks(
+            ent.name,
+            tracks,
+            `Spotify · ${tracks.length}/${ent.items.length} ${isVi ? 'bài khớp' : 'matched'}`,
+            ent.coverUrl
+          ),
+        };
+      }
+      if (link.kind === 'apple') {
+        if (link.type === 'song') {
+          const album = await fetchAlbumDetails(link.id);
+          const t = album?.tracks?.find((x) => x.id.endsWith(link.id)) || album?.tracks?.[0];
+          if (t) {
+            await playTrack(t, [t]);
+            setIsPlayerOpen(true);
+            return { kind: 'played', title: t.title };
+          }
+        } else if (link.type === 'album') {
+          const album = await fetchAlbumDetails(link.id);
+          if (album?.tracks?.length) {
+            return {
+              kind: 'playlist',
+              playlist: savePlaylistFromTracks(
+                album.title,
+                album.tracks,
+                `Apple Music · ${album.artist}`,
+                album.artworkUrl
+              ),
+            };
+          }
+        }
+        return {
+          kind: 'none',
+          message: isVi ? 'Chưa hỗ trợ liên kết Apple Music này' : 'Unsupported Apple Music link',
+        };
+      }
+      return {
+        kind: 'none',
+        message: isVi
+          ? 'Hỗ trợ: YouTube / YouTube Music (bài, playlist), Spotify (bài, playlist, album), Apple Music'
+          : 'Supported: YouTube / YouTube Music, Spotify, Apple Music links',
+      };
+    },
+    [matchSongList, playTrack, savePlaylistFromTracks]
+  );
+
+  const searchSuggestions = useCallback(
+    async (q: string): Promise<string[]> => {
+      const term = q.trim().toLowerCase();
+      if (term.length < 2) return [];
+      const local = searchHistory.filter((s) => s.toLowerCase().startsWith(term)).slice(0, 3);
+      let remote: string[] = [];
+      if (prefsRef.current.searchSuggestions) {
+        remote = await fetchInnerTubeSuggestions(term).catch(() => []);
+        if (remote.length === 0) {
+          // browser preview: Apple catalog titles as hints (CORS-enabled)
+          const hits = await searchItunesTracks(term, 6, 'VN').catch(() => [] as Track[]);
+          remote = hits.map((t) => `${t.title} ${t.artist}`.trim());
+        }
+      }
+      const seen = new Set<string>();
+      return [...local, ...remote]
+        .filter((s) => {
+          const k = s.toLowerCase();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+        .slice(0, 8);
+    },
+    [searchHistory]
+  );
+
+  const addTracksToPlaylist = useCallback(
+    (playlistId: string, tracks: Track[]) => {
+      setPlaylists((prev) => {
+        const next = prev.map((pl) => {
+          if (pl.id !== playlistId) return pl;
+          const have = new Set(pl.trackIds);
+          const merged = [...pl.tracks, ...tracks.filter((t) => !have.has(t.id))];
+          return {
+            ...pl,
+            tracks: merged,
+            trackIds: merged.map((t) => t.id),
+            coverUrl: pl.coverUrl || merged[0]?.artworkUrl,
+            updatedAt: Date.now(),
+          };
+        });
+        StorageService.savePlaylists(next);
+        return next;
+      });
+      showToast(
+        prefsRef.current.language === 'vi'
+          ? `Đã thêm ${tracks.length} bài vào playlist`
+          : `Added ${tracks.length} songs`
+      );
+    },
+    [showToast]
+  );
+
+  const removeTracksFromPlaylist = useCallback((playlistId: string, trackIds: string[]) => {
+    const drop = new Set(trackIds);
+    setPlaylists((prev) => {
+      const next = prev.map((pl) => {
+        if (pl.id !== playlistId) return pl;
+        const kept = pl.tracks.filter((t) => !drop.has(t.id));
+        return { ...pl, tracks: kept, trackIds: kept.map((t) => t.id), updatedAt: Date.now() };
+      });
+      StorageService.savePlaylists(next);
+      return next;
+    });
+  }, []);
+
+  const likeTracks = useCallback(
+    (tracks: Track[]) => {
+      setLikedTracks((prev) => {
+        const have = new Set(prev.map((t) => t.id));
+        const next = [...tracks.filter((t) => !have.has(t.id)), ...prev];
+        StorageService.saveLikedTracks(next);
+        return next;
+      });
+      showToast(
+        prefsRef.current.language === 'vi'
+          ? `Đã thích ${tracks.length} bài ♥`
+          : `Liked ${tracks.length} songs ♥`
+      );
+    },
+    [showToast]
+  );
+
+  const queueTracks = useCallback(
+    (tracks: Track[], next = false) => {
+      setQueue((prev) => {
+        const copy = [...prev];
+        if (next && copy.length > 0) copy.splice(queueIndexRef.current + 1, 0, ...tracks);
+        else copy.push(...tracks);
+        return copy;
+      });
+      showToast(
+        prefsRef.current.language === 'vi'
+          ? `Đã thêm ${tracks.length} bài vào hàng chờ`
+          : `Queued ${tracks.length} songs`
+      );
+    },
+    [showToast]
+  );
+
+  const isBlocked = useCallback(
+    (track: Track) => isBlacklisted(track, prefs.blacklist),
+    [prefs.blacklist]
+  );
+  const blockTrack = useCallback(
+    (track: Track) => {
+      const bl = prefsRef.current.blacklist;
+      if (bl.tracks.some((t) => t.id === track.id)) return;
+      updatePrefs({
+        blacklist: {
+          ...bl,
+          tracks: [...bl.tracks, { id: track.id, title: track.title, artist: track.artist }],
+        },
+      });
+      setQueue((prev) => prev.filter((t, i) => i === queueIndexRef.current || t.id !== track.id));
+      showToast(
+        prefsRef.current.language === 'vi' ? `Đã chặn "${track.title}"` : `Blocked "${track.title}"`
+      );
+    },
+    [showToast, updatePrefs]
+  );
+  const blockArtist = useCallback(
+    (name: string) => {
+      const bl = prefsRef.current.blacklist;
+      const clean = name.split(/,|&| feat\.?| ft\./i)[0].trim();
+      if (!clean || bl.artists.some((a) => a.toLowerCase() === clean.toLowerCase())) return;
+      updatePrefs({ blacklist: { ...bl, artists: [...bl.artists, clean] } });
+      showToast(
+        prefsRef.current.language === 'vi' ? `Đã chặn nghệ sĩ ${clean}` : `Blocked artist ${clean}`
+      );
+    },
+    [showToast, updatePrefs]
+  );
+  const unblockTrack = useCallback(
+    (id: string) => {
+      const bl = prefsRef.current.blacklist;
+      updatePrefs({ blacklist: { ...bl, tracks: bl.tracks.filter((t) => t.id !== id) } });
+    },
+    [updatePrefs]
+  );
+  const unblockArtist = useCallback(
+    (name: string) => {
+      const bl = prefsRef.current.blacklist;
+      updatePrefs({ blacklist: { ...bl, artists: bl.artists.filter((a) => a !== name) } });
+    },
+    [updatePrefs]
+  );
+
+  const exportLibrary = useCallback(async () => {
+    try {
+      const { onboarded: _o, ...prefsToSave } = prefsRef.current;
+      const name = await exportBackupFile(
+        buildBackup({
+          likedTracks,
+          playlists,
+          history,
+          searchHistory,
+          prefs: prefsToSave,
+          audioLab,
+        })
+      );
+      showToast(prefsRef.current.language === 'vi' ? `Đã xuất ${name}` : `Exported ${name}`);
+    } catch (e: any) {
+      showToast(String(e?.message || 'Export failed'));
+    }
+  }, [audioLab, history, likedTracks, playlists, searchHistory, showToast]);
+
+  const pickLibraryBackup = useCallback(async () => {
+    const text = await pickBackupFile();
+    if (!text) return null;
+    const backup = parseBackup(text);
+    return { backup, preview: previewBackup(backup, { likedTracks, playlists }) };
+  }, [likedTracks, playlists]);
+
+  const applyLibraryBackup = useCallback(
+    (backup: LibraryBackup, mode: 'merge' | 'replace', includeSettings: boolean) => {
+      const merged = mergeLibrary({ likedTracks, playlists, history, searchHistory }, backup, mode);
+      setLikedTracks(merged.likedTracks);
+      StorageService.saveLikedTracks(merged.likedTracks);
+      setPlaylists(merged.playlists);
+      StorageService.savePlaylists(merged.playlists);
+      setHistory(merged.history);
+      StorageService.saveHistory(merged.history);
+      setSearchHistory(merged.searchHistory);
+      StorageService.saveSearchHistory(merged.searchHistory);
+      if (includeSettings && backup.prefs) {
+        const { onboarded: _o, ...rest } = backup.prefs;
+        updatePrefs({ ...rest, onboarded: true } as Partial<MochyPreferences>);
+      }
+      if (includeSettings && backup.audioLab) {
+        const lab = { ...DEFAULT_AUDIO_LAB, ...backup.audioLab };
+        setAudioLab(lab);
+        StorageService.saveAudioLab(lab);
+        audioEngine.applyAudioLab(lab);
+      }
+      showToast(
+        prefsRef.current.language === 'vi'
+          ? `Đã khôi phục (${mode === 'merge' ? 'gộp' : 'thay thế'}): ${merged.likedTracks.length} bài thích, ${merged.playlists.length} playlist`
+          : `Restored (${mode}): ${merged.likedTracks.length} liked, ${merged.playlists.length} playlists`
+      );
+    },
+    [history, likedTracks, playlists, searchHistory, showToast, updatePrefs]
+  );
+
+  const importLocalFiles = useCallback(async () => {
+    try {
+      const metas = await importLocalAudioFiles();
+      if (metas.length === 0) return 0;
+      setDownloads((prev) => {
+        const next = { ...prev };
+        for (const m of metas) next[m.track.id] = m;
+        StorageService.saveDownloads(next);
+        return next;
+      });
+      showToast(
+        prefsRef.current.language === 'vi'
+          ? `Đã nhập ${metas.length} tệp — có trong Tải xuống ngoại tuyến`
+          : `Imported ${metas.length} files into Offline`
+      );
+      return metas.length;
+    } catch (e: any) {
+      showToast(String(e?.message || 'Import failed'));
+      return 0;
+    }
+  }, [showToast]);
+
+  const connectLastfm = useCallback(async (k: string, s: string, u: string, pw: string) => {
+    const name = await Scrobbler.connectLastfm(k, s, u, pw);
+    setScrobbleState(Scrobbler.get());
+    return name;
+  }, []);
+  const connectListenBrainz = useCallback(async (token: string) => {
+    const name = await Scrobbler.connectListenBrainz(token);
+    setScrobbleState(Scrobbler.get());
+    return name;
+  }, []);
+  const disconnectScrobbler = useCallback(async (service: 'lastfm' | 'listenbrainz') => {
+    await Scrobbler.disconnect(service);
+    setScrobbleState(Scrobbler.get());
+  }, []);
+  const setScrobbleEnabled = useCallback((enabled: boolean) => {
+    Scrobbler.update({ enabled }).then(setScrobbleState);
+  }, []);
+
+  const seekBy = useCallback((deltaSec: number) => {
+    const target = Math.max(0, positionSecRef.current + deltaSec);
+    positionSecRef.current = target;
+    setPositionSec(target);
+    audioEngine.seekTo(target);
+  }, []);
+  const positionSecRef = useRef(positionSec);
+  positionSecRef.current = positionSec;
+
+  // Re-apply normalisation immediately when the switch changes
+  useEffect(() => {
+    if (currentTrack)
+      audioEngine.setGainMultiplier(
+        Loudness.multiplier(currentTrack, resolvedStream, prefs.normalizeVolume)
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs.normalizeVolume]);
+
+  const loudnessLabel = useMemo(
+    () =>
+      currentTrack && prefs.normalizeVolume
+        ? Loudness.describe(currentTrack, resolvedStream)
+        : null,
+    [currentTrack, prefs.normalizeVolume, resolvedStream]
+  );
+
+  const [importSheet, setImportSheet] = useState<{ mode: 'link' | 'list'; text: string } | null>(
+    null
+  );
+  const [chartsSheet, setChartsSheet] = useState<{ genre: number | null } | null>(null);
+  const openImport = useCallback(
+    (mode: 'link' | 'list', text = '') => setImportSheet({ mode, text }),
+    []
+  );
+  const closeImport = useCallback(() => setImportSheet(null), []);
+  const openCharts = useCallback((genre: number | null = null) => setChartsSheet({ genre }), []);
+  const closeCharts = useCallback(() => setChartsSheet(null), []);
+
+  const extras = useMemo<MochyExtras>(
+    () => ({
+      isOnline,
+      importSheet,
+      openImport,
+      closeImport,
+      chartsSheet,
+      openCharts,
+      closeCharts,
+      fetchChart,
+      openMusicLink,
+      matchSongList,
+      savePlaylistFromTracks,
+      searchSuggestions,
+      addTracksToPlaylist,
+      likeTracks,
+      queueTracks,
+      removeTracksFromPlaylist,
+      isBlocked,
+      blockTrack,
+      blockArtist,
+      unblockTrack,
+      unblockArtist,
+      exportLibrary,
+      pickLibraryBackup,
+      applyLibraryBackup,
+      importLocalFiles,
+      scrobble: scrobbleState,
+      connectLastfm,
+      connectListenBrainz,
+      disconnectScrobbler,
+      setScrobbleEnabled,
+      seekBy,
+      loudnessLabel,
+    }),
+    [
+      isOnline,
+      importSheet,
+      openImport,
+      closeImport,
+      chartsSheet,
+      openCharts,
+      closeCharts,
+      fetchChart,
+      openMusicLink,
+      matchSongList,
+      savePlaylistFromTracks,
+      searchSuggestions,
+      addTracksToPlaylist,
+      likeTracks,
+      queueTracks,
+      removeTracksFromPlaylist,
+      isBlocked,
+      blockTrack,
+      blockArtist,
+      unblockTrack,
+      unblockArtist,
+      exportLibrary,
+      pickLibraryBackup,
+      applyLibraryBackup,
+      importLocalFiles,
+      scrobbleState,
+      connectLastfm,
+      connectListenBrainz,
+      disconnectScrobbler,
+      setScrobbleEnabled,
+      seekBy,
+      loudnessLabel,
+    ]
+  );
+
   const openCollection = useCallback((target: CollectionTarget | null) => {
     triggerHaptic('light');
     setCollectionTarget(target);
   }, []);
 
-  const value = useMemo<MochyContextValue>(
+  const baseValue = useMemo<Omit<MochyContextValue, keyof MochyExtras>>(
     () => ({
       activeTab,
       setActiveTab,
@@ -1347,6 +2164,11 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       removeMonochromeServer,
       verifyAllServers,
     ]
+  );
+
+  const value = useMemo<MochyContextValue>(
+    () => ({ ...baseValue, ...extras }),
+    [baseValue, extras]
   );
 
   return <MochyContext.Provider value={value}>{children}</MochyContext.Provider>;

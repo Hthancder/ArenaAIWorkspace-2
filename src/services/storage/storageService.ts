@@ -25,7 +25,17 @@ const KEYS = {
   AUDIOLAB: '@mochy/audiolab_v1',
   MONOCHROME_SERVERS: '@mochy/monochrome_servers_v1',
   SEARCH_HISTORY: '@mochy/search_history_v1',
+  SESSION: '@mochy/playback_session_v1',
 };
+
+export interface PlaybackSession {
+  queue: Track[];
+  index: number;
+  positionSec: number;
+  shuffle: boolean;
+  repeat: 'OFF' | 'ALL' | 'ONE';
+  savedAt: number;
+}
 
 export const DEFAULT_AUDIO_LAB: AudioLabSettings = {
   enabled: false,
@@ -103,6 +113,13 @@ export const StorageService = {
 
   loadSearchHistory: () => readJson<string[]>(KEYS.SEARCH_HISTORY, []),
   saveSearchHistory: (queries: string[]) => writeJson(KEYS.SEARCH_HISTORY, queries.slice(0, 15)),
+
+  loadSession: () => readJson<PlaybackSession | null>(KEYS.SESSION, null),
+  saveSession: (s: PlaybackSession) =>
+    writeJson(KEYS.SESSION, {
+      ...s,
+      queue: s.queue.filter((t) => t.source !== 'synth').slice(0, 300),
+    }),
 
   loadDownloads: () => readJson<Record<string, DownloadedTrackMeta>>(KEYS.DOWNLOADS, {}),
   saveDownloads: (map: Record<string, DownloadedTrackMeta>) => writeJson(KEYS.DOWNLOADS, map),

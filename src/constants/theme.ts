@@ -110,7 +110,7 @@ export function buildArtworkPalette(seedKey?: string, hintHue?: number): Artwork
     hash = Math.imul(hash, 16777619);
   }
   const hue = hintHue !== undefined ? hintHue : Math.abs(hash) % 360;
-  const rawSat = 0.48 + ((Math.abs(hash >> 8) % 35) / 100);
+  const rawSat = 0.48 + (Math.abs(hash >> 8) % 35) / 100;
   const saturation = Math.max(0.32, Math.min(0.82, rawSat));
 
   // Ported directly from ArtworkPalette.kt:
@@ -171,4 +171,21 @@ export function resolveFontFamily(style: AppFontStyle): string | undefined {
     default:
       return undefined; // Native SF Pro on iOS
   }
+}
+
+/** Hue (0–360) of a #RRGGBB colour, or null when it isn't a valid hex colour */
+export function hexToHue(hex: string): number | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  if (d === 0) return 0;
+  let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h *= 60;
+  return h < 0 ? h + 360 : h;
 }

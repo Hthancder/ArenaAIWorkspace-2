@@ -3,15 +3,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import React, { useState } from 'react';
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ArtworkImage } from './ArtworkImage';
 import { MOCHY_COLORS } from '../constants/theme';
 import { useMochy } from '../context/MochyContext';
@@ -35,6 +27,9 @@ export const TrackActionSheet: React.FC = () => {
     prefs,
     palette,
     showToast,
+    blockTrack,
+    blockArtist,
+    startInstantMix,
   } = useMochy();
 
   const [pickingPlaylist, setPickingPlaylist] = useState(false);
@@ -52,12 +47,7 @@ export const TrackActionSheet: React.FC = () => {
   };
 
   return (
-    <Modal
-      visible={Boolean(actionTrack)}
-      transparent
-      animationType="fade"
-      onRequestClose={close}
-    >
+    <Modal visible={Boolean(actionTrack)} transparent animationType="fade" onRequestClose={close}>
       <Pressable style={styles.backdrop} onPress={close}>
         <Pressable style={styles.sheetOuter} onPress={(e) => e.stopPropagation?.()}>
           <GlassSurface intensity={75} tintColor="rgba(18, 18, 26, 0.90)" style={styles.sheet}>
@@ -174,10 +164,7 @@ export const TrackActionSheet: React.FC = () => {
                   </Text>
                 </Pressable>
 
-                <Pressable
-                  style={styles.menuItem}
-                  onPress={() => setPickingPlaylist(true)}
-                >
+                <Pressable style={styles.menuItem} onPress={() => setPickingPlaylist(true)}>
                   <Ionicons name="add-circle-outline" size={21} color="#FFFFFF" />
                   <Text style={styles.menuLabel}>
                     {vi ? 'Thêm vào Playlist…' : 'Add to Playlist…'}
@@ -223,7 +210,9 @@ export const TrackActionSheet: React.FC = () => {
                 >
                   <Ionicons name="person-outline" size={21} color="#FFFFFF" />
                   <Text style={styles.menuLabel}>
-                    {vi ? `Xem nghệ sĩ: ${actionTrack.artist}` : `Go to Artist: ${actionTrack.artist}`}
+                    {vi
+                      ? `Xem nghệ sĩ: ${actionTrack.artist}`
+                      : `Go to Artist: ${actionTrack.artist}`}
                   </Text>
                 </Pressable>
 
@@ -239,7 +228,9 @@ export const TrackActionSheet: React.FC = () => {
                   >
                     <Ionicons name="disc-outline" size={21} color="#FFFFFF" />
                     <Text style={styles.menuLabel}>
-                      {vi ? `Xem Album: ${actionTrack.album || ''}` : `Go to Album: ${actionTrack.album || ''}`}
+                      {vi
+                        ? `Xem Album: ${actionTrack.album || ''}`
+                        : `Go to Album: ${actionTrack.album || ''}`}
                     </Text>
                   </Pressable>
                 )}
@@ -247,9 +238,7 @@ export const TrackActionSheet: React.FC = () => {
                 <Pressable
                   style={styles.menuItem}
                   onPress={async () => {
-                    await Clipboard.setStringAsync(
-                      `${actionTrack.title} — ${actionTrack.artist}`
-                    );
+                    await Clipboard.setStringAsync(`${actionTrack.title} — ${actionTrack.artist}`);
                     showToast(vi ? 'Đã sao chép tên bài hát' : 'Copied song info');
                     close();
                   }}
@@ -257,6 +246,47 @@ export const TrackActionSheet: React.FC = () => {
                   <Ionicons name="copy-outline" size={20} color="#FFFFFF" />
                   <Text style={styles.menuLabel}>
                     {vi ? 'Sao chép thông tin bài hát' : 'Copy Song Info'}
+                  </Text>
+                </Pressable>
+
+                {/* Song radio (Musike autoplay radio seeded from one song) */}
+                <Pressable
+                  style={styles.menuItem}
+                  onPress={() => {
+                    const seed = `${actionTrack.artist} ${actionTrack.genre || ''}`.trim();
+                    close();
+                    startInstantMix(seed);
+                  }}
+                >
+                  <Ionicons name="radio-outline" size={21} color="#FFFFFF" />
+                  <Text style={styles.menuLabel}>
+                    {vi ? 'Radio từ bài này' : 'Start song radio'}
+                  </Text>
+                </Pressable>
+
+                {/* Blacklist (Spotube) */}
+                <Pressable
+                  style={styles.menuItem}
+                  onPress={() => {
+                    blockTrack(actionTrack);
+                    close();
+                  }}
+                >
+                  <Ionicons name="remove-circle-outline" size={21} color="#F87171" />
+                  <Text style={styles.menuLabel}>{vi ? 'Chặn bài này' : 'Block this song'}</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.menuItem}
+                  onPress={() => {
+                    blockArtist(actionTrack.artist);
+                    close();
+                  }}
+                >
+                  <Ionicons name="ban-outline" size={21} color="#F87171" />
+                  <Text style={styles.menuLabel}>
+                    {vi
+                      ? `Chặn nghệ sĩ ${actionTrack.artist.split(',')[0]}`
+                      : `Block ${actionTrack.artist.split(',')[0]}`}
                   </Text>
                 </Pressable>
               </ScrollView>

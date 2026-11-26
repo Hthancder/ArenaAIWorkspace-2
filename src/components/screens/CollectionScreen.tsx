@@ -34,9 +34,33 @@ export const CollectionModal: React.FC = () => {
     removeTrackFromPlaylist,
     deletePlaylist,
     prefs,
+    savePlaylistFromTracks,
+    addTracksToPlaylist,
+    likeTracks,
+    queueTracks,
+    removeTracksFromPlaylist,
+    downloadTrack,
+    downloadingIds,
+    searchTracks,
+    showToast,
+    createPlaylist,
   } = useMochy();
 
   const [loading, setLoading] = useState(false);
+  // Multi-select (Musike): pick songs, then play / like / queue / add to playlist / remove
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [pickPlaylist, setPickPlaylist] = useState(false);
+  // Artist "load more" songs (OpenSpot paginated artist songs)
+  const [moreTracks, setMoreTracks] = useState<Track[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    setSelecting(false);
+    setSelected({});
+    setPickPlaylist(false);
+    setMoreTracks([]);
+  }, [collectionTarget]);
   const [albumData, setAlbumData] = useState<AlbumSummary | null>(null);
   const [artistData, setArtistData] = useState<ArtistSummary | null>(null);
 
@@ -97,7 +121,12 @@ export const CollectionModal: React.FC = () => {
         ? 'Nghệ sĩ nổi bật'
         : 'Featured Artist';
     artworkUrl = artistData?.artworkUrl || '';
-    tracks = artistData?.topTracks || [];
+    const base = artistData?.topTracks || [];
+    const have = new Set(base.map((x) => `${x.title}|${x.artist}`.toLowerCase()));
+    tracks = [
+      ...base,
+      ...moreTracks.filter((x) => !have.has(`${x.title}|${x.artist}`.toLowerCase())),
+    ];
   } else if (collectionTarget.kind === 'playlist') {
     const pl = playlists.find((p) => p.id === collectionTarget.playlistId);
     title = pl?.name || 'Playlist';
@@ -119,6 +148,24 @@ export const CollectionModal: React.FC = () => {
   }
 
   const headerPalette = buildArtworkPalette(title);
+  const chosen = tracks.filter((x) => selected[x.id]);
+  const canSaveAsPlaylist =
+    collectionTarget.kind === 'album' ||
+    collectionTarget.kind === 'artist' ||
+    collectionTarget.kind === 'liked';
+  const loadMoreArtist = async () => {
+    if (collectionTarget.kind !== 'artist') return;
+    setLoadingMore(true);
+    const name = artistData?.name || collectionTarget.name;
+    const res = await searchTracks(name, 'all');
+    const nameLc = name.toLowerCase();
+    const mine = res.tracks.filter((x) => x.artist.toLowerCase().includes(nameLc));
+    setMoreTracks((prev) => {
+      const ids = new Set([...prev, ...tracks].map((x) => `${x.title}|${x.artist}`.toLowerCase()));
+      return [...prev, ...mine.filter((x) => !ids.has(`${x.title}|${x.artist}`.toLowerCase()))];
+    });
+    setLoadingMore(false);
+  };
 
   return (
     <Modal
@@ -137,13 +184,27 @@ export const CollectionModal: React.FC = () => {
             style={[styles.hero, { paddingTop: Math.max(insets.top, 16) }]}
           >
             <View style={styles.navBar}>
-              <Pressable
-                onPress={() => openCollection(null)}
-                style={styles.backBtn}
-              >
+              <Pressable onPress={() => openCollection(null)} style={styles.backBtn}>
                 <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
               </Pressable>
 
+              <View style={{ flex: 1 }} />
+              {tracks.length > 0 && (
+                <Pressable
+                  onPress={() => {
+                    setSelecting((v) => !v);
+                    setSelected({});
+                    setPickPlaylist(false);
+                  }}
+                  style={[styles.backBtn, { marginRight: removablePlaylistId ? 8 : 0 }]}
+                >
+                  <Ionicons
+                    name={selecting ? 'close' : 'checkmark-done-outline'}
+                    size={19}
+                    color="#FFFFFF"
+                  />
+                </Pressable>
+              )}
               {removablePlaylistId && (
                 <Pressable
                   onPress={() => {
@@ -205,6 +266,50 @@ export const CollectionModal: React.FC = () => {
                   </Pressable>
                 </View>
               )}
+              {tracks.length > 0 && (
+                <View style={[styles.heroBtns, { marginTop: 10 }]}>
+                  {canSaveAsPlaylist && (
+                    <Pressable
+                      onPress={() => {
+                        const pl = savePlaylistFromTracks(title, tracks, subtitle, artworkUrl);
+                        showToast(
+                          vi
+                            ? `Đã lưu thành playlist "${pl.name}"`
+                            : `Saved as playlist "${pl.name}"`
+                        );
+                      }}
+                      style={styles.chipBtn}
+                    >
+                      <Ionicons name="bookmark-outline" size={15} color="#FFF" />
+                      <Text style={styles.chipText}>
+                        {vi ? 'Lưu playlist' : 'Save as playlist'}
+                      </Text>
+                    </Pressable>
+                  )}
+                  {collectionTarget.kind !== 'offline' && (
+                    <Pressable
+                      onPress={() => {
+                        tracks.slice(0, 50).forEach((x) => downloadTrack(x));
+                        showToast(
+                          vi
+                            ? `Đang tải ${Math.min(50, tracks.length)} bài…`
+                            : `Downloading ${Math.min(50, tracks.length)} songs…`
+                        );
+                      }}
+                      style={styles.chipBtn}
+                    >
+                      <Ionicons name="arrow-down-circle-outline" size={15} color="#FFF" />
+                      <Text style={styles.chipText}>
+                        {Object.keys(downloadingIds).length > 0
+                          ? `${Object.keys(downloadingIds).length}…`
+                          : vi
+                            ? 'Tải tất cả'
+                            : 'Download all'}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
             </View>
           </LinearGradient>
 
@@ -215,20 +320,181 @@ export const CollectionModal: React.FC = () => {
           )}
 
           {/* Tracklist */}
+          {selecting && (
+            <View style={styles.selectBar}>
+              <Pressable
+                onPress={() => {
+                  const all = chosen.length === tracks.length;
+                  setSelected(all ? {} : Object.fromEntries(tracks.map((x) => [x.id, true])));
+                }}
+              >
+                <Text style={{ color: headerPalette.accent, fontWeight: '800' }}>
+                  {chosen.length === tracks.length
+                    ? vi
+                      ? 'Bỏ chọn'
+                      : 'None'
+                    : vi
+                      ? 'Chọn tất cả'
+                      : 'All'}
+                </Text>
+              </Pressable>
+              <Text style={{ color: '#FFF', fontWeight: '700' }}>
+                {chosen.length} {vi ? 'đã chọn' : 'selected'}
+              </Text>
+            </View>
+          )}
+          {selecting && chosen.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.bulkRow}
+            >
+              <Pressable
+                onPress={() => {
+                  playTrack(chosen[0], chosen);
+                  openCollection(null);
+                }}
+                style={[styles.chipBtn, { backgroundColor: headerPalette.accent }]}
+              >
+                <Ionicons name="play" size={15} color={headerPalette.onAccent} />
+                <Text style={[styles.chipText, { color: headerPalette.onAccent }]}>
+                  {vi ? 'Phát' : 'Play'}
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => queueTracks(chosen, true)} style={styles.chipBtn}>
+                <Ionicons name="play-forward-outline" size={15} color="#FFF" />
+                <Text style={styles.chipText}>{vi ? 'Phát kế' : 'Play next'}</Text>
+              </Pressable>
+              <Pressable onPress={() => queueTracks(chosen)} style={styles.chipBtn}>
+                <Ionicons name="list" size={15} color="#FFF" />
+                <Text style={styles.chipText}>{vi ? 'Hàng chờ' : 'Queue'}</Text>
+              </Pressable>
+              {collectionTarget.kind !== 'liked' && (
+                <Pressable onPress={() => likeTracks(chosen)} style={styles.chipBtn}>
+                  <Ionicons name="heart-outline" size={15} color="#FFF" />
+                  <Text style={styles.chipText}>{vi ? 'Thích' : 'Like'}</Text>
+                </Pressable>
+              )}
+              <Pressable onPress={() => setPickPlaylist((v) => !v)} style={styles.chipBtn}>
+                <Ionicons name="add-circle-outline" size={15} color="#FFF" />
+                <Text style={styles.chipText}>{vi ? 'Vào playlist' : 'To playlist'}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  chosen.forEach((x) => downloadTrack(x));
+                }}
+                style={styles.chipBtn}
+              >
+                <Ionicons name="arrow-down-circle-outline" size={15} color="#FFF" />
+                <Text style={styles.chipText}>{vi ? 'Tải' : 'Download'}</Text>
+              </Pressable>
+              {removablePlaylistId && (
+                <Pressable
+                  onPress={() => {
+                    removeTracksFromPlaylist(
+                      removablePlaylistId!,
+                      chosen.map((x) => x.id)
+                    );
+                    setSelected({});
+                  }}
+                  style={styles.chipBtn}
+                >
+                  <Ionicons name="trash-outline" size={15} color="#F87171" />
+                  <Text style={[styles.chipText, { color: '#F87171' }]}>
+                    {vi ? 'Xoá' : 'Remove'}
+                  </Text>
+                </Pressable>
+              )}
+            </ScrollView>
+          )}
+          {selecting && pickPlaylist && chosen.length > 0 && (
+            <View style={styles.plPicker}>
+              <Pressable
+                onPress={() => {
+                  const pl = createPlaylist(
+                    vi
+                      ? `Playlist mới ${new Date().toLocaleDateString()}`
+                      : `New playlist ${new Date().toLocaleDateString()}`
+                  );
+                  addTracksToPlaylist(pl.id, chosen);
+                  setPickPlaylist(false);
+                }}
+                style={styles.plRow}
+              >
+                <Ionicons name="add" size={18} color={headerPalette.accent} />
+                <Text style={{ color: '#FFF', fontWeight: '700' }}>
+                  {vi ? 'Playlist mới' : 'New playlist'}
+                </Text>
+              </Pressable>
+              {playlists
+                .filter((p) => p.id !== removablePlaylistId)
+                .map((p) => (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => {
+                      addTracksToPlaylist(p.id, chosen);
+                      setPickPlaylist(false);
+                    }}
+                    style={styles.plRow}
+                  >
+                    <Ionicons name="musical-notes" size={16} color={headerPalette.accent} />
+                    <Text style={{ color: '#FFF' }} numberOfLines={1}>
+                      {p.name} ({p.tracks.length})
+                    </Text>
+                  </Pressable>
+                ))}
+            </View>
+          )}
+
           <View style={{ paddingHorizontal: 6 }}>
-            {tracks.map((song, idx) => (
-              <TrackRow
-                key={`${song.id}-${idx}`}
-                track={song}
-                queueContext={tracks}
-                indexBadge={idx + 1}
-                onRemove={
-                  removablePlaylistId
-                    ? () => removeTrackFromPlaylist(removablePlaylistId!, song.id)
-                    : undefined
-                }
-              />
-            ))}
+            {selecting &&
+              tracks.map((song, idx) => (
+                <Pressable
+                  key={`sel-${song.id}-${idx}`}
+                  onPress={() => setSelected((prev) => ({ ...prev, [song.id]: !prev[song.id] }))}
+                  style={styles.selRow}
+                >
+                  <Ionicons
+                    name={selected[song.id] ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={22}
+                    color={selected[song.id] ? headerPalette.accent : MOCHY_COLORS.textMuted}
+                  />
+                  <ArtworkImage source={{ uri: song.artworkUrl }} style={styles.selArt} />
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={1} style={{ color: '#FFF', fontWeight: '700' }}>
+                      {song.title}
+                    </Text>
+                    <Text numberOfLines={1} style={{ color: MOCHY_COLORS.textMuted, fontSize: 12 }}>
+                      {song.artist}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            {!selecting &&
+              tracks.map((song, idx) => (
+                <TrackRow
+                  key={`${song.id}-${idx}`}
+                  track={song}
+                  queueContext={tracks}
+                  indexBadge={idx + 1}
+                  onRemove={
+                    removablePlaylistId
+                      ? () => removeTrackFromPlaylist(removablePlaylistId!, song.id)
+                      : undefined
+                  }
+                />
+              ))}
+            {!selecting && collectionTarget.kind === 'artist' && tracks.length > 0 && (
+              <Pressable onPress={loadMoreArtist} disabled={loadingMore} style={styles.loadMore}>
+                {loadingMore ? (
+                  <ActivityIndicator color={headerPalette.accent} />
+                ) : (
+                  <Text style={{ color: headerPalette.accent, fontWeight: '800' }}>
+                    {vi ? 'Thêm bài của nghệ sĩ' : 'Load more songs'}
+                  </Text>
+                )}
+              </Pressable>
+            )}
           </View>
 
           {/* Artist Discography Albums if viewing Artist */}
@@ -247,16 +513,17 @@ export const CollectionModal: React.FC = () => {
                   {artistData.albums.map((alb) => (
                     <Pressable
                       key={alb.id}
-                      onPress={() =>
-                        openCollection({ kind: 'album', id: alb.id, summary: alb })
-                      }
+                      onPress={() => openCollection({ kind: 'album', id: alb.id, summary: alb })}
                       style={{ width: 136 }}
                     >
                       <ArtworkImage
                         source={{ uri: alb.artworkUrl }}
                         style={{ width: 136, height: 136, borderRadius: 16, marginBottom: 6 }}
                       />
-                      <Text numberOfLines={1} style={{ color: '#FFF', fontWeight: '700', fontSize: 13.5 }}>
+                      <Text
+                        numberOfLines={1}
+                        style={{ color: '#FFF', fontWeight: '700', fontSize: 13.5 }}
+                      >
                         {alb.title}
                       </Text>
                       {alb.year && (
@@ -343,6 +610,49 @@ const styles = StyleSheet.create({
     borderRadius: 99,
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
+  chipBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 99,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  chipText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  selectBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  bulkRow: { gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
+  plPicker: {
+    marginHorizontal: 14,
+    marginBottom: 10,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    overflow: 'hidden',
+  },
+  plRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  selRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  selArt: { width: 44, height: 44, borderRadius: 8 },
+  loadMore: { alignItems: 'center', paddingVertical: 16 },
   discographyHeading: {
     color: '#FFFFFF',
     fontSize: 18,

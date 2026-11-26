@@ -20,6 +20,8 @@ import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useMochy } from '../../context/MochyContext';
 import { formatTimeSec } from '../MochyIcons';
 import { TrackRow } from '../TrackRow';
+import { useHoldSeek } from '../../hooks/useHoldSeek';
+import { SpectrumBars } from './SpectrumBars';
 import { BedsideClockView } from './BedsidePlayer';
 import { IpodClassicView } from './IpodPlayer';
 import { LyricsView } from './LyricsView';
@@ -62,7 +64,11 @@ export const FullPlayerModal: React.FC = () => {
     palette,
     prefs,
     updatePrefs,
+    seekBy,
+    loudnessLabel,
   } = useMochy();
+  const ff = useHoldSeek(seekBy, 1);
+  const rw = useHoldSeek(seekBy, -1);
 
   const [pane, setPane] = useState<SubPane>('artwork');
   const [seekBarWidth, setSeekBarWidth] = useState(300);
@@ -119,11 +125,7 @@ export const FullPlayerModal: React.FC = () => {
       >
         {/* Top Bar */}
         <View style={styles.topBar}>
-          <Pressable
-            hitSlop={10}
-            onPress={() => setIsPlayerOpen(false)}
-            style={styles.topIconBtn}
-          >
+          <Pressable hitSlop={10} onPress={() => setIsPlayerOpen(false)} style={styles.topIconBtn}>
             <Ionicons name="chevron-down" size={24} color="#FFFFFF" />
           </Pressable>
 
@@ -139,6 +141,7 @@ export const FullPlayerModal: React.FC = () => {
             />
             <Text numberOfLines={1} style={[styles.qualityBadgeLabel, { color: palette.accent }]}>
               {resolvedStream?.qualityLabel || currentTrack.qualityBadge || 'Mochy Stream'}
+              {loudnessLabel ? ` · RG ${loudnessLabel}` : ''}
             </Text>
           </Pressable>
 
@@ -192,9 +195,7 @@ export const FullPlayerModal: React.FC = () => {
                     queueContext={queue}
                     indexBadge={idx + 1}
                     compact
-                    onRemove={
-                      idx !== queueIndex ? () => removeFromQueue(idx) : undefined
-                    }
+                    onRemove={idx !== queueIndex ? () => removeFromQueue(idx) : undefined}
                   />
                 ))}
               </ScrollView>
@@ -239,16 +240,11 @@ export const FullPlayerModal: React.FC = () => {
                   }}
                   style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
                 >
-                  <Text style={styles.sleepOptionText}>
-                    {vi ? 'Hết bài này' : 'End of Song'}
-                  </Text>
+                  <Text style={styles.sleepOptionText}>{vi ? 'Hết bài này' : 'End of Song'}</Text>
                 </Pressable>
               </View>
               {(sleepRemainingSec !== null || sleepEndOfTrack) && (
-                <Pressable
-                  onPress={() => setSleepTimer(null)}
-                  style={styles.turnOffSleepBtn}
-                >
+                <Pressable onPress={() => setSleepTimer(null)} style={styles.turnOffSleepBtn}>
                   <Text style={{ color: '#F87171', fontWeight: '700' }}>
                     {vi ? 'Tắt hẹn giờ' : 'Turn Off Timer'}
                   </Text>
@@ -327,9 +323,7 @@ export const FullPlayerModal: React.FC = () => {
                         <Text style={styles.styleCardTitle}>
                           {vi ? meta.titleVi : meta.titleEn}
                         </Text>
-                        <Text style={styles.styleCardDesc}>
-                          {vi ? meta.descVi : meta.descEn}
-                        </Text>
+                        <Text style={styles.styleCardDesc}>{vi ? meta.descVi : meta.descEn}</Text>
                       </View>
                       <View
                         style={[
@@ -371,22 +365,11 @@ export const FullPlayerModal: React.FC = () => {
                 <ArtworkImage source={{ uri: currentTrack.artworkUrl }} style={styles.coverImage} />
                 {prefs.playerStyle === 'POSTER' && (
                   <View style={styles.posterVisualizerRow}>
-                    {[0.4, 0.85, 0.6, 1.0, 0.72, 0.92, 0.5, 0.88, 0.65, 0.45, 0.78, 0.55].map(
-                      (h, idx) => (
-                        <View
-                          key={idx}
-                          style={[
-                            styles.visBar,
-                            {
-                              height: isPlaying
-                                ? 8 + ((Math.sin(positionSec * 5 + idx) + 1) * 14 * h)
-                                : 5,
-                              backgroundColor: palette.accent,
-                            },
-                          ]}
-                        />
-                      )
-                    )}
+                    <SpectrumBars
+                      isPlaying={isPlaying}
+                      positionSec={positionSec}
+                      color={palette.accent}
+                    />
                   </View>
                 )}
               </View>
@@ -457,9 +440,7 @@ export const FullPlayerModal: React.FC = () => {
               <View style={styles.timestampRow}>
                 <Text style={styles.timestampText}>{formatTimeSec(positionSec)}</Text>
                 <Pressable
-                  onPress={() =>
-                    updatePrefs({ showRemainingTime: !prefs.showRemainingTime })
-                  }
+                  onPress={() => updatePrefs({ showRemainingTime: !prefs.showRemainingTime })}
                 >
                   <Text style={styles.timestampText}>
                     {prefs.showRemainingTime
@@ -480,7 +461,14 @@ export const FullPlayerModal: React.FC = () => {
                 />
               </Pressable>
 
-              <Pressable hitSlop={10} onPress={playPrevious} style={styles.skipBtn}>
+              <Pressable
+                hitSlop={10}
+                onPress={rw.guard(playPrevious)}
+                onLongPress={rw.onLongPress}
+                onPressOut={rw.onPressOut}
+                delayLongPress={rw.delayLongPress}
+                style={styles.skipBtn}
+              >
                 <Ionicons name="play-skip-back" size={30} color="#FFFFFF" />
               </Pressable>
 
@@ -500,7 +488,14 @@ export const FullPlayerModal: React.FC = () => {
                 )}
               </Pressable>
 
-              <Pressable hitSlop={10} onPress={playNext} style={styles.skipBtn}>
+              <Pressable
+                hitSlop={10}
+                onPress={ff.guard(playNext)}
+                onLongPress={ff.onLongPress}
+                onPressOut={ff.onPressOut}
+                delayLongPress={ff.delayLongPress}
+                style={styles.skipBtn}
+              >
                 <Ionicons name="play-skip-forward" size={30} color="#FFFFFF" />
               </Pressable>
 
@@ -542,66 +537,38 @@ export const FullPlayerModal: React.FC = () => {
         <View style={styles.bottomDeck}>
           <Pressable
             onPress={() => setPane((p) => (p === 'lyrics' ? 'artwork' : 'lyrics'))}
-            style={[
-              styles.deckPill,
-              pane === 'lyrics' && { backgroundColor: palette.container },
-            ]}
+            style={[styles.deckPill, pane === 'lyrics' && { backgroundColor: palette.container }]}
           >
             <Ionicons
               name="chatbubble-ellipses-outline"
               size={18}
               color={pane === 'lyrics' ? palette.accent : '#FFFFFF'}
             />
-            <Text
-              style={[
-                styles.deckLabel,
-                pane === 'lyrics' && { color: palette.accent },
-              ]}
-            >
+            <Text style={[styles.deckLabel, pane === 'lyrics' && { color: palette.accent }]}>
               {vi ? 'Lời nhạc' : 'Lyrics'}
             </Text>
           </Pressable>
 
           <Pressable
             onPress={() => setPane((p) => (p === 'queue' ? 'artwork' : 'queue'))}
-            style={[
-              styles.deckPill,
-              pane === 'queue' && { backgroundColor: palette.container },
-            ]}
+            style={[styles.deckPill, pane === 'queue' && { backgroundColor: palette.container }]}
           >
-            <Ionicons
-              name="list"
-              size={18}
-              color={pane === 'queue' ? palette.accent : '#FFFFFF'}
-            />
-            <Text
-              style={[
-                styles.deckLabel,
-                pane === 'queue' && { color: palette.accent },
-              ]}
-            >
+            <Ionicons name="list" size={18} color={pane === 'queue' ? palette.accent : '#FFFFFF'} />
+            <Text style={[styles.deckLabel, pane === 'queue' && { color: palette.accent }]}>
               {vi ? 'Hàng chờ' : 'Queue'}
             </Text>
           </Pressable>
 
           <Pressable
             onPress={() => setIsAudioLabOpen(true)}
-            style={[
-              styles.deckPill,
-              audioLab.enabled && { backgroundColor: palette.container },
-            ]}
+            style={[styles.deckPill, audioLab.enabled && { backgroundColor: palette.container }]}
           >
             <Ionicons
               name="options-outline"
               size={18}
               color={audioLab.enabled ? palette.accent : '#FFFFFF'}
             />
-            <Text
-              style={[
-                styles.deckLabel,
-                audioLab.enabled && { color: palette.accent },
-              ]}
-            >
+            <Text style={[styles.deckLabel, audioLab.enabled && { color: palette.accent }]}>
               Audio Lab
             </Text>
           </Pressable>
@@ -618,11 +585,7 @@ export const FullPlayerModal: React.FC = () => {
             <Ionicons
               name="moon-outline"
               size={17}
-              color={
-                sleepRemainingSec !== null || sleepEndOfTrack
-                  ? palette.accent
-                  : '#FFFFFF'
-              }
+              color={sleepRemainingSec !== null || sleepEndOfTrack ? palette.accent : '#FFFFFF'}
             />
             <Text style={styles.deckLabel}>
               {sleepRemainingSec !== null

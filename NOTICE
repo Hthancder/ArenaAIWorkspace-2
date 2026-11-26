@@ -21,3 +21,34 @@ Mochy Music stands on the shoulders of these open-source projects and services:
 - **lrc.red** (https://lrc.red) — Word-timed lyrics
 - **LyricsPlus / YouLyPlus** by [Ibra Al Tabian](https://github.com/ibratabian17/LyricsPlus) — Word/syllable-timed lyrics API
 - **Better Lyrics API** by [Boidushya](https://github.com/better-lyrics/api) & **Unison Lyrics** (https://github.com/better-lyrics/unison) — TTML & syllable lyrics
+
+## Merged feature sources (ideas reimplemented in TypeScript — no source code copied)
+
+The iOS app also brings together the best ideas from four more open-source music players.
+Every feature below was written from scratch for this codebase. They are credited in the
+in-app About & Credits screen as well.
+
+- **Spotube** by [KRTirtho](https://github.com/KRTirtho/spotube). License: AGPL-3.0.
+  Ideas used: artist/song blacklist, scrobbling, first-run welcome. No Spotube code is
+  included. Spotube's AGPL-3.0 license notice is kept here as a courtesy.
+- **OpenSpot Music** by [BlackHatDevX](https://github.com/BlackHatDevX/openspot-music-app). License: MIT.
+  Ideas used: Spotify public playlist import (here it reads the public embed page instead of a
+  third-party transfer service), trending charts by country, capsule mini player, quick actions,
+  offline banner.
+- **Musike** by [Ernani1234](https://github.com/Ernani1234/musike). License: MIT.
+  Ideas used: "Search a list" batch matching with swap, paste-a-YouTube-link, search
+  suggestions, multi-select, backup export/import with merge/replace preview, accent presets plus a
+  custom colour, hideable Home sections, autoplay radio, queue resume, next-track preload, and a
+  remote YouTube client list (`config/streaming.json`).
+- **Cog** by [Christopher Snowhill (kode54) and contributors](https://github.com/losnoco/Cog). License: GPL-2.0.
+  Ideas used: ReplayGain-style normalisation with clipping prevention, spectrum visualizer,
+  Last.fm and ListenBrainz scrobbling, playing files from the iOS Files app, hold next/previous to
+  seek.
+
+Copyright notices for the MIT-licensed projects:
+- OpenSpot Music: Copyright (c) BlackHatDevX. MIT License.
+- Musike: Copyright (c) Ernani1234. MIT License.
+
+Charts data comes from Apple's public iTunes RSS feeds. Scrobbles go to Last.fm and
+ListenBrainz only when you connect your own account.
+

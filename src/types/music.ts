@@ -1,12 +1,7 @@
 // Core domain types for Mochy Music iOS (ported from Mochy Music by realidkroo)
 
 export type MusicSourceId =
-  | 'innertube'
-  | 'monochrome'
-  | 'jiosaavn'
-  | 'itunes'
-  | 'offline'
-  | 'synth';
+  'innertube' | 'monochrome' | 'jiosaavn' | 'itunes' | 'offline' | 'local' | 'synth';
 
 export interface Track {
   id: string;
@@ -45,6 +40,10 @@ export interface ResolvedStream {
   cacheKey?: string;
   /** Candidate came from Source Memory (played successfully before) */
   fromMemory?: boolean;
+  /** Loudness correction reported by the source (YouTube loudnessDb, TIDAL ReplayGain), in dB */
+  gainDb?: number;
+  /** Sample peak (0..1+) for clipping prevention */
+  peak?: number;
   diagnostics: DiagnosticStep[];
 }
 

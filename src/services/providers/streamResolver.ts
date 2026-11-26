@@ -204,6 +204,8 @@ export function createStreamCandidateQueue(
                     sampleRateHz: mono.sampleRateHz,
                     headers: MONOCHROME_STREAM_HEADERS,
                     cacheKey: `mono-${mono.id}`,
+                    gainDb: mono.gainDb,
+                    peak: mono.peak,
                   } as Candidate,
                 ]
               : []
@@ -245,6 +247,7 @@ export function createStreamCandidateQueue(
                   qualityLabel: yt.qualityLabel,
                   codec: yt.codec,
                   headers: yt.headers,
+                  gainDb: yt.gainDb,
                 }) as Candidate
             )
           )
