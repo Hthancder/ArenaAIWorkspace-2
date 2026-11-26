@@ -22,6 +22,8 @@ import { SearchScreen } from './src/components/screens/SearchScreen';
 import { SettingsScreen } from './src/components/screens/SettingsScreen';
 import { TrackActionSheet } from './src/components/TrackActionSheet';
 import { ChartsModal } from './src/components/merge/ChartsModal';
+import { RadioModal } from './src/components/merge/RadioModal';
+import { HaloMark } from './src/components/brand/HaloGlow';
 import { ImportModal } from './src/components/merge/ImportModal';
 import { WelcomeModal } from './src/components/merge/WelcomeModal';
 import { t } from './src/constants/i18n';
@@ -129,6 +131,11 @@ const HolySicShell: React.FC = () => {
                   }}
                   style={styles.tabItem}
                 >
+                  {selected && (
+                    <View pointerEvents="none" style={styles.tabHalo}>
+                      <HaloMark size={20} color={HOLYSIC_COLORS.halo} />
+                    </View>
+                  )}
                   {tab.isBrandMark ? (
                     <HolySicMarkIcon size={23} color={tint} filled={selected} />
                   ) : (
@@ -174,6 +181,7 @@ const HolySicShell: React.FC = () => {
           initialMode={importSheet?.mode}
           initialText={importSheet?.text}
         />
+        <RadioModal />
         <ChartsModal
           visible={!!chartsSheet}
           onClose={closeCharts}
@@ -197,6 +205,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  tabHalo: { position: 'absolute', top: 1, alignSelf: 'center' },
   outerFrame: {
     flex: 1,
     alignItems: 'center',

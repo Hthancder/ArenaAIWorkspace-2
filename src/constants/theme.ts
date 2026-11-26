@@ -32,6 +32,8 @@ export const HOLYSIC_COLORS = {
   flacEmerald: '#34D399',
   aacAmber: '#FBBF24',
   iosBlue: '#60A5FA',
+  /** HolySic brand: halo gold */
+  halo: '#FCD34D',
 };
 
 function hslToHex(h: number, s: number, l: number): string {

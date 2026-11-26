@@ -95,6 +95,30 @@ export function createStreamCandidateQueue(
     return makeQueue(producers, diagnostics, prefs);
   }
 
+  // 2b. Catalog-only sources carry their own stream: Audius (MP3 320) and live radio stations
+  if ((track.source === 'audius' || track.source === 'radio') && track.streamUrl) {
+    const radio = track.source === 'radio';
+    pushStep({
+      module: radio ? 'Radio Browser' : 'Audius',
+      step: radio ? 'Live station stream' : 'Artist-uploaded stream',
+      ok: true,
+      detail: track.qualityBadge || (radio ? 'LIVE' : 'MP3 320 kbps'),
+      latencyMs: 1,
+    });
+    producers.push(
+      Promise.resolve([
+        {
+          url: track.streamUrl,
+          source: track.source,
+          sourceLabel: radio ? 'Radio' : 'Audius',
+          qualityLabel: track.qualityBadge || (radio ? 'LIVE' : 'MP3 320 kbps'),
+          codec: radio ? (/\.m3u8/i.test(track.streamUrl) ? 'HLS' : 'Stream') : 'MP3',
+        } as Candidate,
+      ])
+    );
+    return makeQueue(producers, diagnostics, prefs);
+  }
+
   // 3. Source Memory — what played this song last time goes first
   if (prefs.rememberSources) {
     const mem = SourceMemory.get(track);

@@ -1,7 +1,15 @@
 // Core domain types for HolySic (ported from Mochy Music by realidkroo)
 
 export type MusicSourceId =
-  'innertube' | 'monochrome' | 'jiosaavn' | 'itunes' | 'offline' | 'local' | 'synth';
+  | 'innertube'
+  | 'monochrome'
+  | 'jiosaavn'
+  | 'itunes'
+  | 'offline'
+  | 'local'
+  | 'synth'
+  | 'audius'
+  | 'radio';
 
 export interface Track {
   id: string;
@@ -21,6 +29,8 @@ export interface Track {
   /** Optional synth chord recipe for offline zero-network showcase fallback */
   synthPreset?: string;
   source: MusicSourceId;
+  /** Live stream (internet radio): no duration, no seeking, no lyrics/scrobbling */
+  isLive?: boolean;
   qualityBadge?: string;
   genre?: string;
   releaseYear?: number;

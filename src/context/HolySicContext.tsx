@@ -46,6 +46,8 @@ import { Loudness } from '../services/audio/loudness';
 import { ScrobbleSettings, Scrobbler } from '../services/scrobble/scrobbler';
 import { useConnectivity } from '../services/net/connectivity';
 import { fetchNonMusicSegments, segmentAt } from '../services/discovery/sponsorBlock';
+import { registerStationClick, searchStations } from '../services/discovery/radioBrowser';
+import { searchAudiusTracks } from '../services/providers/audiusProvider';
 import { exportDownloadToFiles, shareTrack as shareTrackSheet } from '../services/share/shareTools';
 import { AUTO_EQ_PRESETS, OFFLINE_SHOWCASE_TRACKS } from '../data/curatedCatalog';
 import { audioEngine } from '../services/audio/audioEngine';
@@ -106,6 +108,13 @@ interface HolySicExtras {
   closeImport: () => void;
   chartsSheet: { genre: number | null } | null;
   openCharts: (genre?: number | null) => void;
+  /** Live radio browser (Radio Browser directory) */
+  radioOpen: boolean;
+  openRadio: () => void;
+  closeRadio: () => void;
+  /** Saved radio stations */
+  isFavoriteStation: (id: string) => boolean;
+  toggleFavoriteStation: (station: Track) => void;
   closeCharts: () => void;
   /** Charts by country & genre (OpenSpot trending + Musike genre browse) */
   fetchChart: (country: string, genreId: number | null) => Promise<Track[]>;
@@ -534,6 +543,11 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setLyrics(null);
       return;
     }
+    if (currentTrack.isLive) {
+      setLyrics(null);
+      setIsLoadingLyrics(false);
+      return;
+    }
     let cancelled = false;
     setIsLoadingLyrics(true);
     fetchLyricsForTrack(currentTrack)
@@ -592,7 +606,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       setCurrentTrack(track);
       setPositionSec(0);
-      setDurationSec(track.durationSec || 180);
+      setDurationSec(track.isLive ? 0 : track.durationSec || 180);
       setIsPlaying(false);
       setIsBuffering(true);
       setResolvedStream(null);
@@ -720,7 +734,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
               audioEngine.seekTo(startAtSec);
               setPositionSec(startAtSec);
             }
-            if (prefsRef.current.rememberSources) {
+            if (prefsRef.current.rememberSources && !track.isLive && track.source !== 'audius') {
               SourceMemory.rememberSuccess(track, cand, Date.now() - startedAt, localUri);
             }
             break;
@@ -770,9 +784,10 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         startedAt: Date.now(),
         listened: 0,
         lastPos: startAtSec,
-        scrobbled: played.isPreview === true,
+        scrobbled: played.isPreview === true || track.isLive === true,
       };
-      if (!played.isPreview) Scrobbler.nowPlaying(track).catch(() => undefined);
+      if (track.isLive) registerStationClick(track.id);
+      else if (!played.isPreview) Scrobbler.nowPlaying(track).catch(() => undefined);
 
       // Log listening event for HolySic Recap & History
       setHistory((prev) => {
@@ -850,7 +865,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const playPrevious = useCallback(() => {
     triggerHaptic('light');
-    if (positionSec > 3.5) {
+    if (positionSec > 3.5 && !currentTrackRef.current?.isLive) {
       audioEngine.seekTo(0);
       setPositionSec(0);
       return;
@@ -873,7 +888,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setIsPlaying(st.isPlaying);
       setIsBuffering(st.isBuffering);
       setPositionSec(st.currentTimeSec);
-      if (st.durationSec > 0) setDurationSec(st.durationSec);
+      if (st.durationSec > 0 && Number.isFinite(st.durationSec) && !currentTrackRef.current?.isLive)
+        setDurationSec(st.durationSec);
       trackListeningRef.current?.(st.currentTimeSec, st.durationSec, st.isPlaying);
 
       if (st.didJustFinish) {
@@ -942,6 +958,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
           : undefined;
       if (
         nextTrack &&
+        !nextTrack.isLive &&
+        !log.track.isLive &&
         preloadingRef.current !== nextTrack.id &&
         !downloadsRef.current[nextTrack.id]
       ) {
@@ -1181,6 +1199,9 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ) {
         tasks.push(searchInnerTubeTracks(q, 10));
       }
+      // Catalog-only extras: Audius (artist uploads) and live radio stations
+      if (sourceFilter === 'audius') tasks.push(searchAudiusTracks(q, 25));
+      if (sourceFilter === 'radio') tasks.push(searchStations({ name: q, limit: 30 }));
 
       const [albums, ...trackGroups] = await Promise.all([
         sourceFilter === 'all' || sourceFilter === 'itunes'
@@ -1428,6 +1449,14 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const downloadTrack = useCallback(
     async (track: Track) => {
       if (downloads[track.id] || downloadingIds[track.id]) return;
+      if (track.isLive) {
+        showToast(
+          prefsRef.current.language === 'vi'
+            ? 'Không thể tải đài phát trực tiếp'
+            : 'Live stations cannot be downloaded'
+        );
+        return;
+      }
       triggerHaptic('medium');
       setDownloadingIds((prev) => ({ ...prev, [track.id]: true }));
       try {
@@ -2008,6 +2037,35 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const closeImport = useCallback(() => setImportSheet(null), []);
   const openCharts = useCallback((genre: number | null = null) => setChartsSheet({ genre }), []);
   const closeCharts = useCallback(() => setChartsSheet(null), []);
+  const [radioOpen, setRadioOpen] = useState(false);
+  const openRadio = useCallback(() => setRadioOpen(true), []);
+  const closeRadio = useCallback(() => setRadioOpen(false), []);
+  const isFavoriteStation = useCallback(
+    (id: string) => (prefs.favoriteStations || []).some((x) => x.id === id),
+    [prefs.favoriteStations]
+  );
+  const toggleFavoriteStation = useCallback(
+    (station: Track) => {
+      const list = prefsRef.current.favoriteStations || [];
+      const has = list.some((x) => x.id === station.id);
+      triggerHaptic('light');
+      updatePrefs({
+        favoriteStations: has
+          ? list.filter((x) => x.id !== station.id)
+          : [station, ...list].slice(0, 60),
+      });
+      showToast(
+        prefsRef.current.language === 'vi'
+          ? has
+            ? 'Đã bỏ lưu đài'
+            : 'Đã lưu đài radio'
+          : has
+            ? 'Station removed'
+            : 'Station saved'
+      );
+    },
+    [showToast, updatePrefs]
+  );
 
   // Per-song lyrics delay (Spotube) — kept for the 300 most recent songs
   const nudgeLyricsOffset = useCallback(
@@ -2064,6 +2122,11 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       closeImport,
       chartsSheet,
       openCharts,
+      radioOpen,
+      openRadio,
+      closeRadio,
+      isFavoriteStation,
+      toggleFavoriteStation,
       closeCharts,
       fetchChart,
       openMusicLink,
@@ -2098,6 +2161,11 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       closeImport,
       chartsSheet,
       openCharts,
+      radioOpen,
+      openRadio,
+      closeRadio,
+      isFavoriteStation,
+      toggleFavoriteStation,
       closeCharts,
       fetchChart,
       openMusicLink,

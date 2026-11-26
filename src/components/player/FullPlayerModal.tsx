@@ -384,47 +384,61 @@ export const FullPlayerModal: React.FC = () => {
               </Pressable>
             </View>
 
-            {/* Interactive Scrubbing Seek Bar */}
-            <View style={styles.seekSection}>
-              <Pressable
-                onLayout={(e: LayoutChangeEvent) =>
-                  setSeekBarWidth(e.nativeEvent.layout.width || 300)
-                }
-                onPress={handleSeekPress}
-                style={styles.seekHitBox}
-              >
-                <View style={styles.seekTrack}>
-                  <View
-                    style={[
-                      styles.seekFill,
-                      { width: `${progress * 100}%`, backgroundColor: palette.accent },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.seekThumb,
-                      {
-                        left: `${progress * 100}%`,
-                        backgroundColor: palette.accent,
-                      },
-                    ]}
-                  />
+            {/* Live radio: no timeline, just an on-air bar */}
+            {currentTrack.isLive ? (
+              <View style={styles.seekSection}>
+                <View style={[styles.seekTrack, { backgroundColor: 'rgba(239,68,68,0.25)' }]}>
+                  <View style={[styles.seekFill, { width: '100%', backgroundColor: '#EF4444' }]} />
                 </View>
-              </Pressable>
-
-              <View style={styles.timestampRow}>
-                <Text style={styles.timestampText}>{formatTimeSec(positionSec)}</Text>
-                <Pressable
-                  onPress={() => updatePrefs({ showRemainingTime: !prefs.showRemainingTime })}
-                >
-                  <Text style={styles.timestampText}>
-                    {prefs.showRemainingTime
-                      ? `-${formatTimeSec(Math.max(0, durationSec - positionSec))}`
-                      : formatTimeSec(durationSec)}
+                <View style={styles.timestampRow}>
+                  <Text style={[styles.timestampText, { color: '#FCA5A5', fontWeight: '900' }]}>
+                    ● LIVE · {formatTimeSec(positionSec)}
                   </Text>
-                </Pressable>
+                  <Text style={styles.timestampText}>{currentTrack.genre || 'Radio'}</Text>
+                </View>
               </View>
-            </View>
+            ) : (
+              <View style={styles.seekSection}>
+                <Pressable
+                  onLayout={(e: LayoutChangeEvent) =>
+                    setSeekBarWidth(e.nativeEvent.layout.width || 300)
+                  }
+                  onPress={handleSeekPress}
+                  style={styles.seekHitBox}
+                >
+                  <View style={styles.seekTrack}>
+                    <View
+                      style={[
+                        styles.seekFill,
+                        { width: `${progress * 100}%`, backgroundColor: palette.accent },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.seekThumb,
+                        {
+                          left: `${progress * 100}%`,
+                          backgroundColor: palette.accent,
+                        },
+                      ]}
+                    />
+                  </View>
+                </Pressable>
+
+                <View style={styles.timestampRow}>
+                  <Text style={styles.timestampText}>{formatTimeSec(positionSec)}</Text>
+                  <Pressable
+                    onPress={() => updatePrefs({ showRemainingTime: !prefs.showRemainingTime })}
+                  >
+                    <Text style={styles.timestampText}>
+                      {prefs.showRemainingTime
+                        ? `-${formatTimeSec(Math.max(0, durationSec - positionSec))}`
+                        : formatTimeSec(durationSec)}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
 
             {/* Primary Transport Row */}
             <View style={styles.transportRow}>

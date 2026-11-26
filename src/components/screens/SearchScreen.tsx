@@ -27,6 +27,8 @@ const SOURCE_FILTERS: { id: 'all' | MusicSourceId; label: string }[] = [
   { id: 'monochrome', label: 'Monochrome FLAC' },
   { id: 'innertube', label: 'InnerTube YT' },
   { id: 'itunes', label: 'Apple Catalog' },
+  { id: 'audius', label: 'Audius Indie' },
+  { id: 'radio', label: 'Radio Live' },
 ];
 
 const FEATURED_ARTISTS = [

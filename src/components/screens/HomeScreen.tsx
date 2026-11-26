@@ -14,6 +14,9 @@ import { CHART_COUNTRIES, CHART_GENRES } from '../../services/discovery/chartsSe
 import { HomeSectionId } from '../../constants/preferences';
 import { HolySicMarkIcon } from '../HolySicIcons';
 import { TrackRow } from '../TrackRow';
+import { HaloGlow, SectionTitle } from '../brand/HaloGlow';
+import { searchStations } from '../../services/discovery/radioBrowser';
+import { AUDIUS_GENRES, fetchAudiusTrending } from '../../services/providers/audiusProvider';
 
 export const HomeScreen: React.FC = () => {
   const {
@@ -34,6 +37,9 @@ export const HomeScreen: React.FC = () => {
     searchTracks,
     fetchChart,
     openCharts,
+    openRadio,
+    toggleFavoriteStation,
+    currentTrack,
     openImport,
     importLocalFiles,
     likedTracks,
@@ -56,6 +62,41 @@ export const HomeScreen: React.FC = () => {
   }, [country.code, globalCode, fetchChart]);
   const chartLocal = localChart.length > 0 ? localChart : vnTrending;
   const chartGlobal = globalChart.length > 0 ? globalChart : globalTrending;
+
+  // Live radio shelf: saved stations first, then the most-played stations in your chart country
+  const [stations, setStations] = useState<Track[]>([]);
+  useEffect(() => {
+    if (!shown('radio')) return;
+    let cancelled = false;
+    searchStations({ countrycode: country.code, limit: 14 }).then(
+      (l) => !cancelled && setStations(l)
+    );
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [country.code]);
+  const radioShelf = [
+    ...(prefs.favoriteStations || []),
+    ...stations.filter((x) => !(prefs.favoriteStations || []).some((f) => f.id === x.id)),
+  ].slice(0, 16);
+
+  // Audius indie trending (artist uploads, full-length MP3 320)
+  const [audiusGenre, setAudiusGenre] = useState('');
+  const [audius, setAudius] = useState<Track[]>([]);
+  const [audiusLoading, setAudiusLoading] = useState(false);
+  useEffect(() => {
+    if (!shown('audius')) return;
+    let cancelled = false;
+    setAudiusLoading(true);
+    fetchAudiusTrending(audiusGenre, 'week', 20)
+      .then((l) => !cancelled && setAudius(l))
+      .finally(() => !cancelled && setAudiusLoading(false));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audiusGenre]);
 
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [moodTracks, setMoodTracks] = useState<Track[] | null>(null);
@@ -98,15 +139,23 @@ export const HomeScreen: React.FC = () => {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      <HaloGlow color={palette.accent} height={320} />
       {/* Top Header */}
       <View style={styles.headerRow}>
         <View style={styles.brandLeft}>
-          <View style={[styles.logoBadge, { backgroundColor: palette.container }]}>
-            <HolySicMarkIcon size={22} color={palette.accent} filled />
-          </View>
+          <LinearGradient
+            colors={[palette.accent + '55', 'rgba(18,10,36,0.9)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.logoBadge, styles.logoBadgeHalo]}
+          >
+            <HolySicMarkIcon size={24} color="#FFFFFF" filled />
+          </LinearGradient>
           <View>
             <Text style={[styles.greetingSub, { fontFamily }]}>{greeting}</Text>
-            <Text style={[styles.brandTitle, { fontFamily }]}>HolySic</Text>
+            <Text style={[styles.brandTitle, { fontFamily }]}>
+              Holy<Text style={{ color: palette.accent }}>Sic</Text>
+            </Text>
           </View>
         </View>
 
@@ -200,6 +249,13 @@ export const HomeScreen: React.FC = () => {
               onPress: () => openCharts(null),
             },
             {
+              icon: 'radio',
+              tint: '#F87171',
+              label: 'Radio',
+              sub: 'LIVE',
+              onPress: () => openRadio(),
+            },
+            {
               icon: 'folder-open-outline',
               tint: '#F472B6',
               label: vi ? 'Tệp' : 'Files',
@@ -228,9 +284,7 @@ export const HomeScreen: React.FC = () => {
       {shown('quickPicks') && (
         <>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { fontFamily }]}>
-              {t(prefs.language, 'quickPicks')}
-            </Text>
+            <SectionTitle fontFamily={fontFamily}>{t(prefs.language, 'quickPicks')}</SectionTitle>
             {(isLoadingHome || loadingMood) && (
               <ActivityIndicator size="small" color={palette.accent} />
             )}
@@ -299,9 +353,9 @@ export const HomeScreen: React.FC = () => {
       {shown('recent') && history.length > 0 && (
         <>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { fontFamily }]}>
+            <SectionTitle fontFamily={fontFamily}>
               {t(prefs.language, 'keepListening')}
-            </Text>
+            </SectionTitle>
           </View>
           <ScrollView
             horizontal
@@ -336,9 +390,9 @@ export const HomeScreen: React.FC = () => {
       {shown('albums') && featuredAlbums.length > 0 && (
         <>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { fontFamily }]}>
+            <SectionTitle fontFamily={fontFamily}>
               {t(prefs.language, 'featuredAlbums')}
-            </Text>
+            </SectionTitle>
           </View>
           <ScrollView
             horizontal
@@ -372,11 +426,11 @@ export const HomeScreen: React.FC = () => {
               onPress={() => openCharts(null)}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
             >
-              <Text style={[styles.sectionTitle, { fontFamily }]}>
+              <SectionTitle fontFamily={fontFamily}>
                 {vi
                   ? `Thịnh hành ${country.flag} ${country.vi}`
                   : `Trending ${country.flag} ${country.en}`}
-              </Text>
+              </SectionTitle>
               <Ionicons name="chevron-down" size={15} color={HOLYSIC_COLORS.textMuted} />
             </Pressable>
             <Pressable onPress={() => chartLocal[0] && playTrack(chartLocal[0], chartLocal)}>
@@ -402,7 +456,7 @@ export const HomeScreen: React.FC = () => {
       {shown('genres') && (
         <>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { fontFamily }]}>{vi ? 'Thể loại' : 'Genres'}</Text>
+            <SectionTitle fontFamily={fontFamily}>{vi ? 'Thể loại' : 'Genres'}</SectionTitle>
           </View>
           <View style={styles.genreGrid}>
             {CHART_GENRES.filter((g) => g.id !== null)
@@ -426,13 +480,117 @@ export const HomeScreen: React.FC = () => {
         </>
       )}
 
+      {/* Live radio (Radio Browser) */}
+      {shown('radio') && radioShelf.length > 0 && (
+        <>
+          <View style={styles.sectionHeader}>
+            <SectionTitle fontFamily={fontFamily}>
+              {vi ? 'Radio trực tuyến' : 'Live radio'}
+            </SectionTitle>
+            <Pressable onPress={openRadio}>
+              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
+                {vi ? 'Tất cả đài' : 'All stations'}
+              </Text>
+            </Pressable>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalCards}
+          >
+            {radioShelf.map((st) => {
+              const on = currentTrack?.id === st.id;
+              return (
+                <Pressable
+                  key={st.id}
+                  onPress={() => playTrack(st, radioShelf)}
+                  onLongPress={() => toggleFavoriteStation(st)}
+                  style={styles.radioCard}
+                >
+                  <View>
+                    <ArtworkImage
+                      source={{ uri: st.artworkUrl }}
+                      fallbackSeed={st.title}
+                      style={[styles.radioArt, on && { borderColor: palette.accent }]}
+                    />
+                    <View style={styles.liveTag}>
+                      <View style={styles.liveDot} />
+                      <Text style={styles.liveTagText}>LIVE</Text>
+                    </View>
+                  </View>
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.squareTitle, { fontFamily }, on && { color: palette.accent }]}
+                  >
+                    {st.title}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.squareSub}>
+                    {st.genre || st.artist}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </>
+      )}
+
+      {/* Indie trending from Audius */}
+      {shown('audius') && (audius.length > 0 || audiusLoading) && (
+        <>
+          <View style={styles.sectionHeader}>
+            <SectionTitle fontFamily={fontFamily}>
+              {vi ? 'Indie thịnh hành · Audius' : 'Indie trending · Audius'}
+            </SectionTitle>
+            <Pressable onPress={() => audius[0] && playTrack(audius[0], audius)}>
+              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
+                {t(prefs.language, 'playAll')}
+              </Text>
+            </Pressable>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.horizontalCards, { gap: 8, paddingBottom: 10 }]}
+          >
+            {AUDIUS_GENRES.map((g) => {
+              const active = audiusGenre === g.id;
+              return (
+                <Pressable
+                  key={g.id || 'all'}
+                  onPress={() => setAudiusGenre(g.id)}
+                  style={[
+                    styles.audiusChip,
+                    active && { backgroundColor: palette.accent, borderColor: palette.accent },
+                  ]}
+                >
+                  <Text style={[styles.audiusChipText, active && { color: palette.onAccent }]}>
+                    {vi ? g.vi : g.en}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <View style={styles.listCard}>
+            {audiusLoading && audius.length === 0 ? (
+              <ActivityIndicator style={{ marginVertical: 18 }} color={palette.accent} />
+            ) : (
+              audius
+                .slice(0, 6)
+                .map((song, idx) => (
+                  <TrackRow key={song.id} track={song} queueContext={audius} indexBadge={idx + 1} />
+                ))
+            )}
+          </View>
+        </>
+      )}
+
       {/* Global chart */}
       {shown('global') && (
         <>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { fontFamily }]}>
+            <SectionTitle fontFamily={fontFamily}>
               {t(prefs.language, 'globalCharts')} {globalCountry.flag}
-            </Text>
+            </SectionTitle>
             <Pressable onPress={() => chartGlobal[0] && playTrack(chartGlobal[0], chartGlobal)}>
               <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
                 {t(prefs.language, 'playAll')}
@@ -456,6 +614,40 @@ export const HomeScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  logoBadgeHalo: { borderWidth: 1, borderColor: 'rgba(252,211,77,0.35)' },
+  radioCard: { width: 118 },
+  radioArt: {
+    width: 118,
+    height: 118,
+    borderRadius: 59,
+    backgroundColor: '#1B1B24',
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  liveTag: {
+    position: 'absolute',
+    bottom: 12,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 99,
+    backgroundColor: 'rgba(10,10,14,0.85)',
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' },
+  liveTagText: { color: '#FFF', fontSize: 9.5, fontWeight: '900', letterSpacing: 0.8 },
+  audiusChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 99,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  audiusChipText: { color: '#E4E4EC', fontWeight: '700', fontSize: 12.5 },
   quickActions: { gap: 10, paddingHorizontal: 16, paddingBottom: 6, paddingTop: 2 },
   qaCard: {
     flexDirection: 'row',

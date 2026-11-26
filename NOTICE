@@ -54,6 +54,11 @@ Charts data comes from Apple's public iTunes RSS feeds. Non-music segment data c
 SponsorBlock (https://sponsor.ajay.app, CC BY-NC-SA 4.0 database), and can be turned off in Settings. Scrobbles go to Last.fm and
 ListenBrainz only when you connect your own account.
 
+Extra catalogues and data: indie tracks stream from Audius (https://audius.co, artist uploads via
+its open API). Live stations come from the community-run Radio Browser directory
+(https://www.radio-browser.info). Artist bios are short excerpts from Wikipedia
+(https://www.wikipedia.org), licensed CC BY-SA 4.0, and always link to the source article.
+
 ## Rename notice — HolySic
 
 In November 2026 this fork was renamed to **HolySic**, with a new name, logo, bundle identifier

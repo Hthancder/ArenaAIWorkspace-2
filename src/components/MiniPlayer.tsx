@@ -33,7 +33,11 @@ export const MiniPlayer: React.FC = () => {
   // OpenSpot-style floating capsule vs. HolySic card
   const capsule = prefs.miniPlayerStyle === 'capsule';
 
-  const progress = durationSec > 0 ? Math.min(1, Math.max(0, positionSec / durationSec)) : 0;
+  const progress = currentTrack?.isLive
+    ? 1
+    : durationSec > 0
+      ? Math.min(1, Math.max(0, positionSec / durationSec))
+      : 0;
   const liked = isLiked(currentTrack.id);
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
@@ -77,6 +81,7 @@ export const MiniPlayer: React.FC = () => {
               </Text>
             ) : (
               <Text numberOfLines={1} style={[styles.artist, { fontFamily }]}>
+                {currentTrack.isLive ? '● LIVE · ' : ''}
                 {currentTrack.artist}
               </Text>
             )}

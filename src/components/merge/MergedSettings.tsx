@@ -28,6 +28,8 @@ const HOME_SECTIONS: { id: HomeSectionId; vi: string; en: string }[] = [
   { id: 'charts', vi: 'Thịnh hành theo quốc gia', en: 'Trending by country' },
   { id: 'genres', vi: 'Thể loại', en: 'Genres' },
   { id: 'global', vi: 'Xếp hạng toàn cầu', en: 'Global chart' },
+  { id: 'radio', vi: 'Radio trực tuyến', en: 'Live radio' },
+  { id: 'audius', vi: 'Indie thịnh hành (Audius)', en: 'Indie trending (Audius)' },
 ];
 
 export const MergedSettings: React.FC = () => {
@@ -191,19 +193,21 @@ export const MergedSettings: React.FC = () => {
         <Text style={[styles.rowTitle, { marginTop: 16 }]}>
           {vi ? 'Mục trên Trang chủ' : 'Home sections'}
         </Text>
-        {HOME_SECTIONS.map((s) =>
-          row(
-            vi ? s.vi : s.en,
-            '',
-            sw(!prefs.hiddenHomeSections.includes(s.id), (on) =>
-              updatePrefs({
-                hiddenHomeSections: on
-                  ? prefs.hiddenHomeSections.filter((x) => x !== s.id)
-                  : [...prefs.hiddenHomeSections, s.id],
-              })
-            )
-          )
-        )}
+        {HOME_SECTIONS.map((s) => (
+          <React.Fragment key={s.id}>
+            {row(
+              vi ? s.vi : s.en,
+              '',
+              sw(!prefs.hiddenHomeSections.includes(s.id), (on) =>
+                updatePrefs({
+                  hiddenHomeSections: on
+                    ? prefs.hiddenHomeSections.filter((x) => x !== s.id)
+                    : [...prefs.hiddenHomeSections, s.id],
+                })
+              )
+            )}
+          </React.Fragment>
+        ))}
       </View>
 
       {/* ───────── Playback ───────── */}

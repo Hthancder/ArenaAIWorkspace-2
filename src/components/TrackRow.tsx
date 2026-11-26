@@ -154,7 +154,15 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         </View>
       )}
 
-      <Text style={[styles.duration, { fontFamily }]}>{formatTimeSec(track.durationSec)}</Text>
+      <Text
+        style={[
+          styles.duration,
+          { fontFamily },
+          track.isLive && { color: '#F87171', fontWeight: '900' },
+        ]}
+      >
+        {track.isLive ? 'LIVE' : formatTimeSec(track.durationSec)}
+      </Text>
 
       <Pressable
         hitSlop={8}

@@ -39,6 +39,27 @@ export const UPSTREAM_CREDITS: CreditProject[] = [
     url: 'https://sponsor.ajay.app',
   },
   {
+    name: 'Audius',
+    author: 'Audius protocol & artists',
+    roleVi: 'Nhạc indie do nghệ sĩ tự đăng, phát đầy đủ MP3 320 (API mở, miễn phí)',
+    roleEn: 'Artist-uploaded indie music, full-length MP3 320 (open API)',
+    url: 'https://audius.co',
+  },
+  {
+    name: 'Radio Browser',
+    author: 'segler-alex & community',
+    roleVi: 'Danh bạ 50.000+ đài radio trực tuyến do cộng đồng duy trì',
+    roleEn: 'Community directory of 50,000+ internet radio stations',
+    url: 'https://www.radio-browser.info',
+  },
+  {
+    name: 'Wikipedia',
+    author: 'Wikipedia contributors',
+    roleVi: 'Tiểu sử nghệ sĩ (nội dung CC BY-SA 4.0, có liên kết bài gốc)',
+    roleEn: 'Artist bios (CC BY-SA 4.0 text, linked to the source article)',
+    url: 'https://www.wikipedia.org',
+  },
+  {
     name: 'OpenSpot Music',
     author: 'BlackHatDevX',
     roleVi:

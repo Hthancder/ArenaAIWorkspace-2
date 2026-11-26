@@ -71,6 +71,7 @@ merged in from Spotube, OpenSpot, Musike and Cog. All original notices are kept 
 - **Sao lưu/khôi phục** (gộp hoặc thay thế, xem trước) · **chọn nhiều bài** · **gợi ý khi gõ** · **tự phát bài tương tự** · **khôi phục hàng chờ** · **chuẩn bị sẵn bài kế** *(Musike)*
 - **Hàng chờ nâng cao:** đưa bài lên/xuống, xoá các bài sau, lưu hàng chờ thành playlist · **chỉnh lệch lời bài hát** từng bài ±0,5 giây · **bỏ qua đoạn không phải nhạc** trong MV YouTube (SponsorBlock) *(Spotube)*
 - **Chia sẻ bài hát** *(OpenSpot)* · **lưu bài đã tải vào ứng dụng Tệp** với tên "Nghệ sĩ - Tên bài" · **lọc & sắp xếp** trong playlist/đã thích/đã tải *(Spotube, Musike)*
+- **Radio trực tuyến 50.000+ đài** (Radio Browser): theo quốc gia / tâm trạng, lưu đài yêu thích, nhãn LIVE · **Indie thịnh hành Audius** (MP3 320 đầy đủ, lọc thể loại, có trong Tìm kiếm) · **Tiểu sử nghệ sĩ** từ Wikipedia (CC BY-SA)
 - **Màu nhấn** (8 màu + tự chọn) · ẩn/hiện mục Trang chủ *(Musike)* · **MiniPlayer viên nang** · lối tắt · banner ngoại tuyến *(OpenSpot)*
 
 ## 🚀 Cài đặt / Installation

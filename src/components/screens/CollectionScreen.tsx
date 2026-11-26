@@ -3,6 +3,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
+import { ArtistBioCard } from '../ArtistBioCard';
 import {
   ActivityIndicator,
   Modal,
@@ -569,6 +570,15 @@ export const CollectionModal: React.FC = () => {
               </Pressable>
             )}
           </View>
+
+          {collectionTarget.kind === 'artist' && (
+            <ArtistBioCard
+              name={title}
+              language={prefs.language}
+              accent={headerPalette.accent}
+              fontFamily={fontFamily}
+            />
+          )}
 
           {/* Artist Discography Albums if viewing Artist */}
           {collectionTarget.kind === 'artist' &&

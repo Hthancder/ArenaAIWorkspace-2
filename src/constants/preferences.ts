@@ -31,7 +31,9 @@ export type HomeSectionId =
   | 'global'
   | 'albums'
   | 'recent'
-  | 'genres';
+  | 'genres'
+  | 'radio'
+  | 'audius';
 
 export interface BlacklistPref {
   artists: string[];
@@ -67,6 +69,8 @@ export interface HolySicPreferences {
   searchSuggestions: boolean;
   /** Skip talking intros/outros in YouTube music videos (SponsorBlock music_offtopic) */
   skipNonMusic: boolean;
+  /** Saved live radio stations (as live tracks) */
+  favoriteStations: import('../types/music').Track[];
   /** Per-song lyrics delay in ms (positive = lyrics later) */
   lyricsOffsets: Record<string, number>;
   /** Welcome tour finished */
@@ -113,6 +117,7 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   searchSuggestions: true,
   skipNonMusic: true,
   lyricsOffsets: {},
+  favoriteStations: [],
   onboarded: false,
   miniPlayerStyle: 'card',
   language: 'vi',
