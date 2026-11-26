@@ -8,6 +8,7 @@ import { HOLYSIC_COLORS, resolveFontFamily } from '../constants/theme';
 import { useHolySic } from '../context/HolySicContext';
 import { GlassSurface } from './GlassSurface';
 import { useHoldSeek } from '../hooks/useHoldSeek';
+import { AmbientSpill, useAmbientColors } from './ambient/AmbientLight';
 
 export const MiniPlayer: React.FC = () => {
   const {
@@ -26,9 +27,11 @@ export const MiniPlayer: React.FC = () => {
     palette,
     prefs,
     seekBy,
+    ambient,
   } = useHolySic();
   const ff = useHoldSeek(seekBy, 1);
 
+  const ambientColors = useAmbientColors();
   if (!currentTrack) return null;
   // OpenSpot-style floating capsule vs. HolySic card
   const capsule = prefs.miniPlayerStyle === 'capsule';
@@ -48,6 +51,13 @@ export const MiniPlayer: React.FC = () => {
 
   return (
     <Pressable onPress={() => setIsPlayerOpen(true)} style={styles.outer}>
+      {ambient.spill && !prefs.pureBlack && (
+        <AmbientSpill
+          colors={ambientColors}
+          level={ambient.level * (isPlaying ? 1 : 0.55)}
+          style={capsule ? styles.spillCapsule : styles.spill}
+        />
+      )}
       <GlassSurface
         intensity={68}
         tintColor={palette.surface + 'D8'}
@@ -152,6 +162,8 @@ export const MiniPlayer: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  spill: { position: 'absolute', left: -6, right: -6, top: -18, bottom: -4 },
+  spillCapsule: { position: 'absolute', left: 8, right: 8, top: -16, bottom: -2 },
   outer: {
     paddingHorizontal: 10,
     marginBottom: 8,

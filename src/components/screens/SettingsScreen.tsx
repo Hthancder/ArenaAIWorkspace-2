@@ -45,6 +45,7 @@ export const SettingsScreen: React.FC = () => {
     removeMonochromeServer,
     verifyAllServers,
     haptic,
+    ambient,
   } = useHolySic();
 
   const [newServerUrl, setNewServerUrl] = useState('');
@@ -247,6 +248,7 @@ export const SettingsScreen: React.FC = () => {
           <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 6 }}>
             {(
               [
+                ['AMBIENT', 'Ambient Light'],
                 ['APPLE_MUSIC', 'Apple Mesh'],
                 ['COVER_GRADIENT', 'Cover Gradient'],
                 ['DARK_GRADIENT', 'Dark Tone'],
@@ -274,6 +276,72 @@ export const SettingsScreen: React.FC = () => {
             })}
           </View>
         </ScrollView>
+
+        {/* Ambient Light (YouTube-style glow from the cover's real colours) */}
+        <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>
+          {vi ? 'Ánh sáng Ambient (như YouTube)' : 'Ambient light (YouTube-style)'}
+        </Text>
+        <Text style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 12, lineHeight: 17 }}>
+          {vi
+            ? 'Màu thật của ảnh bìa lan ra nền, toả sáng quanh ảnh và nhịp theo tiếng bass.'
+            : "The cover's real colours flood the background, glow around the art and pulse with the bass."}
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 8 }}>
+          {(
+            [
+              ['off', vi ? 'Tắt' : 'Off'],
+              ['low', vi ? 'Nhẹ' : 'Low'],
+              ['medium', vi ? 'Vừa' : 'Medium'],
+              ['high', vi ? 'Mạnh' : 'High'],
+            ] as const
+          ).map(([id, label]) => {
+            const selected = prefs.ambientLight === id;
+            return (
+              <Pressable
+                key={id}
+                onPress={() => updatePrefs({ ambientLight: id })}
+                style={[styles.smallOptionPill, selected && { backgroundColor: palette.accent }]}
+              >
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '700',
+                    color: selected ? palette.onAccent : '#FFF',
+                  }}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={styles.switchRow}>
+          <Text style={[styles.rowTitle, { flex: 1, paddingRight: 10 }]}>
+            {vi ? 'Ánh sáng nhịp theo nhạc' : 'Light breathes with the music'}
+          </Text>
+          <Switch
+            value={prefs.ambientBreathing}
+            onValueChange={(v) => updatePrefs({ ambientBreathing: v })}
+            trackColor={{ false: '#2A2A36', true: palette.accent }}
+          />
+        </View>
+        <View style={styles.switchRow}>
+          <Text style={[styles.rowTitle, { flex: 1, paddingRight: 10 }]}>
+            {vi ? 'Lan sáng ra MiniPlayer & Trang chủ' : 'Spill light onto mini player & Home'}
+          </Text>
+          <Switch
+            value={prefs.ambientSpill}
+            onValueChange={(v) => updatePrefs({ ambientSpill: v })}
+            trackColor={{ false: '#2A2A36', true: palette.accent }}
+          />
+        </View>
+        {ambient.reduced && prefs.ambientLight !== 'off' && (
+          <Text style={{ color: HOLYSIC_COLORS.aacAmber, fontSize: 12, marginBottom: 4 }}>
+            {vi
+              ? '⚡ Đang bật Tiết kiệm pin / Giảm chuyển động: ánh sáng được dịu bớt và không nhịp.'
+              : '⚡ Low Power Mode / Reduce Motion is on: the light is toned down and steady.'}
+          </Text>
+        )}
 
         {/* Font Customizer */}
         <Text style={[styles.inlineSubLabel, { marginTop: 10 }]}>

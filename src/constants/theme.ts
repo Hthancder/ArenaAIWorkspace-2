@@ -150,6 +150,39 @@ export function buildArtworkPalette(seedKey?: string, hintHue?: number): Artwork
   };
 }
 
+/**
+ * Palette from the cover's REAL colours (see services/artwork/artworkColors). The accent keeps
+ * the tonal maths above so text on it stays readable, while gradients/mesh use the cover's own
+ * primary + secondary hues. `fixedHue` keeps a user-picked accent colour.
+ */
+export function buildPaletteFromArtColors(
+  c: { primary: string; secondary: string; hue: number; sat: number; mono: boolean },
+  fixedHue?: number
+): ArtworkPalette {
+  const hue = fixedHue !== undefined ? fixedHue : c.hue;
+  const sat = c.mono && fixedHue === undefined ? 0.1 : Math.max(0.4, Math.min(0.86, c.sat));
+  const secHue = hexToHue(c.secondary) ?? (hue + 38) % 360;
+  const artSat = c.mono ? 0.08 : Math.max(0.35, Math.min(0.8, c.sat));
+  const accent = hslToHex(hue, sat, c.mono && fixedHue === undefined ? 0.86 : 0.74);
+  const container = hslToHex(hue, sat * 0.55, 0.25);
+  return {
+    seed: c.primary,
+    accent,
+    onAccent: relativeLuminance(accent) > 0.42 ? '#0A0A0E' : '#FFFFFF',
+    container,
+    onContainer: relativeLuminance(container) > 0.42 ? '#0A0A0E' : '#FFFFFF',
+    surface: hslToHex(c.hue, artSat * 0.4, 0.11),
+    glow: hslToHex(c.hue, artSat, 0.55) + '44',
+    gradient: [hslToHex(c.hue, artSat * 0.7, 0.3), hslToHex(secHue, artSat * 0.5, 0.15), '#060609'],
+    appleMesh: [
+      hslToHex(c.hue, artSat * 0.75, 0.33),
+      hslToHex(secHue, artSat * 0.65, 0.24),
+      hslToHex(secHue, artSat * 0.5, 0.14),
+      '#07070B',
+    ],
+  };
+}
+
 export function resolveFontFamily(style: AppFontStyle): string | undefined {
   if (Platform.OS === 'web') {
     switch (style) {

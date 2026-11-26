@@ -59,6 +59,9 @@ its open API). Live stations come from the community-run Radio Browser directory
 (https://www.radio-browser.info). Artist bios are short excerpts from Wikipedia
 (https://www.wikipedia.org), licensed CC BY-SA 4.0, and always link to the source article.
 
+Ambient light reads artwork colours with jpeg-js (https://github.com/jpeg-js/jpeg-js, BSD-3-Clause,
+Copyright (c) 2014 Eugene Ware, based on pdf.js by Mozilla, Apache-2.0).
+
 ## Rename notice — HolySic
 
 In November 2026 this fork was renamed to **HolySic**, with a new name, logo, bundle identifier

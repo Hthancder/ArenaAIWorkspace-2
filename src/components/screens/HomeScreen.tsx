@@ -15,6 +15,7 @@ import { HomeSectionId } from '../../constants/preferences';
 import { HolySicMarkIcon } from '../HolySicIcons';
 import { TrackRow } from '../TrackRow';
 import { HaloGlow, SectionTitle } from '../brand/HaloGlow';
+import { AmbientSpill, useAmbientColors } from '../ambient/AmbientLight';
 import { searchStations } from '../../services/discovery/radioBrowser';
 import { AUDIUS_GENRES, fetchAudiusTrending } from '../../services/providers/audiusProvider';
 
@@ -40,12 +41,14 @@ export const HomeScreen: React.FC = () => {
     openRadio,
     toggleFavoriteStation,
     currentTrack,
+    ambient,
     openImport,
     importLocalFiles,
     likedTracks,
     downloads,
   } = useHolySic();
 
+  const ambientColors = useAmbientColors();
   const shown = (id: HomeSectionId) => !prefs.hiddenHomeSections.includes(id);
   const country = CHART_COUNTRIES.find((c) => c.code === prefs.chartCountry) || CHART_COUNTRIES[0];
   const globalCode = country.code === 'us' ? 'gb' : 'us';
@@ -139,7 +142,15 @@ export const HomeScreen: React.FC = () => {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <HaloGlow color={palette.accent} height={320} />
+      {currentTrack && ambient.spill && !prefs.pureBlack && (
+        <AmbientSpill
+          variant="wash"
+          colors={ambientColors}
+          level={ambient.level * 0.85}
+          style={styles.homeWash}
+        />
+      )}
+      <HaloGlow color={palette.accent} height={320} intensity={currentTrack ? 0.6 : 1} />
       {/* Top Header */}
       <View style={styles.headerRow}>
         <View style={styles.brandLeft}>
@@ -614,6 +625,7 @@ export const HomeScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  homeWash: { position: 'absolute', top: -40, left: -40, right: -40, height: 420 },
   logoBadgeHalo: { borderWidth: 1, borderColor: 'rgba(252,211,77,0.35)' },
   radioCard: { width: 118 },
   radioArt: {

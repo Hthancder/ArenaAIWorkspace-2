@@ -72,6 +72,11 @@ merged in from Spotube, OpenSpot, Musike and Cog. All original notices are kept 
 - **Hàng chờ nâng cao:** đưa bài lên/xuống, xoá các bài sau, lưu hàng chờ thành playlist · **chỉnh lệch lời bài hát** từng bài ±0,5 giây · **bỏ qua đoạn không phải nhạc** trong MV YouTube (SponsorBlock) *(Spotube)*
 - **Chia sẻ bài hát** *(OpenSpot)* · **lưu bài đã tải vào ứng dụng Tệp** với tên "Nghệ sĩ - Tên bài" · **lọc & sắp xếp** trong playlist/đã thích/đã tải *(Spotube, Musike)*
 - **Radio trực tuyến 50.000+ đài** (Radio Browser): theo quốc gia / tâm trạng, lưu đài yêu thích, nhãn LIVE · **Indie thịnh hành Audius** (MP3 320 đầy đủ, lọc thể loại, có trong Tìm kiếm) · **Tiểu sử nghệ sĩ** từ Wikipedia (CC BY-SA)
+- **Ánh sáng Ambient kiểu YouTube:**
+  - Màu **thật** của ảnh bìa (đọc từ điểm ảnh, từng góc riêng) lan ra nền trình phát và toả sáng quanh ảnh bìa.
+  - Ánh sáng nhịp theo tiếng bass và chuyển màu mượt khi đổi bài.
+  - Ánh sáng lan ra MiniPlayer và Trang chủ; màu nhấn lấy theo ảnh bìa.
+  - 4 mức Tắt / Nhẹ / Vừa / Mạnh; tự dịu khi bật Tiết kiệm pin hoặc Giảm chuyển động.
 - **Màu nhấn** (8 màu + tự chọn) · ẩn/hiện mục Trang chủ *(Musike)* · **MiniPlayer viên nang** · lối tắt · banner ngoại tuyến *(OpenSpot)*
 
 ## 🚀 Cài đặt / Installation

@@ -10,14 +10,25 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Platform } from 'react-native';
+import { AccessibilityInfo, Platform } from 'react-native';
+import * as Battery from 'expo-battery';
 import {
   DEFAULT_PREFERENCES,
   MainTab,
   HolySicPreferences,
   RepeatMode,
 } from '../constants/preferences';
-import { ArtworkPalette, buildArtworkPalette, hexToHue } from '../constants/theme';
+import {
+  ArtworkPalette,
+  buildArtworkPalette,
+  buildPaletteFromArtColors,
+  hexToHue,
+} from '../constants/theme';
+import {
+  ArtColors,
+  cachedArtworkColors,
+  extractArtworkColors,
+} from '../services/artwork/artworkColors';
 import { fetchTopSongs } from '../services/discovery/chartsService';
 import {
   fetchSpotifyEntity,
@@ -193,6 +204,10 @@ interface HolySicContextValue extends HolySicExtras {
   prefs: HolySicPreferences;
   updatePrefs: (patch: Partial<HolySicPreferences>) => void;
   palette: ArtworkPalette;
+  /** Real colours sampled from the current cover (null until read / unreadable) */
+  artColors: ArtColors | null;
+  /** Ambient light state: strength 0..1 (0 = off), breathing on/off, spill behind mini player */
+  ambient: { level: number; breathing: boolean; spill: boolean; reduced: boolean };
 
   // Discovery Feeds & Search
   quickPicks: Track[];
@@ -403,6 +418,64 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     toastTimerRef.current = setTimeout(() => setToastMessage(null), 2600);
   }, []);
 
+  // Real cover colours (ambient light + accent). Cached per artwork URL.
+  const [artColors, setArtColors] = useState<ArtColors | null>(null);
+  useEffect(() => {
+    const url = currentTrack?.artworkUrl;
+    const hit = cachedArtworkColors(url);
+    if (hit !== undefined) {
+      setArtColors(hit);
+      return;
+    }
+    let cancelled = false;
+    extractArtworkColors(url)
+      .then((c) => !cancelled && setArtColors(c))
+      .catch(() => !cancelled && setArtColors(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack?.artworkUrl]);
+
+  // Low Power Mode & Reduce Motion tone the ambient light down automatically
+  const [lowPower, setLowPower] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    let sub: { remove: () => void } | null = null;
+    let rm: { remove: () => void } | null = null;
+    if (Platform.OS !== 'web') {
+      Battery.isLowPowerModeEnabledAsync()
+        .then(setLowPower)
+        .catch(() => undefined);
+      try {
+        sub = Battery.addLowPowerModeListener((e) => setLowPower(!!e.lowPowerMode));
+      } catch {
+        sub = null;
+      }
+    }
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(setReduceMotion)
+      .catch(() => undefined);
+    try {
+      rm = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion) as any;
+    } catch {
+      rm = null;
+    }
+    return () => {
+      sub?.remove();
+      rm?.remove();
+    };
+  }, []);
+  const ambient = useMemo(() => {
+    const base = { off: 0, low: 0.5, medium: 0.8, high: 1 }[prefs.ambientLight] ?? 0.8;
+    const reduced = lowPower || reduceMotion;
+    return {
+      level: lowPower ? Math.min(base, 0.45) : base,
+      breathing: prefs.ambientBreathing && !reduced && base > 0,
+      spill: prefs.ambientSpill && base > 0,
+      reduced,
+    };
+  }, [prefs.ambientLight, prefs.ambientBreathing, prefs.ambientSpill, lowPower, reduceMotion]);
+
   const palette = useMemo(() => {
     const seed = currentTrack ? `${currentTrack.title}-${currentTrack.artist}` : 'holysic-default';
     // Fixed accent (Musike-style presets / custom colour): the hue is kept, lightness is
@@ -411,14 +484,16 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prefs.accentColor && prefs.accentColor !== 'dynamic'
         ? hexToHue(prefs.accentColor)
         : undefined;
+    // Dynamic accent follows the cover's real colours once they've been read
+    if (artColors && currentTrack) return buildPaletteFromArtColors(artColors, hue ?? undefined);
     return buildArtworkPalette(seed, hue ?? undefined);
-  }, [currentTrack, prefs.accentColor]);
+  }, [currentTrack, prefs.accentColor, artColors]);
 
   // Hydrate persistent storage
   useEffect(() => {
     (async () => {
       const [
-        savedPrefs,
+        loadedPrefs,
         savedLiked,
         savedPlaylists,
         savedHistory,
@@ -444,6 +519,17 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       refreshRemoteStreamClients().catch(() => undefined);
 
+      let savedPrefs = loadedPrefs;
+      // One-time: old default background → the new ambient-light backdrop
+      if (!savedPrefs.ambientIntroduced) {
+        savedPrefs = {
+          ...savedPrefs,
+          ambientIntroduced: true,
+          playerBackground:
+            savedPrefs.playerBackground === 'APPLE_MUSIC' ? 'AMBIENT' : savedPrefs.playerBackground,
+        };
+        StorageService.savePreferences(savedPrefs).catch(() => undefined);
+      }
       setPrefs(savedPrefs);
       setLikedTracks(savedLiked);
       if (savedPlaylists.length > 0) {
@@ -2219,6 +2305,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prefs,
       updatePrefs,
       palette,
+      artColors,
+      ambient,
       quickPicks,
       vnTrending,
       globalTrending,
@@ -2302,6 +2390,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prefs,
       updatePrefs,
       palette,
+      artColors,
+      ambient,
       quickPicks,
       vnTrending,
       globalTrending,

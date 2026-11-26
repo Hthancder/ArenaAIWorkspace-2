@@ -14,6 +14,12 @@ import {
   View,
 } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
+import {
+  AmbientBackdrop,
+  CoverGlow,
+  useAmbientColors,
+  useAmbientEnergy,
+} from '../ambient/AmbientLight';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PLAYER_STYLE_META, PlayerStyle } from '../../constants/preferences';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
@@ -64,7 +70,12 @@ export const FullPlayerModal: React.FC = () => {
     updatePrefs,
     seekBy,
     loudnessLabel,
+    ambient,
   } = useHolySic();
+  const ambientColors = useAmbientColors();
+  // Hooks must run before the early return below
+  const ambientOn = ambient.level > 0 && prefs.playerStyle !== 'BEDSIDE' && !prefs.pureBlack;
+  const energy = useAmbientEnergy(isPlayerOpen && ambientOn, ambient.breathing, isPlaying);
   const ff = useHoldSeek(seekBy, 1);
   const rw = useHoldSeek(seekBy, -1);
 
@@ -78,8 +89,11 @@ export const FullPlayerModal: React.FC = () => {
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const progress = durationSec > 0 ? Math.min(1, Math.max(0, positionSec / durationSec)) : 0;
 
-  const gradientColors: readonly [string, string, ...string[]] =
-    prefs.playerStyle === 'BEDSIDE' || prefs.playerBackground === 'SOLID' || prefs.pureBlack
+  const ambientBackdrop =
+    ambientOn && prefs.playerBackground === 'AMBIENT' && prefs.playerStyle !== 'IPOD';
+  const gradientColors: readonly [string, string, ...string[]] = ambientBackdrop
+    ? ['#050507', '#050507']
+    : prefs.playerStyle === 'BEDSIDE' || prefs.playerBackground === 'SOLID' || prefs.pureBlack
       ? ['#050508', '#020204', '#000000']
       : prefs.playerBackground === 'APPLE_MUSIC'
         ? palette.appleMesh
@@ -121,6 +135,14 @@ export const FullPlayerModal: React.FC = () => {
           },
         ]}
       >
+        {ambientBackdrop && (
+          <AmbientBackdrop
+            artworkUrl={currentTrack.artworkUrl}
+            colors={ambientColors}
+            level={ambient.level}
+            energy={energy}
+          />
+        )}
         {/* Top Bar */}
         <View style={styles.topBar}>
           <Pressable hitSlop={10} onPress={() => setIsPlayerOpen(false)} style={styles.topIconBtn}>
@@ -326,28 +348,45 @@ export const FullPlayerModal: React.FC = () => {
           ) : prefs.playerStyle === 'BEDSIDE' ? (
             <BedsideClockView />
           ) : prefs.playerStyle === 'TURNTABLE' ? (
-            <TurntableVinylStage />
+            <CoverGlow
+              colors={ambientColors}
+              level={ambientOn ? ambient.level * 0.8 : 0}
+              energy={energy}
+              size={300}
+            >
+              <TurntableVinylStage />
+            </CoverGlow>
           ) : (
-            /* Flagship & Poster Cover Stage */
+            /* Flagship & Poster Cover Stage — wrapped in the ambient glow */
             <View style={styles.flagshipCoverCenter}>
-              <View
-                style={[
-                  styles.coverShadowWrap,
-                  prefs.playerStyle === 'POSTER' && styles.posterCoverWrap,
-                  !isPlaying && { transform: [{ scale: 0.94 }] },
-                ]}
+              <CoverGlow
+                colors={ambientColors}
+                level={ambientOn ? ambient.level : 0}
+                energy={energy}
+                size={prefs.playerStyle === 'POSTER' ? 320 : 300}
               >
-                <ArtworkImage source={{ uri: currentTrack.artworkUrl }} style={styles.coverImage} />
-                {prefs.playerStyle === 'POSTER' && (
-                  <View style={styles.posterVisualizerRow}>
-                    <SpectrumBars
-                      isPlaying={isPlaying}
-                      positionSec={positionSec}
-                      color={palette.accent}
-                    />
-                  </View>
-                )}
-              </View>
+                <View
+                  style={[
+                    styles.coverShadowWrap,
+                    prefs.playerStyle === 'POSTER' && styles.posterCoverWrap,
+                    !isPlaying && { transform: [{ scale: 0.94 }] },
+                  ]}
+                >
+                  <ArtworkImage
+                    source={{ uri: currentTrack.artworkUrl }}
+                    style={styles.coverImage}
+                  />
+                  {prefs.playerStyle === 'POSTER' && (
+                    <View style={styles.posterVisualizerRow}>
+                      <SpectrumBars
+                        isPlaying={isPlaying}
+                        positionSec={positionSec}
+                        color={palette.accent}
+                      />
+                    </View>
+                  )}
+                </View>
+              </CoverGlow>
             </View>
           )}
         </View>
@@ -599,6 +638,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   topBar: {
+    zIndex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

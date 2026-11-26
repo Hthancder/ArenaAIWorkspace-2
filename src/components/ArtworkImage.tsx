@@ -38,7 +38,7 @@ export function normalizeArtworkUrl(raw?: string | null): string {
   return url;
 }
 
-function decodeSvgDataUri(uri: string): string | null {
+export function decodeSvgDataUri(uri: string): string | null {
   try {
     const comma = uri.indexOf(',');
     if (comma < 0) return null;

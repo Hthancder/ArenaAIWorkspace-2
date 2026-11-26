@@ -69,6 +69,14 @@ export interface HolySicPreferences {
   searchSuggestions: boolean;
   /** Skip talking intros/outros in YouTube music videos (SponsorBlock music_offtopic) */
   skipNonMusic: boolean;
+  /** Ambient light (YouTube-style glow from the cover): strength */
+  ambientLight: 'off' | 'low' | 'medium' | 'high';
+  /** Glow breathes with the music (bass) */
+  ambientBreathing: boolean;
+  /** Spill the cover's light behind the mini player and the top of Home */
+  ambientSpill: boolean;
+  /** One-time switch of old default backgrounds to the new ambient backdrop */
+  ambientIntroduced: boolean;
   /** Saved live radio stations (as live tracks) */
   favoriteStations: import('../types/music').Track[];
   /** Per-song lyrics delay in ms (positive = lyrics later) */
@@ -118,6 +126,10 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   skipNonMusic: true,
   lyricsOffsets: {},
   favoriteStations: [],
+  ambientLight: 'medium',
+  ambientBreathing: true,
+  ambientSpill: true,
+  ambientIntroduced: false,
   onboarded: false,
   miniPlayerStyle: 'card',
   language: 'vi',
@@ -126,7 +138,7 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   animationSpeed: 1.0,
   fontStyle: 'inter',
   playerStyle: 'FLAGSHIP',
-  playerBackground: 'APPLE_MUSIC',
+  playerBackground: 'AMBIENT',
   ipodTheme: 'BLACK',
   bedsideClockFace: 'BIG',
   bedsideNightTint: 'ORANGE',
