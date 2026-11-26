@@ -32,6 +32,11 @@
           "NSAllowsArbitraryLoads": true
         },
         "NSMicrophoneUsageDescription": "HolySic only requests audio access when optional visualizer sampling is enabled."
+      },
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.holysic.music"
+        ]
       }
     },
     "android": {
@@ -75,7 +80,8 @@
             "deploymentTarget": "15.1"
           }
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ]
   }
 }

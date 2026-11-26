@@ -1,0 +1,834 @@
+// HolySic — Now Playing widget (home screen: small / medium / large; Lock Screen on iOS 16+).
+//
+// The app writes the current song into the shared App Group (UserDefaults suite
+// "group.com.holysic.music"): key "nowPlaying" = JSON, key "art" = a small base64 JPEG of the
+// cover. The widget never talks to the network; it only renders that snapshot. Buttons are deep
+// links (holysic://widget/…) handled by the app, so they work on iOS 15 too.
+//
+// HolySic started as a fork of Mochy Music by realidkroo (GPL-3.0).
+
+import SwiftUI
+import UIKit
+import WidgetKit
+
+let holySicAppGroup = "group.com.holysic.music"
+
+// MARK: - Data
+
+struct QueueItem: Codable, Hashable {
+  var title: String
+  var artist: String
+}
+
+struct NowPlaying: Codable {
+  var title: String
+  var artist: String
+  var album: String?
+  var isPlaying: Bool
+  var position: Double
+  var duration: Double
+  /// unix seconds when `position` was sampled
+  var updatedAt: Double
+  var accent: String?
+  var bgTop: String?
+  var bgBottom: String?
+  var badge: String?
+  var liked: Bool?
+  var isLive: Bool?
+  var upNext: [QueueItem]?
+  var lang: String?
+
+  var vi: Bool { (lang ?? "vi") == "vi" }
+
+  /// When the song (would have) started, from the sampled position
+  var startDate: Date { Date(timeIntervalSince1970: updatedAt - position) }
+  var endDate: Date { startDate.addingTimeInterval(max(duration, 1)) }
+
+  func elapsed(at date: Date) -> Double {
+    guard duration > 0 else { return 0 }
+    let p = isPlaying ? position + date.timeIntervalSince1970 - updatedAt : position
+    return min(max(p, 0), duration)
+  }
+
+  func progress(at date: Date) -> Double {
+    guard duration > 0, isLive != true else { return 0 }
+    return elapsed(at: date) / duration
+  }
+}
+
+enum SharedStore {
+  static var defaults: UserDefaults? { UserDefaults(suiteName: holySicAppGroup) }
+
+  static func nowPlaying() -> NowPlaying? {
+    guard let d = defaults else { return nil }
+    var data: Data?
+    if let s = d.string(forKey: "nowPlaying") {
+      data = s.data(using: .utf8)
+    } else {
+      data = d.data(forKey: "nowPlaying")
+    }
+    guard let json = data else { return nil }
+    return try? JSONDecoder().decode(NowPlaying.self, from: json)
+  }
+
+  static func artwork() -> UIImage? {
+    guard let s = defaults?.string(forKey: "art"), !s.isEmpty,
+      let data = Data(base64Encoded: s, options: .ignoreUnknownCharacters)
+    else { return nil }
+    return UIImage(data: data)
+  }
+}
+
+// MARK: - Timeline
+
+struct NowPlayingEntry: TimelineEntry {
+  let date: Date
+  let np: NowPlaying?
+  let art: UIImage?
+  var isSample = false
+}
+
+struct NowPlayingProvider: TimelineProvider {
+  static let sample = NowPlaying(
+    title: "Midnight Over West Lake",
+    artist: "HolySic Sound Lab",
+    album: "HolySic Sessions",
+    isPlaying: true,
+    position: 74,
+    duration: 212,
+    updatedAt: Date().timeIntervalSince1970,
+    accent: "#C084FC",
+    bgTop: "#3B1F6E",
+    bgBottom: "#0B0716",
+    badge: "FLAC",
+    liked: true,
+    isLive: false,
+    upNext: [
+      QueueItem(title: "Neon Rain in Saigon", artist: "HolySic Sound Lab"),
+      QueueItem(title: "Velvet Espresso", artist: "HolySic Sound Lab"),
+      QueueItem(title: "Paper Lanterns", artist: "Hội An Trio"),
+      QueueItem(title: "Last Train Home", artist: "Lofi Hà Nội"),
+    ],
+    lang: "vi"
+  )
+
+  func placeholder(in context: Context) -> NowPlayingEntry {
+    NowPlayingEntry(date: Date(), np: Self.sample, art: nil, isSample: true)
+  }
+
+  func getSnapshot(in context: Context, completion: @escaping (NowPlayingEntry) -> Void) {
+    // the widget gallery shows a sample until something has played
+    if let np = SharedStore.nowPlaying() {
+      completion(NowPlayingEntry(date: Date(), np: np, art: SharedStore.artwork()))
+    } else {
+      completion(NowPlayingEntry(date: Date(), np: Self.sample, art: nil, isSample: true))
+    }
+  }
+
+  func getTimeline(in context: Context, completion: @escaping (Timeline<NowPlayingEntry>) -> Void) {
+    let now = Date()
+    let stored = SharedStore.nowPlaying()
+    let art = SharedStore.artwork()
+    guard let np = stored, np.isPlaying, np.duration > 0, np.isLive != true else {
+      // paused / nothing playing: one static entry; the app reloads us when that changes
+      completion(
+        Timeline(entries: [NowPlayingEntry(date: now, np: stored, art: art)], policy: .never))
+      return
+    }
+    // Playing: iOS 16+ animates the bar & clock itself (timer views); these entries keep the
+    // bar moving on iOS 15 and flip to "paused" look once the song should have ended.
+    var entries: [NowPlayingEntry] = []
+    let end = np.endDate
+    var t = now
+    let step: TimeInterval = 10
+    while t < end && entries.count < 60 {
+      entries.append(NowPlayingEntry(date: t, np: np, art: art))
+      t = t.addingTimeInterval(step)
+    }
+    var ended = np
+    ended.isPlaying = false
+    ended.position = np.duration
+    ended.updatedAt = end.timeIntervalSince1970
+    entries.append(NowPlayingEntry(date: max(end, now.addingTimeInterval(1)), np: ended, art: art))
+    completion(Timeline(entries: entries, policy: .never))
+  }
+}
+
+// MARK: - Helpers
+
+extension Color {
+  init(hex: String?, fallback: Color) {
+    guard var s = hex?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else {
+      self = fallback
+      return
+    }
+    if s.hasPrefix("#") { s.removeFirst() }
+    if s.count == 3 { s = s.map { "\($0)\($0)" }.joined() }
+    guard s.count >= 6, let v = UInt64(s.prefix(6), radix: 16) else {
+      self = fallback
+      return
+    }
+    self = Color(
+      red: Double((v >> 16) & 0xFF) / 255,
+      green: Double((v >> 8) & 0xFF) / 255,
+      blue: Double(v & 0xFF) / 255
+    )
+  }
+}
+
+enum Brand {
+  static let purpleTop = Color(red: 0.165, green: 0.078, blue: 0.322)  // #2A1452
+  static let purpleBottom = Color(red: 0.024, green: 0.020, blue: 0.043)  // #06050B
+  static let gold = Color(red: 0.992, green: 0.902, blue: 0.541)  // #FDE68A
+  static let lilac = Color(red: 0.753, green: 0.518, blue: 0.988)  // #C084FC
+}
+
+func clock(_ sec: Double) -> String {
+  let s = max(0, Int(sec.rounded(.down)))
+  return String(format: "%d:%02d", s / 60, s % 60)
+}
+
+func deepLink(_ action: String) -> URL {
+  URL(string: "holysic://widget/\(action)")!
+}
+
+extension View {
+  /// iOS 17 wants the background declared as the container background (for StandBy / tinting)
+  @ViewBuilder
+  func widgetBackground<B: View>(@ViewBuilder _ bg: () -> B) -> some View {
+    let backdrop = bg()
+    if #available(iOSApplicationExtension 17.0, *) {
+      self.containerBackground(for: .widget) { backdrop }
+    } else {
+      self.background(backdrop)
+    }
+  }
+}
+
+extension WidgetConfiguration {
+  func contentMarginsDisabledIfAvailable() -> some WidgetConfiguration {
+    if #available(iOSApplicationExtension 17.0, *) {
+      return self.contentMarginsDisabled()
+    } else {
+      return self
+    }
+  }
+}
+
+// MARK: - Pieces
+
+struct Theme {
+  let accent: Color
+  let top: Color
+  let bottom: Color
+
+  init(_ np: NowPlaying?) {
+    accent = Color(hex: np?.accent, fallback: Brand.lilac)
+    top = Color(hex: np?.bgTop, fallback: Brand.purpleTop)
+    bottom = Color(hex: np?.bgBottom, fallback: Brand.purpleBottom)
+  }
+}
+
+/// Cover colours + a soft blurred copy of the artwork, darkened so white text always reads
+struct ArtBackdrop: View {
+  let theme: Theme
+  let art: UIImage?
+  var artOpacity: Double = 0.55
+
+  var body: some View {
+    ZStack {
+      LinearGradient(
+        colors: [theme.top, theme.bottom], startPoint: .topLeading, endPoint: .bottomTrailing)
+      if let art = art {
+        Image(uiImage: art)
+          .resizable()
+          .scaledToFill()
+          .blur(radius: 34)
+          .opacity(artOpacity)
+          .clipped()
+      }
+      RadialGradient(
+        colors: [theme.accent.opacity(0.28), .clear], center: .topLeading, startRadius: 4,
+        endRadius: 220)
+      LinearGradient(
+        colors: [Color.black.opacity(0.05), Color.black.opacity(0.45)], startPoint: .top,
+        endPoint: .bottom)
+    }
+  }
+}
+
+struct Cover: View {
+  let art: UIImage?
+  let theme: Theme
+  var corner: CGFloat = 16
+
+  var body: some View {
+    ZStack {
+      if let art = art {
+        Image(uiImage: art).resizable().scaledToFill()
+      } else {
+        LinearGradient(
+          colors: [theme.accent.opacity(0.85), theme.top], startPoint: .topLeading,
+          endPoint: .bottomTrailing)
+        Image(systemName: "music.note")
+          .font(.system(size: 30, weight: .semibold))
+          .foregroundColor(.white.opacity(0.9))
+      }
+    }
+    .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: corner, style: .continuous)
+        .stroke(Color.white.opacity(0.14), lineWidth: 0.6)
+    )
+    .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: 6)
+  }
+}
+
+/// Animated equaliser-style glyph for "playing", pause glyph otherwise
+struct StateBadge: View {
+  let np: NowPlaying
+  let accent: Color
+
+  var body: some View {
+    HStack(spacing: 4) {
+      Image(systemName: np.isLive == true ? "dot.radiowaves.left.and.right" : np.isPlaying ? "waveform" : "pause.fill")
+        .font(.system(size: 9, weight: .bold))
+      Text(label)
+        .font(.system(size: 9, weight: .heavy))
+        .tracking(0.6)
+        .lineLimit(1)
+    }
+    .foregroundColor(accent)
+    .padding(.horizontal, 7)
+    .padding(.vertical, 3)
+    .background(Capsule().fill(Color.white.opacity(0.12)))
+  }
+
+  var label: String {
+    if np.isLive == true { return "LIVE" }
+    if np.isPlaying { return np.vi ? "ĐANG PHÁT" : "NOW PLAYING" }
+    return np.vi ? "TẠM DỪNG" : "PAUSED"
+  }
+}
+
+struct ProgressBar: View {
+  let np: NowPlaying
+  let date: Date
+  let accent: Color
+  var showTimes = true
+
+  var body: some View {
+    VStack(spacing: 4) {
+      bar.frame(height: 4)
+      if showTimes && np.isLive != true {
+        HStack {
+          elapsedText
+          Spacer()
+          Text(clock(np.duration))
+        }
+        .font(.system(size: 10, weight: .semibold).monospacedDigit())
+        .foregroundColor(.white.opacity(0.62))
+      }
+    }
+  }
+
+  /// iOS 16+ animates a running song by itself; otherwise the bar is drawn at the entry's position
+  var live: Bool { np.isPlaying && np.duration > 0 && np.isLive != true && date < np.endDate }
+
+  @ViewBuilder var bar: some View {
+    if #available(iOSApplicationExtension 16.0, *) {
+      if live {
+        ProgressView(
+          timerInterval: np.startDate...np.endDate, countsDown: false,
+          label: { EmptyView() }, currentValueLabel: { EmptyView() }
+        )
+        .progressViewStyle(.linear)
+        .tint(accent)
+        .scaleEffect(x: 1, y: 1.3, anchor: .center)
+      } else {
+        staticBar
+      }
+    } else {
+      staticBar
+    }
+  }
+
+  var staticBar: some View {
+    GeometryReader { geo in
+        ZStack(alignment: .leading) {
+          Capsule().fill(Color.white.opacity(0.18))
+          Capsule()
+            .fill(LinearGradient(colors: [accent, accent.opacity(0.75)], startPoint: .leading, endPoint: .trailing))
+            .frame(width: max(4, geo.size.width * CGFloat(np.progress(at: date))))
+        }
+    }
+  }
+
+  @ViewBuilder var elapsedText: some View {
+    if #available(iOSApplicationExtension 16.0, *) {
+      if live {
+        Text(timerInterval: np.startDate...np.endDate, countsDown: false)
+      } else {
+        Text(clock(np.elapsed(at: date)))
+      }
+    } else {
+      Text(clock(np.elapsed(at: date)))
+    }
+  }
+}
+
+struct ControlButton: View {
+  let system: String
+  let action: String
+  var size: CGFloat = 15
+  var filled = false
+  var accent: Color = .white
+
+  var body: some View {
+    Link(destination: deepLink(action)) {
+      ZStack {
+        if filled {
+          Circle().fill(Color.white)
+          Image(systemName: system)
+            .font(.system(size: size, weight: .black))
+            .foregroundColor(Color.black.opacity(0.85))
+            .offset(x: system == "play.fill" ? 1.5 : 0)
+        } else {
+          Image(systemName: system)
+            .font(.system(size: size, weight: .bold))
+            .foregroundColor(.white.opacity(0.92))
+        }
+      }
+      .frame(width: filled ? size * 2.5 : size * 2, height: filled ? size * 2.5 : size * 2)
+      .contentShape(Rectangle())
+    }
+  }
+}
+
+struct Controls: View {
+  let np: NowPlaying
+  var size: CGFloat = 15
+
+  var body: some View {
+    HStack(spacing: 0) {
+      ControlButton(system: "backward.fill", action: "prev", size: size)
+      Spacer(minLength: 4)
+      ControlButton(
+        system: np.isPlaying ? "pause.fill" : "play.fill", action: "toggle", size: size, filled: true)
+      Spacer(minLength: 4)
+      ControlButton(system: "forward.fill", action: "next", size: size)
+      Spacer(minLength: 4)
+      ControlButton(system: np.liked == true ? "heart.fill" : "heart", action: "like", size: size - 1)
+    }
+  }
+}
+
+struct Wordmark: View {
+  var size: CGFloat = 11
+
+  var body: some View {
+    HStack(spacing: 4) {
+      Image("holysicMark")
+        .resizable()
+        .frame(width: size + 5, height: size + 5)
+        .clipShape(RoundedRectangle(cornerRadius: (size + 5) * 0.28, style: .continuous))
+      (Text("Holy").foregroundColor(.white) + Text("Sic").foregroundColor(Brand.gold))
+        .font(.system(size: size, weight: .heavy, design: .rounded))
+    }
+  }
+}
+
+// MARK: - Empty state
+
+struct EmptyStateView: View {
+  let compact: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: compact ? 6 : 10) {
+      Wordmark(size: compact ? 12 : 14)
+      Spacer(minLength: 0)
+      Image(systemName: "music.note.list")
+        .font(.system(size: compact ? 22 : 28, weight: .semibold))
+        .foregroundColor(Brand.lilac)
+      Text("Chưa phát bài nào")
+        .font(.system(size: compact ? 14 : 17, weight: .bold, design: .rounded))
+        .foregroundColor(.white)
+      Text("Chạm để mở HolySic")
+        .font(.system(size: compact ? 11 : 12, weight: .medium))
+        .foregroundColor(.white.opacity(0.6))
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    .padding(compact ? 14 : 18)
+  }
+}
+
+// MARK: - Small
+
+struct SmallView: View {
+  let entry: NowPlayingEntry
+  let np: NowPlaying
+
+  var body: some View {
+    let theme = Theme(np)
+    ZStack(alignment: .bottomLeading) {
+      // the cover fills the tile, a gradient keeps the text readable
+      GeometryReader { geo in
+        if let art = entry.art {
+          Image(uiImage: art)
+            .resizable()
+            .scaledToFill()
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
+        } else {
+          ArtBackdrop(theme: theme, art: nil)
+          Image(systemName: "music.note")
+            .font(.system(size: 44, weight: .semibold))
+            .foregroundColor(.white.opacity(0.22))
+            .frame(width: geo.size.width, height: geo.size.height * 0.62)
+        }
+      }
+      LinearGradient(
+        stops: [
+          .init(color: .clear, location: 0.25),
+          .init(color: theme.bottom.opacity(0.55), location: 0.55),
+          .init(color: theme.bottom.opacity(0.95), location: 1),
+        ],
+        startPoint: .top, endPoint: .bottom)
+
+      VStack(alignment: .leading, spacing: 3) {
+        HStack {
+          Image("holysicMark")
+            .resizable()
+            .frame(width: 20, height: 20)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .shadow(color: .black.opacity(0.4), radius: 4)
+          Spacer()
+          Image(systemName: np.isPlaying ? "waveform" : "pause.fill")
+            .font(.system(size: 11, weight: .bold))
+            .foregroundColor(.white)
+            .padding(6)
+            .background(Circle().fill(Color.black.opacity(0.35)))
+        }
+        Spacer(minLength: 0)
+        Text(np.title)
+          .font(.system(size: 15, weight: .bold, design: .rounded))
+          .foregroundColor(.white)
+          .lineLimit(2)
+          .minimumScaleFactor(0.85)
+        Text(np.artist)
+          .font(.system(size: 11.5, weight: .medium))
+          .foregroundColor(.white.opacity(0.72))
+          .lineLimit(1)
+        ProgressBar(np: np, date: entry.date, accent: theme.accent, showTimes: false)
+          .padding(.top, 4)
+      }
+      .padding(13)
+    }
+    .widgetURL(deepLink("open"))
+  }
+}
+
+// MARK: - Medium
+
+struct MediumView: View {
+  let entry: NowPlayingEntry
+  let np: NowPlaying
+
+  var body: some View {
+    let theme = Theme(np)
+    GeometryReader { geo in
+      HStack(spacing: 14) {
+        Cover(art: entry.art, theme: theme, corner: 18)
+          .frame(width: geo.size.height - 28, height: geo.size.height - 28)
+        VStack(alignment: .leading, spacing: 0) {
+          HStack(spacing: 6) {
+            StateBadge(np: np, accent: theme.accent)
+            if let badge = np.badge, !badge.isEmpty {
+              Text(badge)
+                .font(.system(size: 9, weight: .heavy))
+                .foregroundColor(.white.opacity(0.7))
+                .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+          }
+          Spacer(minLength: 4)
+          Text(np.title)
+            .font(.system(size: 16, weight: .bold, design: .rounded))
+            .foregroundColor(.white)
+            .lineLimit(1)
+          Text(np.artist)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(.white.opacity(0.68))
+            .lineLimit(1)
+            .padding(.top, 1)
+          Spacer(minLength: 6)
+          ProgressBar(np: np, date: entry.date, accent: theme.accent)
+          Spacer(minLength: 4)
+          Controls(np: np, size: 14)
+        }
+      }
+      .padding(14)
+    }
+    .widgetURL(deepLink("open"))
+  }
+}
+
+// MARK: - Large
+
+struct LargeView: View {
+  let entry: NowPlayingEntry
+  let np: NowPlaying
+
+  var body: some View {
+    let theme = Theme(np)
+    VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        Wordmark(size: 12)
+        Spacer()
+        StateBadge(np: np, accent: theme.accent)
+      }
+      HStack(alignment: .center, spacing: 14) {
+        Cover(art: entry.art, theme: theme, corner: 20)
+          .frame(width: 118, height: 118)
+        VStack(alignment: .leading, spacing: 3) {
+          Text(np.title)
+            .font(.system(size: 19, weight: .bold, design: .rounded))
+            .foregroundColor(.white)
+            .lineLimit(2)
+            .minimumScaleFactor(0.85)
+          Text(np.artist)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundColor(.white.opacity(0.72))
+            .lineLimit(1)
+          if let album = np.album, !album.isEmpty {
+            Text(album)
+              .font(.system(size: 11.5, weight: .regular))
+              .foregroundColor(.white.opacity(0.5))
+              .lineLimit(1)
+          }
+          if let badge = np.badge, !badge.isEmpty {
+            Text(badge)
+              .font(.system(size: 9.5, weight: .heavy))
+              .foregroundColor(theme.accent)
+              .padding(.horizontal, 6)
+              .padding(.vertical, 2)
+              .background(Capsule().stroke(theme.accent.opacity(0.6), lineWidth: 0.8))
+              .padding(.top, 3)
+          }
+        }
+        Spacer(minLength: 0)
+      }
+      .padding(.top, 12)
+
+      ProgressBar(np: np, date: entry.date, accent: theme.accent)
+        .padding(.top, 14)
+      Controls(np: np, size: 17)
+        .padding(.horizontal, 6)
+        .padding(.top, 6)
+
+      Rectangle().fill(Color.white.opacity(0.1)).frame(height: 0.6).padding(.top, 10)
+
+      Text(np.vi ? "TIẾP THEO" : "UP NEXT")
+        .font(.system(size: 10, weight: .heavy))
+        .tracking(0.8)
+        .foregroundColor(.white.opacity(0.5))
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+
+      let next = Array((np.upNext ?? []).prefix(3))
+      if next.isEmpty {
+        Text(np.vi ? "Hàng chờ trống — HolySic sẽ tự gợi ý bài tương tự" : "Queue is empty — HolySic will keep the music going")
+          .font(.system(size: 12, weight: .medium))
+          .foregroundColor(.white.opacity(0.55))
+          .lineLimit(2)
+          .padding(.top, 2)
+      } else {
+        ForEach(Array(next.enumerated()), id: \.offset) { i, item in
+          HStack(spacing: 10) {
+            Text("\(i + 1)")
+              .font(.system(size: 12, weight: .bold).monospacedDigit())
+              .foregroundColor(theme.accent)
+              .frame(width: 14)
+            VStack(alignment: .leading, spacing: 1) {
+              Text(item.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(1)
+              Text(item.artist)
+                .font(.system(size: 11, weight: .regular))
+                .foregroundColor(.white.opacity(0.55))
+                .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+          }
+          .padding(.vertical, 3)
+        }
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(16)
+    .widgetURL(deepLink("open"))
+  }
+}
+
+// MARK: - Lock Screen (iOS 16+)
+
+@available(iOSApplicationExtension 16.0, *)
+struct AccessoryView: View {
+  let entry: NowPlayingEntry
+  let family: WidgetFamily
+
+  var body: some View {
+    let np = entry.np
+    Group {
+      switch family {
+      case .accessoryCircular:
+        ZStack {
+          AccessoryWidgetBackground()
+          if let np = np, np.duration > 0, np.isLive != true {
+            if np.isPlaying, entry.date < np.endDate {
+              ProgressView(
+                timerInterval: np.startDate...np.endDate, countsDown: false,
+                label: { EmptyView() },
+                currentValueLabel: {
+                  Image(systemName: "music.note").font(.system(size: 16, weight: .bold))
+                }
+              )
+              .progressViewStyle(.circular)
+            } else {
+              ProgressView(value: np.progress(at: entry.date)) {
+                EmptyView()
+              } currentValueLabel: {
+                Image(systemName: "pause.fill").font(.system(size: 14, weight: .bold))
+              }
+              .progressViewStyle(.circular)
+            }
+          } else {
+            Image(systemName: "music.note").font(.system(size: 18, weight: .bold))
+          }
+        }
+      case .accessoryInline:
+        if let np = np {
+          Label("\(np.title) · \(np.artist)", systemImage: np.isPlaying ? "waveform" : "pause.fill")
+        } else {
+          Label("HolySic", systemImage: "music.note")
+        }
+      default:
+        if let np = np {
+          VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+              Image(systemName: np.isPlaying ? "waveform" : "pause.fill")
+                .font(.system(size: 11, weight: .bold))
+              Text("HolySic").font(.system(size: 11, weight: .heavy))
+                .widgetAccentable()
+            }
+            Text(np.title)
+              .font(.system(size: 14, weight: .bold))
+              .lineLimit(1)
+            Text(np.artist)
+              .font(.system(size: 12))
+              .lineLimit(1)
+              .opacity(0.75)
+            if np.duration > 0, np.isLive != true {
+              if np.isPlaying, entry.date < np.endDate {
+                ProgressView(
+                  timerInterval: np.startDate...np.endDate, countsDown: false,
+                  label: { EmptyView() }, currentValueLabel: { EmptyView() }
+                )
+                .progressViewStyle(.linear)
+              } else {
+                ProgressView(value: np.progress(at: entry.date)).progressViewStyle(.linear)
+              }
+            }
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+          VStack(alignment: .leading) {
+            Text("HolySic").font(.system(size: 14, weight: .heavy))
+            Text("Chạm để mở").font(.system(size: 12)).opacity(0.75)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        }
+      }
+    }
+    .widgetURL(deepLink("open"))
+  }
+}
+
+// MARK: - Entry view
+
+struct HolySicWidgetEntryView: View {
+  @Environment(\.widgetFamily) var family
+  let entry: NowPlayingEntry
+
+  var body: some View {
+    content
+  }
+
+  @ViewBuilder var content: some View {
+    if isAccessory {
+      accessory.widgetBackground { Color.clear }
+    } else if let np = entry.np {
+      let theme = Theme(np)
+      Group {
+        switch family {
+        case .systemMedium: MediumView(entry: entry, np: np)
+        case .systemLarge, .systemExtraLarge: LargeView(entry: entry, np: np)
+        default: SmallView(entry: entry, np: np)
+        }
+      }
+      .widgetBackground { ArtBackdrop(theme: theme, art: entry.art) }
+    } else {
+      EmptyStateView(compact: family == .systemSmall)
+        .widgetURL(deepLink("open"))
+        .widgetBackground { ArtBackdrop(theme: Theme(nil), art: nil) }
+    }
+  }
+
+  var isAccessory: Bool {
+    if #available(iOSApplicationExtension 16.0, *) {
+      return family == .accessoryCircular || family == .accessoryRectangular
+        || family == .accessoryInline
+    }
+    return false
+  }
+
+  @ViewBuilder var accessory: some View {
+    if #available(iOSApplicationExtension 16.0, *) {
+      AccessoryView(entry: entry, family: family)
+    } else {
+      EmptyView()
+    }
+  }
+}
+
+// MARK: - Widget
+
+struct HolySicWidget: Widget {
+  let kind = "HolySicNowPlaying"
+
+  var families: [WidgetFamily] {
+    var f: [WidgetFamily] = [.systemSmall, .systemMedium, .systemLarge]
+    if #available(iOSApplicationExtension 16.0, *) {
+      f += [.accessoryRectangular, .accessoryCircular, .accessoryInline]
+    }
+    return f
+  }
+
+  var body: some WidgetConfiguration {
+    StaticConfiguration(kind: kind, provider: NowPlayingProvider()) { entry in
+      HolySicWidgetEntryView(entry: entry)
+    }
+    .configurationDisplayName("HolySic · Đang phát")
+    .description("Bài đang phát, ảnh bìa, tiến độ và hàng chờ — chạm để điều khiển.")
+    .supportedFamilies(families)
+    .contentMarginsDisabledIfAvailable()
+  }
+}
+
+@main
+struct HolySicWidgetBundle: WidgetBundle {
+  var body: some Widget {
+    HolySicWidget()
+  }
+}

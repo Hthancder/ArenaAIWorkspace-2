@@ -97,6 +97,29 @@ jobs:
             exit 1
           fi
 
+      - name: Widget extension + embed entitlements (App Group) with ldid
+        run: |
+          APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
+          APPEX="$APP_PATH/PlugIns/HolySicWidget.appex"
+          if [ ! -d "$APPEX" ]; then
+            echo "::error title=Widget::HolySicWidget.appex is missing from $APP_PATH/PlugIns"
+            exit 1
+          fi
+          WMIN=$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APPEX/Info.plist")
+          echo "::notice title=Widget::HolySicWidget.appex embedded (MinimumOSVersion $WMIN)"
+          # Unsigned builds carry no entitlements; sideloaders (TrollStore, AltStore, SideStore) read
+          # them from the binary, so fake-sign with ldid to keep the App Group the widget reads from.
+          brew list ldid >/dev/null 2>&1 || brew install ldid || true
+          if command -v ldid >/dev/null 2>&1; then
+            WEXE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APPEX/Info.plist")
+            AEXE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP_PATH/Info.plist")
+            ldid -S"ios/.targets/HolySicWidget/generated.entitlements" "$APPEX/$WEXE"
+            ldid -S"ios/HolySic/HolySic.entitlements" "$APP_PATH/$AEXE"
+            echo "::notice title=Entitlements::$(ldid -e "$APP_PATH/$AEXE" | grep -o 'group\.[a-z.]*' | head -n 1) embedded in app + widget"
+          else
+            echo "::warning title=ldid::ldid unavailable; the IPA has no embedded App Group (widget would show its empty state)"
+          fi
+
       - name: Package HolySic-iOS.ipa
         run: |
           mkdir -p Payload

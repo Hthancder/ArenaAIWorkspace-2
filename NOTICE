@@ -62,6 +62,10 @@ its open API). Live stations come from the community-run Radio Browser directory
 Ambient light reads artwork colours with jpeg-js (https://github.com/jpeg-js/jpeg-js, BSD-3-Clause,
 Copyright (c) 2014 Eugene Ware, based on pdf.js by Mozilla, Apache-2.0).
 
+The iOS widget extension is added to the Xcode project at prebuild time by @bacons/apple-targets
+(https://github.com/EvanBacon/expo-apple-targets, MIT, Copyright (c) Evan Bacon). Song details and
+covers for "Edit song info" are looked up through Apple's iTunes Search API and the Deezer API.
+
 ## Rename notice — HolySic
 
 In November 2026 this fork was renamed to **HolySic**, with a new name, logo, bundle identifier

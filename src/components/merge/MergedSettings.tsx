@@ -21,6 +21,7 @@ import { BackupPreview, LibraryBackup } from '../../services/library/libraryTool
 import { Scrobbler } from '../../services/scrobble/scrobbler';
 import { LocalLibrary } from '../../services/local/localLibrary';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { WidgetSettingsCard } from '../widget/WidgetSettingsCard';
 
 const HOME_SECTIONS: { id: HomeSectionId; vi: string; en: string }[] = [
   { id: 'quickActions', vi: 'Lối tắt nhanh', en: 'Quick actions' },
@@ -215,6 +216,9 @@ export const MergedSettings: React.FC = () => {
       </View>
 
       {/* ───────── Playback ───────── */}
+      {/* ───────── Widget ───────── */}
+      <WidgetSettingsCard fontFamily={fontFamily} />
+
       <Text style={[styles.sectionTitle, { fontFamily }]}>
         {vi ? 'Phát nhạc thông minh' : 'Smart playback'}
       </Text>
