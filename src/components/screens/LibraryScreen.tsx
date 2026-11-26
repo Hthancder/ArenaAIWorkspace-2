@@ -17,6 +17,8 @@ import { t } from '../../constants/i18n';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { TrackRow } from '../TrackRow';
+import { LocalLibrary } from '../../services/local/localLibrary';
+import { useLocalLibrary } from '../local/LocalLibraryScreen';
 
 type LibFilter = 'playlists' | 'liked' | 'offline' | 'history';
 
@@ -30,7 +32,6 @@ export const LibraryScreen: React.FC = () => {
     history,
     createPlaylist,
     openImport,
-    importLocalFiles,
     openCollection,
     setIsRecapOpen,
   } = useHolySic();
@@ -41,6 +42,7 @@ export const LibraryScreen: React.FC = () => {
   const [plDesc, setPlDesc] = useState('');
 
   const vi = prefs.language === 'vi';
+  const local = useLocalLibrary();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const offlineList = Object.values(downloads);
 
@@ -51,9 +53,9 @@ export const LibraryScreen: React.FC = () => {
         <Text style={[styles.pageTitle, { fontFamily }]}>{t(prefs.language, 'library')}</Text>
         <View style={styles.headerRight}>
           <Pressable
-            onPress={() => importLocalFiles()}
+            onPress={() => LocalLibrary.open()}
             style={styles.actionPill}
-            accessibilityLabel={vi ? 'Nhập tệp từ ứng dụng Tệp' : 'Import from Files'}
+            accessibilityLabel={vi ? 'Nhạc trên máy' : 'Local Files'}
           >
             <Ionicons name="folder-open-outline" size={16} color="#FFFFFF" />
           </Pressable>
@@ -75,6 +77,18 @@ export const LibraryScreen: React.FC = () => {
 
       {/* Top Shelf Cards */}
       <View style={styles.shelfRow}>
+        <Pressable
+          onPress={() => LocalLibrary.open()}
+          style={[styles.shelfCard, { backgroundColor: 'rgba(244, 114, 182, 0.14)' }]}
+          accessibilityLabel={vi ? 'Mở Nhạc trên máy' : 'Open Local Files'}
+        >
+          <Ionicons name="phone-portrait" size={22} color="#F472B6" />
+          <Text style={styles.shelfCount}>{local.ready ? local.files.length : '–'}</Text>
+          <Text numberOfLines={1} style={styles.shelfLabel}>
+            {vi ? 'Trên máy' : 'Local'}
+          </Text>
+        </Pressable>
+
         <Pressable
           onPress={() => openCollection({ kind: 'liked' })}
           style={[styles.shelfCard, { backgroundColor: 'rgba(255, 77, 121, 0.14)' }]}

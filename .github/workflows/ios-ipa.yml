@@ -85,6 +85,8 @@ jobs:
           APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
           MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP_PATH/Info.plist")
           echo "::notice title=MinimumOSVersion::$MIN_OS"
+          FILE_SHARING=$(/usr/libexec/PlistBuddy -c "Print :UIFileSharingEnabled" "$APP_PATH/Info.plist" 2>/dev/null || echo missing)
+          echo "::notice title=Files app folder (UIFileSharingEnabled)::$FILE_SHARING"
           if [ ! -s "$APP_PATH/main.jsbundle" ]; then
             echo "::error title=JS bundle::main.jsbundle missing from $APP_PATH (app would launch to a blank screen)"
             exit 1

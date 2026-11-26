@@ -16,6 +16,7 @@ import { ArtworkImage } from './ArtworkImage';
 import { HOLYSIC_COLORS } from '../constants/theme';
 import { useHolySic } from '../context/HolySicContext';
 import { GlassSurface } from './GlassSurface';
+import { isLocalTrack, LocalLibrary, localDirOf } from '../services/local/localLibrary';
 
 export const TrackActionSheet: React.FC = () => {
   const {
@@ -31,6 +32,7 @@ export const TrackActionSheet: React.FC = () => {
     downloadTrack,
     removeDownload,
     openCollection,
+    setIsPlayerOpen,
     prefs,
     palette,
     showToast,
@@ -209,32 +211,52 @@ export const TrackActionSheet: React.FC = () => {
                   </Text>
                 </Pressable>
 
-                <Pressable
-                  style={styles.menuItem}
-                  onPress={() => {
-                    if (isOffline) {
-                      removeDownload(sheetTrack.id);
-                    } else {
-                      downloadTrack(sheetTrack);
-                    }
-                    close();
-                  }}
-                >
-                  <Ionicons
-                    name={isOffline ? 'trash-outline' : 'arrow-down-circle-outline'}
-                    size={21}
-                    color={isOffline ? '#F87171' : HOLYSIC_COLORS.flacEmerald}
-                  />
-                  <Text style={styles.menuLabel}>
-                    {isOffline
-                      ? vi
-                        ? 'Xoá bản tải ngoại tuyến'
-                        : 'Remove Offline Download'
-                      : vi
-                        ? 'Tải xuống nghe ngoại tuyến (Offline)'
-                        : 'Download for Offline Playback'}
-                  </Text>
-                </Pressable>
+                {isLocalTrack(sheetTrack) ? (
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      const dir = localDirOf(sheetTrack);
+                      closeThen(() => {
+                        setIsPlayerOpen(false);
+                        LocalLibrary.open(dir);
+                      });
+                    }}
+                  >
+                    <Ionicons name="folder-open-outline" size={21} color="#F472B6" />
+                    <Text style={styles.menuLabel}>
+                      {vi
+                        ? `Hiện trong thư mục: ${localDirOf(sheetTrack) || 'HolySic'}`
+                        : `Show in folder: ${localDirOf(sheetTrack) || 'HolySic'}`}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      if (isOffline) {
+                        removeDownload(sheetTrack.id);
+                      } else {
+                        downloadTrack(sheetTrack);
+                      }
+                      close();
+                    }}
+                  >
+                    <Ionicons
+                      name={isOffline ? 'trash-outline' : 'arrow-down-circle-outline'}
+                      size={21}
+                      color={isOffline ? '#F87171' : HOLYSIC_COLORS.flacEmerald}
+                    />
+                    <Text style={styles.menuLabel}>
+                      {isOffline
+                        ? vi
+                          ? 'Xoá bản tải ngoại tuyến'
+                          : 'Remove Offline Download'
+                        : vi
+                          ? 'Tải xuống nghe ngoại tuyến (Offline)'
+                          : 'Download for Offline Playback'}
+                    </Text>
+                  </Pressable>
+                )}
 
                 <Pressable
                   style={styles.menuItem}

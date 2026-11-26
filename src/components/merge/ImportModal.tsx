@@ -27,6 +27,7 @@ import { parseTextList, TextItem } from '../../services/import/linkImport';
 import { Track } from '../../types/music';
 import { ArtworkImage } from '../ArtworkImage';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
+import { LocalLibrary } from '../../services/local/localLibrary';
 
 export type ImportMode = 'link' | 'list';
 
@@ -296,7 +297,7 @@ export const ImportModal: React.FC<Props> = ({
                 const n = await importLocalFiles();
                 if (n > 0) {
                   onClose();
-                  openCollection({ kind: 'offline' });
+                  LocalLibrary.open('');
                 }
               }}
               style={styles.filesRow}
@@ -308,8 +309,8 @@ export const ImportModal: React.FC<Props> = ({
                 </Text>
                 <Text style={styles.rowSub}>
                   {vi
-                    ? 'MP3, M4A, FLAC, WAV, AIFF… nghe offline ngay trong HolySic'
-                    : 'MP3, M4A, FLAC, WAV, AIFF… play offline in HolySic'}
+                    ? 'MP3, M4A, FLAC, WAV, AIFF… vào Nhạc trên máy, sắp xếp theo thư mục'
+                    : 'MP3, M4A, FLAC, WAV, AIFF… into Local Files, organised in folders'}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={HOLYSIC_COLORS.textMuted} />

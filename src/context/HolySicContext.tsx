@@ -44,7 +44,6 @@ import {
   buildBackup,
   exportBackupFile,
   filterBlacklisted,
-  importLocalAudioFiles,
   isBlacklisted,
   LibraryBackup,
   mergeLibrary,
@@ -98,6 +97,7 @@ import {
   ResolvedStream,
   Track,
 } from '../types/music';
+import { isLocalTrack, LocalLibrary } from '../services/local/localLibrary';
 
 export type CollectionTarget =
   | { kind: 'album'; id: string; summary?: AlbumSummary }
@@ -392,6 +392,42 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     eventId?: string;
     flushed?: number;
   } | null>(null);
+  // Local Files moved/renamed in the app → keep likes, playlists, history and queue pointing at them
+  useEffect(
+    () =>
+      LocalLibrary.onRemap((map) => {
+        const fix = (t: Track) => map[t.id] || t;
+        setLikedTracks((prev) => {
+          if (!prev.some((t) => map[t.id])) return prev;
+          const next = prev.map(fix);
+          StorageService.saveLikedTracks(next);
+          return next;
+        });
+        setPlaylists((prev) => {
+          if (!prev.some((pl) => pl.tracks.some((t) => map[t.id]))) return prev;
+          const next = prev.map((pl) =>
+            pl.tracks.some((t) => map[t.id])
+              ? {
+                  ...pl,
+                  tracks: pl.tracks.map(fix),
+                  trackIds: pl.trackIds.map((id) => map[id]?.id || id),
+                }
+              : pl
+          );
+          StorageService.savePlaylists(next);
+          return next;
+        });
+        setHistory((prev) => {
+          if (!prev.some((e) => map[e.track.id])) return prev;
+          const next = prev.map((e) => (map[e.track.id] ? { ...e, track: fix(e.track) } : e));
+          StorageService.saveHistory(next);
+          return next;
+        });
+        setQueue((prev) => (prev.some((t) => map[t.id]) ? prev.map(fix) : prev));
+      }),
+    []
+  );
+
   /** Write the real listened seconds of the current play into its history event */
   const flushListenTime = useCallback(() => {
     const log = playLogRef.current;
@@ -722,11 +758,20 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!isCurrent()) return;
 
       const offlineMeta = downloadsRef.current[track.id];
+      // Local Files: play straight from the app folder (follows the file if it was moved)
+      const localUri = isLocalTrack(track) ? LocalLibrary.resolveUri(track) : undefined;
+      if (isLocalTrack(track) && !localUri) {
+        showToast(
+          prefsRef.current.language === 'vi'
+            ? 'Không tìm thấy tệp trên máy — đang thử tìm bài này trực tuyến'
+            : 'File not found on device — trying to find it online'
+        );
+      }
       const baseQueue = createStreamCandidateQueue(
         track,
         prefsRef.current,
         serversRef.current,
-        offlineMeta?.localUri
+        offlineMeta?.localUri || localUri
       );
       // A stream preloaded while the previous song played goes first (unless offline exists)
       const pre = preloadRef.current;
@@ -1071,6 +1116,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (
         nextTrack &&
         !nextTrack.isLive &&
+        !isLocalTrack(nextTrack) &&
         !log.track.isLive &&
         preloadingRef.current !== nextTrack.id &&
         !downloadsRef.current[nextTrack.id]
@@ -2074,20 +2120,15 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const importLocalFiles = useCallback(async () => {
     try {
-      const metas = await importLocalAudioFiles();
-      if (metas.length === 0) return 0;
-      setDownloads((prev) => {
-        const next = { ...prev };
-        for (const m of metas) next[m.track.id] = m;
-        StorageService.saveDownloads(next);
-        return next;
-      });
+      // copies the picked songs (original names) into the Local Files library folder
+      const n = await LocalLibrary.importFromPicker('');
+      if (n === 0) return 0;
       showToast(
         prefsRef.current.language === 'vi'
-          ? `Đã nhập ${metas.length} tệp — có trong Tải xuống ngoại tuyến`
-          : `Imported ${metas.length} files into Offline`
+          ? `Đã thêm ${n} tệp vào Nhạc trên máy`
+          : `Added ${n} files to Local Files`
       );
-      return metas.length;
+      return n;
     } catch (e: any) {
       showToast(String(e?.message || 'Import failed'));
       return 0;

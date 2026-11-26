@@ -6,7 +6,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useEffect, useSyncExternalStore } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassSurface } from './src/components/GlassSurface';
@@ -24,6 +24,8 @@ import { HaloMark } from './src/components/brand/HaloGlow';
 import { ImportModal } from './src/components/merge/ImportModal';
 import { WelcomeModal } from './src/components/merge/WelcomeModal';
 import { SheetSlot } from './src/components/overlay/ModalLayers';
+import { LocalLibraryScreen, LocalOverlayHost } from './src/components/local/LocalLibraryScreen';
+import { LocalLibrary } from './src/services/local/localLibrary';
 import { t } from './src/constants/i18n';
 import { MainTab } from './src/constants/preferences';
 import { HOLYSIC_COLORS, resolveFontFamily } from './src/constants/theme';
@@ -45,6 +47,13 @@ const HolySicShell: React.FC = () => {
     closeCharts,
   } = useHolySic();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
+  // Local Files page (Spotify-style): slides over the tabs, mini player + tab bar stay visible
+  const localOpen = useSyncExternalStore(
+    LocalLibrary.subscribe,
+    () => LocalLibrary.getState().openAt !== null,
+    () => false
+  );
+  useEffect(() => LocalLibrary.init(), []);
 
   const bg = prefs.pureBlack ? HOLYSIC_COLORS.pureBlack : HOLYSIC_COLORS.obsidian;
 
@@ -110,6 +119,7 @@ const HolySicShell: React.FC = () => {
           {activeTab === 'search' && <SearchScreen />}
           {activeTab === 'library' && <LibraryScreen />}
           {activeTab === 'settings' && <SettingsScreen />}
+          {localOpen && <LocalLibraryScreen />}
         </View>
 
         {/* Floating Dock: MiniPlayer + iOS Translucent Bottom Tab Bar */}
@@ -125,6 +135,7 @@ const HolySicShell: React.FC = () => {
                   key={tab.id}
                   onPress={() => {
                     haptic('selection');
+                    if (localOpen) LocalLibrary.close();
                     setActiveTab(tab.id);
                   }}
                   style={styles.tabItem}
@@ -155,6 +166,9 @@ const HolySicShell: React.FC = () => {
         </View>
 
         {/* Non-intrusive Toast Pill */}
+        {/* Local Files sheets / prompts (above the dock) */}
+        <LocalOverlayHost />
+
         {/* Modals & Sheets */}
         <FullPlayerModal />
         <RecapModal />

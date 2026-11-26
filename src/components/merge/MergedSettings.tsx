@@ -19,6 +19,7 @@ import { hexToHue, HOLYSIC_COLORS, resolveFontFamily } from '../../constants/the
 import { useHolySic } from '../../context/HolySicContext';
 import { BackupPreview, LibraryBackup } from '../../services/library/libraryTools';
 import { Scrobbler } from '../../services/scrobble/scrobbler';
+import { LocalLibrary } from '../../services/local/localLibrary';
 
 const HOME_SECTIONS: { id: HomeSectionId; vi: string; en: string }[] = [
   { id: 'quickActions', vi: 'Lối tắt nhanh', en: 'Quick actions' },
@@ -45,7 +46,6 @@ export const MergedSettings: React.FC = () => {
     exportLibrary,
     pickLibraryBackup,
     applyLibraryBackup,
-    importLocalFiles,
     unblockArtist,
     unblockTrack,
     blockArtist,
@@ -405,10 +405,10 @@ export const MergedSettings: React.FC = () => {
             <Text style={styles.toolText}>{vi ? 'Nhập sao lưu' : 'Import backup'}</Text>
           </Pressable>
         </View>
-        <Pressable onPress={() => importLocalFiles()} style={[styles.toolBtn, { marginTop: 8 }]}>
-          <Ionicons name="folder-open-outline" size={18} color={palette.accent} />
+        <Pressable onPress={() => LocalLibrary.open('')} style={[styles.toolBtn, { marginTop: 8 }]}>
+          <Ionicons name="phone-portrait-outline" size={18} color={palette.accent} />
           <Text style={styles.toolText}>
-            {vi ? 'Nhập nhạc từ ứng dụng Tệp' : 'Import music from Files'}
+            {vi ? 'Nhạc trên máy (thư mục, nhập từ Tệp)' : 'Local Files (folders, import)'}
           </Text>
         </Pressable>
 

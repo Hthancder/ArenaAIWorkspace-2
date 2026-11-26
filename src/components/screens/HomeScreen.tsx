@@ -18,6 +18,7 @@ import { HaloGlow, SectionTitle } from '../brand/HaloGlow';
 import { AmbientSpill, useAmbientColors } from '../ambient/AmbientLight';
 import { searchStations } from '../../services/discovery/radioBrowser';
 import { AUDIUS_GENRES, fetchAudiusTrending } from '../../services/providers/audiusProvider';
+import { LocalLibrary } from '../../services/local/localLibrary';
 
 export const HomeScreen: React.FC = () => {
   const {
@@ -43,7 +44,6 @@ export const HomeScreen: React.FC = () => {
     currentTrack,
     ambient,
     openImport,
-    importLocalFiles,
     likedTracks,
     downloads,
   } = useHolySic();
@@ -269,9 +269,9 @@ export const HomeScreen: React.FC = () => {
             {
               icon: 'folder-open-outline',
               tint: '#F472B6',
-              label: vi ? 'Tệp' : 'Files',
+              label: vi ? 'Trên máy' : 'Local',
               sub: 'MP3 · FLAC',
-              onPress: () => importLocalFiles(),
+              onPress: () => LocalLibrary.open(),
             },
           ].map((qa) => (
             <Pressable key={qa.label} onPress={qa.onPress} style={styles.qaCard}>
