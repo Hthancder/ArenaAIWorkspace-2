@@ -1,44 +1,56 @@
 // HolySic brand mark (original design) & small shared helpers
 
 import React from 'react';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { G, Path } from 'react-native-svg';
 
 /**
- * HolySic mark — an eighth note under a halo. Outline for idle tabs, filled when selected.
- * viewBox 0 0 100 100; strokes scale with the icon.
+ * HolySic mark — the app icon's calligraphic eighth note with a halo ring orbiting its stem.
+ * Outline for idle tabs, filled when selected. viewBox 0 0 100 100 (drawn in the icon's
+ * 1024-unit space and scaled down, so the glyph and the app icon are the very same shape).
  */
-const HALO =
-  'M24 19 C24 12.5 36 8 50 8 C64 8 76 12.5 76 19 C76 25.5 64 30 50 30 C36 30 24 25.5 24 19 Z';
-const STEM = 'M60.5 41 V80';
-const FLAG = 'M60.5 41 C66 44.5 76 47.5 78 57 C79 62 77 66 74.5 68.5';
-const HEAD =
-  'M33.5 82.5 C33.5 75 40.5 69.5 49 69.5 C56.5 69.5 61.5 74 61.5 79.5 C61.5 87 54.5 92.5 46 92.5 C38.5 92.5 33.5 88 33.5 82.5 Z';
+const NOTE =
+  'M536 262 C548 330 622 356 674 420 C718 474 712 552 668 610 C659 622 643 615 650 600 ' +
+  'C676 550 668 496 636 462 C606 430 568 420 538 418 L538 694 C540 760 486 806 414 812 ' +
+  'C346 818 304 786 302 744 C300 690 356 640 430 630 C462 626 488 632 506 642 L506 268 ' +
+  'C506 252 532 248 534 262 Z';
+// the ring, split so its front half can pass in front of the stem
+const RING_BACK = 'M338 262 A182 46 0 0 1 702 262';
+const RING_FRONT = 'M338 262 A182 46 0 0 0 702 262';
+const K = 0.142;
+const PLACE = `translate(${50 - 506 * K} ${53 - 509 * K}) scale(${K})`;
 
 export const HolySicMarkIcon: React.FC<{
   size?: number;
   color?: string;
   filled?: boolean;
-}> = ({ size = 24, color = '#FFFFFF', filled = false }) => (
-  <Svg width={size} height={size} viewBox="0 0 100 100">
-    <Path d={HALO} fill="none" stroke={color} strokeWidth={filled ? 9 : 7.5} />
-    <Path d={STEM} stroke={color} strokeWidth={filled ? 10 : 8} strokeLinecap="round" />
-    <Path
-      d={FLAG}
-      fill="none"
-      stroke={color}
-      strokeWidth={filled ? 10 : 8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d={HEAD}
-      fill={filled ? color : 'none'}
-      stroke={color}
-      strokeWidth={filled ? 6 : 8}
-      strokeLinejoin="round"
-    />
-  </Svg>
-);
+}> = ({ size = 24, color = '#FFFFFF', filled = false }) => {
+  const ring = (filled ? 7.5 : 6.5) / K;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100">
+      <G transform={PLACE}>
+        <G transform="rotate(-9 520 262)">
+          <Path d={RING_BACK} fill="none" stroke={color} strokeWidth={ring} strokeLinecap="round" />
+        </G>
+        <Path
+          d={NOTE}
+          fill={filled ? color : 'none'}
+          stroke={color}
+          strokeWidth={(filled ? 2 : 6.5) / K}
+          strokeLinejoin="round"
+        />
+        <G transform="rotate(-9 520 262)">
+          <Path
+            d={RING_FRONT}
+            fill="none"
+            stroke={color}
+            strokeWidth={ring}
+            strokeLinecap="round"
+          />
+        </G>
+      </G>
+    </Svg>
+  );
+};
 
 export function formatTimeSec(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return '0:00';

@@ -3,11 +3,12 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, StyleSheet, Text, View } from 'react-native';
 import { HOLYSIC_COLORS } from '../constants/theme';
 import { ArtistBio, fetchArtistBio } from '../services/discovery/wikipedia';
 import { SectionTitle } from './brand/HaloGlow';
 import { T as UI, themedSheet } from '../theme/ui';
+import { Tap } from './ui/Tap';
 
 export const ArtistBioCard: React.FC<{
   name: string;
@@ -36,7 +37,7 @@ export const ArtistBioCard: React.FC<{
   return (
     <View style={styles.wrap}>
       <SectionTitle fontFamily={fontFamily}>{vi ? 'Về nghệ sĩ' : 'About the artist'}</SectionTitle>
-      <Pressable onPress={() => setExpanded((v) => !v)} style={styles.card}>
+      <Tap onPress={() => setExpanded((v) => !v)} style={styles.card}>
         <Text numberOfLines={expanded ? undefined : 4} style={[styles.text, { fontFamily }]}>
           {bio.extract}
         </Text>
@@ -44,7 +45,8 @@ export const ArtistBioCard: React.FC<{
           <Text style={[styles.more, { color: accent }]}>
             {expanded ? (vi ? 'Thu gọn' : 'Show less') : vi ? 'Xem thêm' : 'Read more'}
           </Text>
-          <Pressable
+          <Tap
+            feedback="opacity"
             hitSlop={8}
             onPress={() => Linking.openURL(bio.pageUrl).catch(() => undefined)}
             style={styles.source}
@@ -53,9 +55,9 @@ export const ArtistBioCard: React.FC<{
             <Text style={styles.sourceText}>
               Wikipedia ({bio.lang.toUpperCase()}) · CC BY-SA 4.0
             </Text>
-          </Pressable>
+          </Tap>
         </View>
-      </Pressable>
+      </Tap>
     </View>
   );
 };

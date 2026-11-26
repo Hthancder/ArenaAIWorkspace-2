@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,6 +20,7 @@ import { Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { Tap } from '../ui/Tap';
 
 interface Props {
   visible: boolean;
@@ -69,16 +69,16 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
     >
       <View style={[styles.root, { paddingTop: insets.top > 30 ? 12 : 16 }]}>
         <View style={styles.header}>
-          <Pressable onPress={onClose} style={styles.iconBtn} accessibilityLabel="Close">
+          <Tap onPress={onClose} style={styles.iconBtn} accessibilityLabel="Close">
             <Ionicons name="chevron-down" size={22} color={UI.text} />
-          </Pressable>
+          </Tap>
           <View style={{ flex: 1 }}>
             <Text style={[styles.title, { fontFamily }]}>{vi ? 'Bảng xếp hạng' : 'Charts'}</Text>
             <Text style={styles.sub}>
               {country.flag} {vi ? country.vi : country.en} · {vi ? genreMeta.vi : genreMeta.en}
             </Text>
           </View>
-          <Pressable
+          <Tap
             onPress={() => setPickCountry((v) => !v)}
             style={[styles.countryBtn, { borderColor: palette.accent + '66' }]}
           >
@@ -88,7 +88,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
               size={14}
               color={UI.text}
             />
-          </Pressable>
+          </Tap>
         </View>
 
         {pickCountry && (
@@ -96,7 +96,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
             {CHART_COUNTRIES.map((c) => {
               const active = c.code === country.code;
               return (
-                <Pressable
+                <Tap
                   key={c.code}
                   onPress={() => {
                     updatePrefs({ chartCountry: c.code });
@@ -116,7 +116,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
                   >
                     {c.flag} {vi ? c.vi : c.en}
                   </Text>
-                </Pressable>
+                </Tap>
               );
             })}
           </ScrollView>
@@ -131,7 +131,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
           {CHART_GENRES.map((g) => {
             const active = g.id === genre;
             return (
-              <Pressable
+              <Tap
                 key={String(g.id)}
                 onPress={() => setGenre(g.id)}
                 style={[
@@ -149,14 +149,14 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
                 >
                   {vi ? g.vi : g.en}
                 </Text>
-              </Pressable>
+              </Tap>
             );
           })}
         </ScrollView>
 
         {tracks.length > 0 && (
           <View style={styles.actions}>
-            <Pressable
+            <Tap
               onPress={() => {
                 playTrack(tracks[0], tracks);
                 onClose();
@@ -167,8 +167,8 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
               <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
                 {vi ? 'Phát tất cả' : 'Play all'}
               </Text>
-            </Pressable>
-            <Pressable
+            </Tap>
+            <Tap
               onPress={() => {
                 const s = [...tracks].sort(() => Math.random() - 0.5);
                 playTrack(s[0], s);
@@ -177,8 +177,8 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
               style={styles.secondary}
             >
               <Ionicons name="shuffle" size={16} color={UI.text} />
-            </Pressable>
-            <Pressable
+            </Tap>
+            <Tap
               onPress={() => {
                 const name = `Top ${tracks.length} ${country.flag} ${vi ? genreMeta.vi : genreMeta.en} · ${new Date().toLocaleDateString()}`;
                 savePlaylistFromTracks(name, tracks);
@@ -187,7 +187,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
               style={styles.secondary}
             >
               <Ionicons name="bookmark-outline" size={16} color={UI.text} />
-            </Pressable>
+            </Tap>
           </View>
         )}
 

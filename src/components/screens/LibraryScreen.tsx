@@ -64,18 +64,17 @@ export const LibraryScreen: React.FC = () => {
         <View style={styles.headerRight}>
           <Tap
             onPress={() => LocalLibrary.open()}
-            style={styles.actionPill}
+            style={styles.iconBtn}
             accessibilityLabel={vi ? 'Nhạc trên máy' : 'Local Files'}
           >
-            <Ionicons name="folder-open-outline" size={16} color={UI.text} />
+            <Ionicons name="folder-open-outline" size={17} color={UI.text} />
           </Tap>
           <Tap
             onPress={() => openImport('link')}
-            style={styles.actionPill}
+            style={styles.iconBtn}
             accessibilityLabel={vi ? 'Nhập playlist' : 'Import playlist'}
           >
-            <Ionicons name="cloud-upload-outline" size={16} color={UI.text} />
-            {!narrow && <Text style={styles.actionPillText}>{vi ? 'Nhập' : 'Import'}</Text>}
+            <Ionicons name="cloud-upload-outline" size={17} color={UI.text} />
           </Tap>
           <Tap
             onPress={() => setShowCreateModal(true)}
@@ -179,7 +178,7 @@ export const LibraryScreen: React.FC = () => {
             minimumFontScale={0.75}
             style={styles.shelfLabel}
           >
-            Recap ID
+            Recap
           </Text>
         </Tap>
       </View>
@@ -324,7 +323,7 @@ export const LibraryScreen: React.FC = () => {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <Tap style={styles.modalBackdrop} onPress={() => setShowCreateModal(false)}>
-            <Tap style={styles.modalBox} onPress={(e) => e.stopPropagation?.()}>
+            <Tap feedback="none" style={styles.modalBox} onPress={(e) => e.stopPropagation?.()}>
               <Text style={styles.modalTitle}>{t(prefs.language, 'createPlaylist')}</Text>
               <TextInput
                 value={plName}
@@ -402,6 +401,15 @@ const styles = themedSheet(() => ({
     borderRadius: 99,
     backgroundColor: UI.fg(0.09),
   },
+  // round icon-only header buttons (UIKit bar button style) leave the large title room
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: UI.fg(0.09),
+  },
   actionPillText: {
     color: UI.text,
     fontSize: 12.5,
@@ -440,7 +448,7 @@ const styles = themedSheet(() => ({
   },
   shelfLabel: {
     color: UI.text2,
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
     marginTop: 2,
   },

@@ -2,12 +2,13 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { t } from '../../constants/i18n';
 import { LyricsPosition } from '../../constants/preferences';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { usePositionSec } from '../../services/audio/playbackClock';
+import { Tap } from '../ui/Tap';
 
 export const LyricsView: React.FC = () => {
   const {
@@ -82,15 +83,16 @@ export const LyricsView: React.FC = () => {
 
         {lyrics.synced && (
           <View style={styles.offsetGroup}>
-            <Pressable
+            <Tap
+              feedback="opacity"
               onPress={() => nudgeLyricsOffset(-500)}
               hitSlop={6}
               style={styles.offsetBtn}
               accessibilityLabel={vi ? 'Lời sớm hơn 0,5 giây' : 'Lyrics 0.5s earlier'}
             >
               <Ionicons name="remove" size={14} color="#FFF" />
-            </Pressable>
-            <Pressable
+            </Tap>
+            <Tap
               onPress={() => nudgeLyricsOffset('reset')}
               onLongPress={() => nudgeLyricsOffset('reset')}
               style={styles.offsetLabelWrap}
@@ -104,19 +106,20 @@ export const LyricsView: React.FC = () => {
                     : 'Sync 0s'
                   : `${lyricsOffsetSec > 0 ? '+' : ''}${lyricsOffsetSec.toFixed(1)}s`}
               </Text>
-            </Pressable>
-            <Pressable
+            </Tap>
+            <Tap
+              feedback="opacity"
               onPress={() => nudgeLyricsOffset(500)}
               hitSlop={6}
               style={styles.offsetBtn}
               accessibilityLabel={vi ? 'Lời trễ hơn 0,5 giây' : 'Lyrics 0.5s later'}
             >
               <Ionicons name="add" size={14} color="#FFF" />
-            </Pressable>
+            </Tap>
           </View>
         )}
 
-        <Pressable onPress={cycleAlign} style={styles.alignBtn}>
+        <Tap onPress={cycleAlign} style={styles.alignBtn}>
           <Ionicons
             name={
               prefs.lyricsPosition === 'CENTER'
@@ -128,7 +131,7 @@ export const LyricsView: React.FC = () => {
             size={16}
             color="#FFF"
           />
-        </Pressable>
+        </Tap>
       </View>
 
       <ScrollView
@@ -143,7 +146,8 @@ export const LyricsView: React.FC = () => {
           const textAlign = line.isBackground ? 'center' : isDuetV2 ? 'right' : baseAlign;
 
           return (
-            <Pressable
+            <Tap
+              feedback="opacity"
               key={line.id}
               onPress={() => {
                 haptic('selection');
@@ -195,7 +199,7 @@ export const LyricsView: React.FC = () => {
                   {line.text}
                 </Text>
               )}
-            </Pressable>
+            </Tap>
           );
         })}
 

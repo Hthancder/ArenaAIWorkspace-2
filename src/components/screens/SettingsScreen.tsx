@@ -3,7 +3,16 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import {
+  Image,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import {
   UPSTREAM_DISCORD_URL,
   UPSTREAM_ORIGIN_URL,
@@ -21,7 +30,6 @@ import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { StreamFileCache } from '../../services/audio/streamFileCache';
 import { SourceMemory } from '../../services/providers/sourceMemory';
-import { HolySicMarkIcon } from '../HolySicIcons';
 import { MergedSettings } from '../merge/MergedSettings';
 import { WidgetCardAnchor } from '../widget/widgetAnchor';
 import { T as UI, themedSheet } from '../../theme/ui';
@@ -91,9 +99,11 @@ export const SettingsScreen: React.FC = () => {
     >
       {/* Hero Brand Banner */}
       <View style={[styles.brandBanner, { borderColor: palette.accent + '35' }]}>
-        <View style={[styles.heroIconWrap, { backgroundColor: palette.container }]}>
-          <HolySicMarkIcon size={36} color={palette.accent} filled />
-        </View>
+        <Image
+          source={require('../../../assets/icon.png')}
+          style={styles.heroIcon}
+          accessibilityIgnoresInvertColors
+        />
         <View style={{ flex: 1 }}>
           <Text style={[styles.brandName, { fontFamily }]}>HolySic · iOS</Text>
           <Text style={styles.brandSub}>
@@ -814,12 +824,14 @@ const styles = themedSheet(() => ({
     borderWidth: 1,
     alignItems: 'center',
   },
-  heroIconWrap: {
+  // the real app icon, in the iOS squircle proportion (corner ≈ 22.5% of the side)
+  heroIcon: {
     width: 62,
     height: 62,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 14,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: UI.fg(0.14),
   },
   brandName: {
     color: UI.text,

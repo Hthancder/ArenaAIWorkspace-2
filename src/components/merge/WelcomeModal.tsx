@@ -5,13 +5,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ACCENT_PRESETS } from '../../constants/preferences';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { HolySicMarkIcon } from '../HolySicIcons';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
+import { Tap } from '../ui/Tap';
 
 const FEATURES: { icon: string; vi: string; en: string; dvi: string; den: string }[] = [
   {
@@ -109,7 +110,7 @@ export const WelcomeModal: React.FC = () => {
               <Text style={styles.label}>{vi ? 'Ngôn ngữ' : 'Language'}</Text>
               <View style={styles.row}>
                 {(['vi', 'en'] as const).map((l) => (
-                  <Pressable
+                  <Tap
                     key={l}
                     onPress={() => updatePrefs({ language: l })}
                     style={[
@@ -123,7 +124,7 @@ export const WelcomeModal: React.FC = () => {
                     <Text style={styles.choiceText}>
                       {l === 'vi' ? '🇻🇳 Tiếng Việt' : '🇬🇧 English'}
                     </Text>
-                  </Pressable>
+                  </Tap>
                 ))}
               </View>
 
@@ -132,7 +133,7 @@ export const WelcomeModal: React.FC = () => {
                 {ACCENT_PRESETS.map((a) => {
                   const active = prefs.accentColor === a.color;
                   return (
-                    <Pressable
+                    <Tap
                       key={a.id}
                       onPress={() => updatePrefs({ accentColor: a.color })}
                       style={styles.swatchWrap}
@@ -149,7 +150,7 @@ export const WelcomeModal: React.FC = () => {
                         )}
                       </View>
                       <Text style={styles.swatchLabel}>{vi ? a.vi : a.en}</Text>
-                    </Pressable>
+                    </Tap>
                   );
                 })}
               </View>
@@ -172,12 +173,12 @@ export const WelcomeModal: React.FC = () => {
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-          <Pressable onPress={finish}>
+          <Tap onPress={finish}>
             <Text style={{ color: HOLYSIC_COLORS.textMuted, fontWeight: '700' }}>
               {vi ? 'Bỏ qua' : 'Skip'}
             </Text>
-          </Pressable>
-          <Pressable
+          </Tap>
+          <Tap
             onPress={() => (step === 0 ? setStep(1) : finish())}
             style={[styles.next, { backgroundColor: palette.accent }]}
           >
@@ -185,7 +186,7 @@ export const WelcomeModal: React.FC = () => {
               {step === 0 ? (vi ? 'Tiếp' : 'Next') : vi ? 'Bắt đầu nghe' : 'Start listening'}
             </Text>
             <Ionicons name="arrow-forward" size={16} color={palette.onAccent} />
-          </Pressable>
+          </Tap>
         </View>
       </LinearGradient>
       <SheetSlot layer="welcome" />

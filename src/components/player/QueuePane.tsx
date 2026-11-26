@@ -3,10 +3,11 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { ArtworkImage } from '../ArtworkImage';
+import { Tap } from '../ui/Tap';
 
 const ROW_H = 60;
 
@@ -58,19 +59,19 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
               : `${queueIndex + 1}/${queue.length} · ${upcoming} left`}
           </Text>
         </View>
-        <Pressable onPress={onDone} hitSlop={8}>
+        <Tap feedback="opacity" onPress={onDone} hitSlop={8}>
           <Text style={{ color: palette.accent, fontWeight: '800' }}>{vi ? 'Xong' : 'Done'}</Text>
-        </Pressable>
+        </Tap>
       </View>
 
       <View style={styles.tools}>
-        <Pressable onPress={saveQueue} style={styles.tool}>
+        <Tap onPress={saveQueue} style={styles.tool}>
           <Ionicons name="bookmark-outline" size={14} color="#FFF" />
           <Text numberOfLines={1} style={styles.toolText}>
             {vi ? 'Lưu playlist' : 'Save playlist'}
           </Text>
-        </Pressable>
-        <Pressable
+        </Tap>
+        <Tap
           onPress={clearUpcoming}
           disabled={upcoming === 0}
           style={[styles.tool, upcoming === 0 && { opacity: 0.4 }]}
@@ -79,7 +80,7 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
           <Text numberOfLines={1} style={[styles.toolText, { color: '#F87171' }]}>
             {vi ? 'Xoá bài sau' : 'Clear upcoming'}
           </Text>
-        </Pressable>
+        </Tap>
       </View>
 
       <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false}>
@@ -87,7 +88,7 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
           const current = idx === queueIndex;
           const past = idx < queueIndex;
           return (
-            <Pressable
+            <Tap
               key={`${item.id}-${idx}`}
               onPress={() => !current && jumpToQueueIndex(idx)}
               style={[
@@ -123,7 +124,8 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
                   {item.artist}
                 </Text>
               </View>
-              <Pressable
+              <Tap
+                feedback="opacity"
                 hitSlop={6}
                 disabled={idx === 0}
                 onPress={() => moveInQueue(idx, idx - 1)}
@@ -131,8 +133,9 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
                 accessibilityLabel={vi ? 'Lên' : 'Move up'}
               >
                 <Ionicons name="chevron-up" size={17} color="#FFF" />
-              </Pressable>
-              <Pressable
+              </Tap>
+              <Tap
+                feedback="opacity"
                 hitSlop={6}
                 disabled={idx === queue.length - 1}
                 onPress={() => moveInQueue(idx, idx + 1)}
@@ -140,8 +143,9 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
                 accessibilityLabel={vi ? 'Xuống' : 'Move down'}
               >
                 <Ionicons name="chevron-down" size={17} color="#FFF" />
-              </Pressable>
-              <Pressable
+              </Tap>
+              <Tap
+                feedback="opacity"
                 hitSlop={6}
                 disabled={current}
                 onPress={() => removeFromQueue(idx)}
@@ -149,8 +153,8 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
                 accessibilityLabel={vi ? 'Xoá khỏi hàng chờ' : 'Remove'}
               >
                 <Ionicons name="close" size={17} color={HOLYSIC_COLORS.textSecondary} />
-              </Pressable>
-            </Pressable>
+              </Tap>
+            </Tap>
           );
         })}
         <View style={{ height: 24 }} />

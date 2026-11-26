@@ -78,7 +78,7 @@ export const ScrubBar: React.FC<{
   const animate = (to: number) =>
     Animated.spring(grow, {
       toValue: to,
-      useNativeDriver: false,
+      useNativeDriver: true,
       speed: 28,
       bounciness: 0,
     }).start();
@@ -128,7 +128,8 @@ export const ScrubBar: React.FC<{
   ).current;
 
   const shown = Math.max(0, Math.min(1, drag ?? value));
-  const h = grow.interpolate({ inputRange: [0, 1], outputRange: [thickness, thickness * 1.7] });
+  // native-driven: the track thickens with scaleY (no layout pass per frame)
+  const trackScale = grow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] });
   const thumbScale = grow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] });
 
   const onA11y = (e: AccessibilityActionEvent) => {
@@ -170,11 +171,11 @@ export const ScrubBar: React.FC<{
       <Animated.View
         pointerEvents="none"
         style={{
-          height: h,
+          height: thickness,
           borderRadius: 99,
           backgroundColor: trackColor,
-          overflow: thumb ? 'visible' : 'hidden',
-          justifyContent: 'center',
+          overflow: 'hidden',
+          transform: [{ scaleY: trackScale }],
         }}
       >
         <View
@@ -188,25 +189,27 @@ export const ScrubBar: React.FC<{
             backgroundColor: color,
           }}
         />
-        {thumb && (
-          <Animated.View
-            style={{
-              position: 'absolute',
-              left: `${shown * 100}%`,
-              width: 13,
-              height: 13,
-              borderRadius: 6.5,
-              marginLeft: -6.5,
-              backgroundColor: color,
-              transform: [{ scale: thumbScale }],
-              shadowColor: '#000',
-              shadowOpacity: 0.3,
-              shadowRadius: 3,
-              shadowOffset: { width: 0, height: 1 },
-            }}
-          />
-        )}
       </Animated.View>
+      {thumb && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: `${shown * 100}%`,
+            top: 22 - 6.5,
+            width: 13,
+            height: 13,
+            borderRadius: 6.5,
+            marginLeft: -6.5,
+            backgroundColor: color,
+            transform: [{ scale: thumbScale }],
+            shadowColor: '#000',
+            shadowOpacity: 0.3,
+            shadowRadius: 3,
+            shadowOffset: { width: 0, height: 1 },
+          }}
+        />
+      )}
     </View>
   );
 };

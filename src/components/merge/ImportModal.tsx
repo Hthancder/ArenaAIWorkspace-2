@@ -13,7 +13,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -33,6 +32,7 @@ import { resolveM3U, ResolvedHow } from '../../services/import/playlistFiles';
 import * as DocumentPicker from 'expo-document-picker';
 import { File as FsFile } from 'expo-file-system';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { Tap } from '../ui/Tap';
 
 /** A playlist file to open in the import screen (from Local Files or "Open with HolySic"). */
 type PendingM3U = { text: string; name: string; baseDir?: string };
@@ -267,16 +267,16 @@ export const ImportModal: React.FC<Props> = ({
         style={styles.root}
       >
         <View style={styles.header}>
-          <Pressable onPress={onClose} style={styles.iconBtn} accessibilityLabel="Close">
+          <Tap onPress={onClose} style={styles.iconBtn} accessibilityLabel="Close">
             <Ionicons name="close" size={20} color={UI.text} />
-          </Pressable>
+          </Tap>
           <Text style={[styles.title, { fontFamily }]}>{vi ? 'Nhập nhạc' : 'Import music'}</Text>
           <View style={{ width: 36 }} />
         </View>
 
         <View style={styles.segment}>
           {(['link', 'list'] as ImportMode[]).map((m) => (
-            <Pressable
+            <Tap
               key={m}
               onPress={() => {
                 setMode(m);
@@ -308,7 +308,7 @@ export const ImportModal: React.FC<Props> = ({
                     ? 'Tìm theo danh sách'
                     : 'Search a list'}
               </Text>
-            </Pressable>
+            </Tap>
           ))}
         </View>
 
@@ -365,15 +365,15 @@ export const ImportModal: React.FC<Props> = ({
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
-                <Pressable onPress={paste} style={styles.pasteBtn}>
+                <Tap onPress={paste} style={styles.pasteBtn}>
                   <Ionicons name="clipboard-outline" size={16} color={UI.text} />
                   <Text style={{ color: UI.text, fontWeight: '700', fontSize: 12 }}>
                     {vi ? 'Dán' : 'Paste'}
                   </Text>
-                </Pressable>
+                </Tap>
               </View>
 
-              <Pressable
+              <Tap
                 disabled={busy || !text.trim()}
                 onPress={mode === 'link' ? runLink : runList}
                 style={[
@@ -401,14 +401,14 @@ export const ImportModal: React.FC<Props> = ({
                         ? 'Tìm tất cả'
                         : 'Find all'}
                 </Text>
-              </Pressable>
+              </Tap>
             </>
           )}
 
           {message && <Text style={styles.message}>{message}</Text>}
 
           {mode === 'link' && (
-            <Pressable
+            <Tap
               onPress={async () => {
                 const n = await importLocalFiles();
                 if (n > 0) {
@@ -430,10 +430,10 @@ export const ImportModal: React.FC<Props> = ({
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={UI.text3} />
-            </Pressable>
+            </Tap>
           )}
           {!fromFile && (mode !== 'list' || rows.length === 0) ? (
-            <Pressable onPress={pickM3U} style={styles.filesRow} accessibilityLabel="M3U">
+            <Tap onPress={pickM3U} style={styles.filesRow} accessibilityLabel="M3U">
               <Ionicons name="document-text-outline" size={20} color={palette.accent} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>
@@ -446,7 +446,7 @@ export const ImportModal: React.FC<Props> = ({
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={UI.text3} />
-            </Pressable>
+            </Tap>
           ) : null}
 
           {mode === 'list' && rows.length > 0 && (
@@ -487,16 +487,16 @@ export const ImportModal: React.FC<Props> = ({
                         </Text>
                       </View>
                       {r.options.length > 1 && (
-                        <Pressable
+                        <Tap
                           onPress={() => setSwapIdx(swapIdx === i ? null : i)}
                           style={styles.smallBtn}
                         >
                           <Text style={{ color: UI.text, fontSize: 12, fontWeight: '700' }}>
                             {vi ? 'Đổi' : 'Swap'}
                           </Text>
-                        </Pressable>
+                        </Tap>
                       )}
-                      <Pressable
+                      <Tap
                         onPress={() =>
                           setRows((prev) =>
                             prev.map((x, j) =>
@@ -513,11 +513,11 @@ export const ImportModal: React.FC<Props> = ({
                           size={18}
                           color={r.chosen >= 0 ? palette.accent : UI.text3}
                         />
-                      </Pressable>
+                      </Tap>
                     </View>
                     {swapIdx === i &&
                       r.options.map((o, k) => (
-                        <Pressable
+                        <Tap
                           key={o.id}
                           onPress={() => {
                             setRows((prev) =>
@@ -531,7 +531,7 @@ export const ImportModal: React.FC<Props> = ({
                             {o.title} — {o.artist}
                           </Text>
                           <Text style={{ color: UI.text3, fontSize: 11 }}>{o.source}</Text>
-                        </Pressable>
+                        </Tap>
                       ))}
                   </View>
                 );
@@ -540,7 +540,7 @@ export const ImportModal: React.FC<Props> = ({
               {chosenTracks.length > 0 && (
                 <View style={{ gap: 10, marginTop: 14 }}>
                   <View style={styles.bulkRow}>
-                    <Pressable
+                    <Tap
                       onPress={() => {
                         playTrack(chosenTracks[0], chosenTracks);
                         setIsPlayerOpen(true);
@@ -552,15 +552,15 @@ export const ImportModal: React.FC<Props> = ({
                       <Text style={{ color: palette.onAccent, fontWeight: '800', fontSize: 13 }}>
                         {vi ? 'Phát' : 'Play'}
                       </Text>
-                    </Pressable>
-                    <Pressable onPress={() => likeTracks(chosenTracks)} style={styles.bulkBtn}>
+                    </Tap>
+                    <Tap onPress={() => likeTracks(chosenTracks)} style={styles.bulkBtn}>
                       <Ionicons name="heart-outline" size={15} color={UI.text} />
                       <Text style={styles.bulkText}>{vi ? 'Thích' : 'Like'}</Text>
-                    </Pressable>
-                    <Pressable onPress={() => queueTracks(chosenTracks)} style={styles.bulkBtn}>
+                    </Tap>
+                    <Tap onPress={() => queueTracks(chosenTracks)} style={styles.bulkBtn}>
                       <Ionicons name="list" size={15} color={UI.text} />
                       <Text style={styles.bulkText}>{vi ? 'Hàng chờ' : 'Queue'}</Text>
-                    </Pressable>
+                    </Tap>
                   </View>
                   <View style={styles.bulkRow}>
                     <TextInput
@@ -569,7 +569,7 @@ export const ImportModal: React.FC<Props> = ({
                       style={[styles.input, { flex: 1, minWidth: 0, paddingVertical: 10 }]}
                       placeholderTextColor={UI.text3}
                     />
-                    <Pressable
+                    <Tap
                       onPress={() => {
                         const pl = savePlaylistFromTracks(playlistName, chosenTracks);
                         showToast(vi ? `Đã lưu "${pl.name}"` : `Saved "${pl.name}"`);
@@ -580,7 +580,7 @@ export const ImportModal: React.FC<Props> = ({
                     >
                       <Ionicons name="add-circle-outline" size={15} color={UI.text} />
                       <Text style={styles.bulkText}>{vi ? 'Lưu playlist' : 'Save playlist'}</Text>
-                    </Pressable>
+                    </Tap>
                   </View>
                 </View>
               )}

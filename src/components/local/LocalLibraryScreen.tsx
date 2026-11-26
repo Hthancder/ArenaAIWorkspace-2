@@ -37,6 +37,7 @@ import { openSongEditor } from './SongInfoEditor';
 import { queueM3UImport } from '../merge/ImportModal';
 import { exportPlaylistM3U } from '../../services/import/playlistFiles';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { Tap } from '../ui/Tap';
 
 export const useLocalLibrary = (): LocalState =>
   useSyncExternalStore(LocalLibrary.subscribe, LocalLibrary.getState, LocalLibrary.getState);
@@ -677,14 +678,15 @@ export const LocalLibraryScreen: React.FC = () => {
           </Text>
         </View>
         {!selecting && (
-          <Pressable
+          <Tap
+            feedback="opacity"
             hitSlop={10}
             onPress={() => subFolderMenu(f)}
             style={styles.moreBtn}
             accessibilityLabel={(vi ? 'Tuỳ chọn ' : 'Options for ') + f.name}
           >
             <Ionicons name="ellipsis-horizontal" size={18} color={UI.fg(0.6)} />
-          </Pressable>
+          </Tap>
         )}
       </Pressable>
     );
@@ -738,14 +740,15 @@ export const LocalLibraryScreen: React.FC = () => {
           </Text>
         </View>
         {!selecting && (
-          <Pressable
+          <Tap
+            feedback="opacity"
             hitSlop={10}
             onPress={() => fileMenu(f)}
             style={styles.moreBtn}
             accessibilityLabel={(vi ? 'Tuỳ chọn ' : 'Options for ') + f.track.title}
           >
             <Ionicons name="ellipsis-horizontal" size={18} color={UI.fg(0.6)} />
-          </Pressable>
+          </Tap>
         )}
       </Pressable>
     );
@@ -841,14 +844,15 @@ export const LocalLibraryScreen: React.FC = () => {
           {vi ? 'Playlist M3U · chạm để mở' : 'M3U playlist · tap to open'}
         </Text>
       </View>
-      <Pressable
+      <Tap
+        feedback="opacity"
         hitSlop={10}
         onPress={() => playlistMenu(rel)}
         style={styles.moreBtn}
         accessibilityLabel={(vi ? 'Tuỳ chọn ' : 'Options for ') + baseName(rel)}
       >
         <Ionicons name="ellipsis-horizontal" size={18} color={UI.fg(0.6)} />
-      </Pressable>
+      </Tap>
     </Pressable>
   );
   const playlistMenu = (rel: string) =>
@@ -946,13 +950,14 @@ export const LocalLibraryScreen: React.FC = () => {
                 {st.fetching.done}/{st.fetching.total}
                 {st.fetching.matched ? ` · ${vi ? 'đã có' : 'found'} ${st.fetching.matched}` : ''}
               </Text>
-              <Pressable
+              <Tap
+                feedback="opacity"
                 onPress={() => LocalLibrary.cancelAutoFill()}
                 hitSlop={8}
                 accessibilityLabel={vi ? 'Dừng tìm' : 'Stop'}
               >
                 <Ionicons name="close-circle" size={16} color={UI.fg(0.6)} />
-              </Pressable>
+              </Tap>
             </View>
           )}
         </View>
@@ -960,7 +965,7 @@ export const LocalLibraryScreen: React.FC = () => {
 
       {scopeTracks.length > 0 && !selecting && (
         <View style={styles.playRow}>
-          <Pressable
+          <Tap
             onPress={() =>
               playList(groups ? scopeTracks : listTracks.length ? listTracks : scopeTracks)
             }
@@ -970,31 +975,31 @@ export const LocalLibraryScreen: React.FC = () => {
             <Text style={[styles.playText, { color: palette.onAccent }]}>
               {vi ? 'Phát' : 'Play'}
             </Text>
-          </Pressable>
-          <Pressable
+          </Tap>
+          <Tap
             onPress={() => playList(scopeTracks, undefined, true)}
             style={[styles.playBtn, styles.ghostBtn]}
           >
             <Ionicons name="shuffle" size={18} color={UI.text} />
             <Text style={styles.playText}>{vi ? 'Ngẫu nhiên' : 'Shuffle'}</Text>
-          </Pressable>
+          </Tap>
           {nav.kind === 'folder' && (
-            <Pressable
+            <Tap
               onPress={() => promptNewFolder(currentDir)}
               style={styles.roundBtn}
               accessibilityLabel={vi ? 'Thư mục mới' : 'New folder'}
             >
               <Ionicons name="folder-open-outline" size={18} color={UI.text} />
-            </Pressable>
+            </Tap>
           )}
           {nav.kind === 'folder' && (
-            <Pressable
+            <Tap
               onPress={() => importHere(currentDir)}
               style={styles.roundBtn}
               accessibilityLabel={vi ? 'Thêm bài từ Tệp' : 'Add from Files'}
             >
               <Ionicons name="add" size={20} color={UI.text} />
-            </Pressable>
+            </Tap>
           )}
         </View>
       )}
@@ -1015,7 +1020,7 @@ export const LocalLibraryScreen: React.FC = () => {
           ).map(([id, label, icon]) => {
             const on = view === id;
             return (
-              <Pressable
+              <Tap
                 key={id}
                 onPress={() => setView(id)}
                 style={[
@@ -1025,7 +1030,7 @@ export const LocalLibraryScreen: React.FC = () => {
               >
                 <Ionicons name={icon} size={14} color={on ? palette.onAccent : UI.fg(0.88)} />
                 <Text style={[styles.segText, on && { color: palette.onAccent }]}>{label}</Text>
-              </Pressable>
+              </Tap>
             );
           })}
         </ScrollView>
@@ -1037,16 +1042,16 @@ export const LocalLibraryScreen: React.FC = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.crumbs}
         >
-          <Pressable onPress={() => setStack([{ kind: 'folder', path: '' }])}>
+          <Tap onPress={() => setStack([{ kind: 'folder', path: '' }])}>
             <Ionicons name="phone-portrait-outline" size={14} color={UI.fg(0.6)} />
-          </Pressable>
+          </Tap>
           {crumbs.map((c, i) => {
             const path = crumbs.slice(0, i + 1).join('/');
             const last = i === crumbs.length - 1;
             return (
               <View key={path} style={styles.crumbItem}>
                 <Ionicons name="chevron-forward" size={12} color={UI.fg(0.35)} />
-                <Pressable
+                <Tap
                   disabled={last}
                   onPress={() =>
                     setStack([
@@ -1059,7 +1064,7 @@ export const LocalLibraryScreen: React.FC = () => {
                   }
                 >
                   <Text style={[styles.crumbText, last && { color: UI.text }]}>{c}</Text>
-                </Pressable>
+                </Tap>
               </View>
             );
           })}
@@ -1086,9 +1091,9 @@ export const LocalLibraryScreen: React.FC = () => {
             autoCorrect={false}
           />
           {!!query && (
-            <Pressable onPress={() => setQuery('')} hitSlop={8}>
+            <Tap feedback="opacity" onPress={() => setQuery('')} hitSlop={8}>
               <Ionicons name="close-circle" size={17} color={UI.fg(0.5)} />
-            </Pressable>
+            </Tap>
           )}
         </View>
       )}
@@ -1117,7 +1122,7 @@ export const LocalLibraryScreen: React.FC = () => {
                 : 'Empty folder — add songs from Files, or move songs here from another folder.'}
           </Text>
           {!q && nav.kind === 'folder' && (
-            <Pressable
+            <Tap
               onPress={() => importHere(currentDir)}
               style={[styles.smallBtn, { borderColor: palette.accent }]}
             >
@@ -1125,7 +1130,7 @@ export const LocalLibraryScreen: React.FC = () => {
               <Text style={[styles.smallBtnText, { color: palette.accent }]}>
                 {vi ? 'Thêm bài từ Tệp' : 'Add from Files'}
               </Text>
-            </Pressable>
+            </Tap>
           )}
         </View>
       )}
@@ -1142,14 +1147,15 @@ export const LocalLibraryScreen: React.FC = () => {
       />
       {/* top bar */}
       <View style={styles.topBar}>
-        <Pressable
+        <Tap
+          feedback="opacity"
           onPress={back}
           hitSlop={10}
           style={styles.topBtn}
           accessibilityLabel={vi ? 'Quay lại' : 'Back'}
         >
           <Ionicons name={selecting ? 'close' : 'chevron-back'} size={22} color={UI.text} />
-        </Pressable>
+        </Tap>
         <Text numberOfLines={1} style={[styles.topTitle, { fontFamily }]}>
           {selecting
             ? `${selected.size} ${vi ? 'đã chọn' : 'selected'}`
@@ -1160,7 +1166,8 @@ export const LocalLibraryScreen: React.FC = () => {
               : title}
         </Text>
         {selecting ? (
-          <Pressable
+          <Tap
+            feedback="opacity"
             onPress={() =>
               setSelected(
                 selected.size === items.length
@@ -1180,16 +1187,17 @@ export const LocalLibraryScreen: React.FC = () => {
                   ? 'Tất cả'
                   : 'All'}
             </Text>
-          </Pressable>
+          </Tap>
         ) : (
-          <Pressable
+          <Tap
+            feedback="opacity"
             onPress={folderMenu}
             hitSlop={10}
             style={styles.topBtn}
             accessibilityLabel={vi ? 'Tuỳ chọn thư mục' : 'Folder options'}
           >
             <Ionicons name="ellipsis-horizontal" size={20} color={UI.text} />
-          </Pressable>
+          </Tap>
         )}
       </View>
 
@@ -1281,14 +1289,14 @@ const SelAction: React.FC<{
   disabled?: boolean;
   danger?: boolean;
 }> = ({ icon, label, onPress, disabled, danger }) => (
-  <Pressable
+  <Tap
     onPress={onPress}
     disabled={disabled}
     style={[styles.selAction, disabled && { opacity: 0.35 }]}
   >
     <Ionicons name={icon} size={20} color={danger ? '#F87171' : UI.fg(1)} />
     <Text style={[styles.selLabel, danger && { color: '#F87171' }]}>{label}</Text>
-  </Pressable>
+  </Tap>
 );
 
 const HelpCard: React.FC<{
@@ -1356,7 +1364,7 @@ const HelpCard: React.FC<{
     {big && (
       <View style={styles.helpBtns}>
         {Platform.OS === 'ios' && (
-          <Pressable
+          <Tap
             onPress={() => LocalLibrary.openInFilesApp()}
             style={[styles.playBtn, { backgroundColor: accent }]}
           >
@@ -1364,9 +1372,9 @@ const HelpCard: React.FC<{
             <Text style={[styles.playText, { color: onAccent }]}>
               {vi ? 'Mở ứng dụng Tệp' : 'Open Files'}
             </Text>
-          </Pressable>
+          </Tap>
         )}
-        <Pressable
+        <Tap
           onPress={onImport}
           style={[
             styles.playBtn,
@@ -1377,11 +1385,11 @@ const HelpCard: React.FC<{
           <Text style={[styles.playText, Platform.OS !== 'ios' && { color: onAccent }]}>
             {vi ? 'Chọn tệp…' : 'Pick files…'}
           </Text>
-        </Pressable>
-        <Pressable onPress={onNewFolder} style={[styles.playBtn, styles.ghostBtn]}>
+        </Tap>
+        <Tap onPress={onNewFolder} style={[styles.playBtn, styles.ghostBtn]}>
           <Ionicons name="folder-outline" size={17} color={UI.text} />
           <Text style={styles.playText}>{vi ? 'Thư mục mới' : 'New folder'}</Text>
-        </Pressable>
+        </Tap>
       </View>
     )}
   </View>
@@ -1454,10 +1462,10 @@ export const LocalOverlayHost: React.FC = () => {
               <Text style={styles.sheetTitle}>{o.title}</Text>
               <Text style={styles.confirmMsg}>{o.message}</Text>
               <View style={styles.dialogBtns}>
-                <Pressable onPress={close} style={[styles.dialogBtn, styles.ghostBtn]}>
+                <Tap onPress={close} style={[styles.dialogBtn, styles.ghostBtn]}>
                   <Text style={styles.playText}>{vi ? 'Huỷ' : 'Cancel'}</Text>
-                </Pressable>
-                <Pressable
+                </Tap>
+                <Tap
                   onPress={() => {
                     close();
                     o.onConfirm();
@@ -1465,7 +1473,7 @@ export const LocalOverlayHost: React.FC = () => {
                   style={[styles.dialogBtn, { backgroundColor: '#DC2626' }]}
                 >
                   <Text style={[styles.playText, { color: UI.text }]}>{o.confirm}</Text>
-                </Pressable>
+                </Tap>
               </View>
             </>
           )}
@@ -1501,12 +1509,9 @@ export const LocalOverlayHost: React.FC = () => {
                 onAccent={palette.onAccent}
                 web={st.backend === 'web'}
               />
-              <Pressable
-                onPress={close}
-                style={[styles.dialogBtn, styles.ghostBtn, { marginTop: 12 }]}
-              >
+              <Tap onPress={close} style={[styles.dialogBtn, styles.ghostBtn, { marginTop: 12 }]}>
                 <Text style={styles.playText}>{vi ? 'Đã hiểu' : 'Got it'}</Text>
-              </Pressable>
+              </Tap>
             </>
           )}
         </View>
@@ -1598,7 +1603,7 @@ const CoverPicker: React.FC<{
         </View>
       </View>
       <View style={styles.coverBtns}>
-        <Pressable
+        <Tap
           disabled={busy}
           onPress={fromPhotos}
           style={[styles.coverBtn, { backgroundColor: accent }]}
@@ -1607,11 +1612,11 @@ const CoverPicker: React.FC<{
           <Text style={[styles.coverBtnText, { color: onAccent }]}>
             {vi ? 'Chọn từ Ảnh' : 'From Photos'}
           </Text>
-        </Pressable>
-        <Pressable disabled={busy} onPress={fromFiles} style={styles.coverBtn}>
+        </Tap>
+        <Tap disabled={busy} onPress={fromFiles} style={styles.coverBtn}>
           <Ionicons name="document-outline" size={18} color={UI.text} />
           <Text style={styles.coverBtnText}>{vi ? 'Từ Tệp' : 'From Files'}</Text>
-        </Pressable>
+        </Tap>
       </View>
       {songCovers.length > 0 && (
         <>
@@ -1621,7 +1626,7 @@ const CoverPicker: React.FC<{
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               {songCovers.map((c) => (
-                <Pressable
+                <Tap
                   key={c.uri}
                   disabled={busy}
                   onPress={() => set(c.uri, false)}
@@ -1632,14 +1637,14 @@ const CoverPicker: React.FC<{
                     style={styles.coverThumb}
                     fallbackSeed={c.title}
                   />
-                </Pressable>
+                </Tap>
               ))}
             </View>
           </ScrollView>
         </>
       )}
       {folder.coverPath ? (
-        <Pressable
+        <Tap
           disabled={busy}
           onPress={() =>
             apply(
@@ -1653,7 +1658,7 @@ const CoverPicker: React.FC<{
           <Text style={[styles.sheetLabel, { color: '#F87171' }]}>
             {vi ? 'Xoá ảnh bìa' : 'Remove cover'}
           </Text>
-        </Pressable>
+        </Tap>
       ) : null}
       <Text style={[styles.sheetSub, { marginTop: 12 }]}>
         {vi
@@ -1702,16 +1707,16 @@ const PromptBody: React.FC<{
         style={styles.promptInput}
       />
       <View style={styles.dialogBtns}>
-        <Pressable onPress={close} style={[styles.dialogBtn, styles.ghostBtn]}>
+        <Tap onPress={close} style={[styles.dialogBtn, styles.ghostBtn]}>
           <Text style={styles.playText}>{vi ? 'Huỷ' : 'Cancel'}</Text>
-        </Pressable>
-        <Pressable
+        </Tap>
+        <Tap
           onPress={submit}
           disabled={!v.trim() || busy}
           style={[styles.dialogBtn, { backgroundColor: accent, opacity: v.trim() ? 1 : 0.4 }]}
         >
           <Text style={[styles.playText, { color: onAccent }]}>{o.confirm}</Text>
-        </Pressable>
+        </Tap>
       </View>
     </>
   );
@@ -1749,12 +1754,13 @@ const MovePicker: React.FC<{
     <>
       <View style={styles.moveHead}>
         {path ? (
-          <Pressable
+          <Tap
+            feedback="opacity"
             hitSlop={10}
             onPress={() => setPath(path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '')}
           >
             <Ionicons name="chevron-back" size={22} color={UI.text} />
-          </Pressable>
+          </Tap>
         ) : (
           <Ionicons name="phone-portrait-outline" size={18} color={UI.fg(0.7)} />
         )}
@@ -1811,16 +1817,16 @@ const MovePicker: React.FC<{
           />
         </View>
       ) : (
-        <Pressable onPress={() => setNaming(true)} style={[styles.sheetItem]}>
+        <Tap onPress={() => setNaming(true)} style={[styles.sheetItem]}>
           <Ionicons name="add-circle-outline" size={20} color={UI.text} />
           <Text style={styles.sheetLabel}>{vi ? 'Thư mục mới ở đây' : 'New folder here'}</Text>
-        </Pressable>
+        </Tap>
       )}
       <View style={styles.dialogBtns}>
-        <Pressable onPress={close} style={[styles.dialogBtn, styles.ghostBtn]}>
+        <Tap onPress={close} style={[styles.dialogBtn, styles.ghostBtn]}>
           <Text style={styles.playText}>{vi ? 'Huỷ' : 'Cancel'}</Text>
-        </Pressable>
-        <Pressable
+        </Tap>
+        <Tap
           onPress={doMove}
           disabled={allHere}
           style={[styles.dialogBtn, { backgroundColor: accent, opacity: allHere ? 0.4 : 1 }]}
@@ -1828,7 +1834,7 @@ const MovePicker: React.FC<{
           <Text style={[styles.playText, { color: onAccent }]}>
             {vi ? 'Chuyển vào đây' : 'Move here'}
           </Text>
-        </Pressable>
+        </Tap>
       </View>
     </>
   );

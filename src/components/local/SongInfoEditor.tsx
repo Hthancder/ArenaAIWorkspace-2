@@ -28,6 +28,7 @@ import { enrich, lookupCandidates, MetaCandidate } from '../../services/local/me
 import { UiColors, useThemedStyles, useUi } from '../../theme/ui';
 import { Track } from '../../types/music';
 import { ArtworkImage } from '../ArtworkImage';
+import { Tap } from '../ui/Tap';
 
 // ---------- open/close store ----------
 
@@ -273,13 +274,14 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
         <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <View style={s.handle} />
           <View style={s.topBar}>
-            <Pressable onPress={requestClose} hitSlop={10} accessibilityLabel="Close">
+            <Tap feedback="opacity" onPress={requestClose} hitSlop={10} accessibilityLabel="Close">
               <Text style={[s.topBtn, confirmDiscard && { color: c.danger, fontWeight: '800' }]}>
                 {confirmDiscard ? (vi ? 'Bỏ thay đổi?' : 'Discard?') : vi ? 'Huỷ' : 'Cancel'}
               </Text>
-            </Pressable>
+            </Tap>
             <Text style={s.topTitle}>{vi ? 'Sửa thông tin' : 'Edit info'}</Text>
-            <Pressable
+            <Tap
+              feedback="opacity"
               onPress={save}
               disabled={saving}
               hitSlop={10}
@@ -298,7 +300,7 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
                   {vi ? 'Lưu' : 'Save'}
                 </Text>
               )}
-            </Pressable>
+            </Tap>
           </View>
 
           <ScrollView
@@ -327,24 +329,21 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
                 ) : null}
               </View>
               <View style={{ flex: 1, gap: 8 }}>
-                <Pressable onPress={pickPhoto} style={s.coverBtn}>
+                <Tap onPress={pickPhoto} style={s.coverBtn}>
                   <Ionicons name="images-outline" size={17} color={c.icon} />
                   <Text style={s.coverBtnText}>{vi ? 'Chọn từ Ảnh' : 'From Photos'}</Text>
-                </Pressable>
-                <Pressable onPress={pickFile} style={s.coverBtn}>
+                </Tap>
+                <Tap onPress={pickFile} style={s.coverBtn}>
                   <Ionicons name="document-outline" size={17} color={c.icon} />
                   <Text style={s.coverBtnText}>{vi ? 'Từ Tệp' : 'From Files'}</Text>
-                </Pressable>
+                </Tap>
                 {(cover || edit?.art) && cover !== null ? (
-                  <Pressable
-                    onPress={() => setCover(edit?.art ? null : undefined)}
-                    style={s.coverBtn}
-                  >
+                  <Tap onPress={() => setCover(edit?.art ? null : undefined)} style={s.coverBtn}>
                     <Ionicons name="arrow-undo-outline" size={17} color={c.icon} />
                     <Text style={s.coverBtnText}>
                       {vi ? 'Dùng ảnh của tệp' : 'Use the file’s art'}
                     </Text>
-                  </Pressable>
+                  </Tap>
                 ) : null}
               </View>
             </View>
@@ -397,14 +396,14 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
                 style={s.searchInput}
                 accessibilityLabel={vi ? 'Tìm thông tin' : 'Search info'}
               />
-              <Pressable
+              <Tap
                 onPress={() => search(query)}
                 style={[s.searchBtn, { backgroundColor: palette.accent }]}
               >
                 <Text style={[s.searchBtnText, { color: palette.onAccent }]}>
                   {vi ? 'Tìm' : 'Search'}
                 </Text>
-              </Pressable>
+              </Tap>
             </View>
             {results && !results.length && !searching ? (
               <Text style={s.note}>
@@ -488,12 +487,12 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
             })}
 
             {hasEdit ? (
-              <Pressable onPress={reset} disabled={saving} style={s.resetBtn}>
+              <Tap onPress={reset} disabled={saving} style={s.resetBtn}>
                 <Ionicons name="refresh" size={18} color={c.danger} />
                 <Text style={[s.resetText, { color: c.danger }]}>
                   {vi ? 'Khôi phục theo tệp' : 'Restore from the file'}
                 </Text>
-              </Pressable>
+              </Tap>
             ) : null}
           </ScrollView>
         </View>

@@ -18,6 +18,7 @@ import { useHolySic } from '../context/HolySicContext';
 import { Track } from '../types/music';
 import { formatTimeSec } from './HolySicIcons';
 import { T as UI, themedSheet } from '../theme/ui';
+import { Tap } from './ui/Tap';
 
 interface TrackRowProps {
   track: Track;
@@ -249,7 +250,8 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         </Text>
       )}
 
-      <Pressable
+      <Tap
+        feedback="opacity"
         hitSlop={8}
         onPress={(e) => {
           e.stopPropagation?.();
@@ -262,10 +264,11 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           size={19}
           color={liked ? HOLYSIC_COLORS.roseLike : UI.text3}
         />
-      </Pressable>
+      </Tap>
 
       {onRemove ? (
-        <Pressable
+        <Tap
+          feedback="opacity"
           hitSlop={8}
           onPress={(e) => {
             e.stopPropagation?.();
@@ -274,9 +277,10 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           style={styles.iconBtn}
         >
           <Ionicons name="close-circle-outline" size={19} color={UI.text3} />
-        </Pressable>
+        </Tap>
       ) : (
-        <Pressable
+        <Tap
+          feedback="opacity"
           hitSlop={8}
           onPress={(e) => {
             e.stopPropagation?.();
@@ -285,7 +289,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           style={styles.iconBtn}
         >
           <Ionicons name="ellipsis-horizontal" size={18} color={UI.text2} />
-        </Pressable>
+        </Tap>
       )}
     </Pressable>
   );

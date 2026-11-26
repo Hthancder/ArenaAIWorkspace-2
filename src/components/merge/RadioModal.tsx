@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,6 +22,7 @@ import { ArtworkImage } from '../ArtworkImage';
 import { HaloGlow } from '../brand/HaloGlow';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { Tap } from '../ui/Tap';
 
 const SCOPES = [
   { id: 'saved', vi: 'Đã lưu', en: 'Saved', flag: '♥' },
@@ -110,9 +110,9 @@ export const RadioModal: React.FC = () => {
       <View style={[styles.root, { paddingTop: insets.top > 30 ? 12 : 16 }]}>
         <HaloGlow color={palette.accent} height={260} />
         <View style={styles.header}>
-          <Pressable onPress={closeRadio} style={styles.iconBtn} accessibilityLabel="Close">
+          <Tap onPress={closeRadio} style={styles.iconBtn} accessibilityLabel="Close">
             <Ionicons name="chevron-down" size={22} color={UI.text} />
-          </Pressable>
+          </Tap>
           <View style={{ flex: 1 }}>
             <Text style={[styles.title, { fontFamily }]}>
               {vi ? 'Radio trực tuyến' : 'Live radio'}
@@ -138,9 +138,9 @@ export const RadioModal: React.FC = () => {
             returnKeyType="search"
           />
           {query.length > 0 && (
-            <Pressable hitSlop={8} onPress={() => setQuery('')}>
+            <Tap feedback="opacity" hitSlop={8} onPress={() => setQuery('')}>
               <Ionicons name="close-circle" size={17} color={UI.text3} />
-            </Pressable>
+            </Tap>
           )}
         </View>
 
@@ -153,7 +153,7 @@ export const RadioModal: React.FC = () => {
           {SCOPES.map((s) => {
             const active = scope === s.id;
             return (
-              <Pressable
+              <Tap
                 key={s.id}
                 onPress={() => setScope(s.id)}
                 style={[
@@ -165,7 +165,7 @@ export const RadioModal: React.FC = () => {
                   {s.flag} {vi ? s.vi : s.en}
                   {s.id === 'saved' && saved.length ? ` ${saved.length}` : ''}
                 </Text>
-              </Pressable>
+              </Tap>
             );
           })}
         </ScrollView>
@@ -178,7 +178,7 @@ export const RadioModal: React.FC = () => {
           {RADIO_TAGS.map((t) => {
             const active = tag === t.id;
             return (
-              <Pressable
+              <Tap
                 key={t.id}
                 onPress={() => setTag(active ? null : t.id)}
                 style={[styles.tagChip, active && { borderColor: palette.accent }]}
@@ -186,7 +186,7 @@ export const RadioModal: React.FC = () => {
                 <Text style={[styles.tagText, active && { color: palette.accent }]}>
                   #{vi ? t.vi : t.en}
                 </Text>
-              </Pressable>
+              </Tap>
             );
           })}
         </ScrollView>
@@ -215,7 +215,7 @@ export const RadioModal: React.FC = () => {
               const active = currentTrack?.id === item.id;
               const fav = isFavoriteStation(item.id);
               return (
-                <Pressable
+                <Tap
                   onPress={() => play(item)}
                   style={[styles.row, active && { backgroundColor: palette.container + '55' }]}
                 >
@@ -249,7 +249,8 @@ export const RadioModal: React.FC = () => {
                       {item.qualityBadge}
                     </Text>
                   </View>
-                  <Pressable
+                  <Tap
+                    feedback="opacity"
                     hitSlop={8}
                     onPress={() => toggleFavoriteStation(item)}
                     style={styles.favBtn}
@@ -260,8 +261,8 @@ export const RadioModal: React.FC = () => {
                       size={20}
                       color={fav ? HOLYSIC_COLORS.roseLike : UI.text2}
                     />
-                  </Pressable>
-                </Pressable>
+                  </Tap>
+                </Tap>
               );
             }}
           />
