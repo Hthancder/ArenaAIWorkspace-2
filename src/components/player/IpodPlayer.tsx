@@ -1,13 +1,13 @@
-// Mochy iPod Classic Player Look — Ported from IpodTheme & IpodWheelColor in PreferenceKeys.kt
+// HolySic iPod Classic Player Look — Ported from IpodTheme & IpodWheelColor in PreferenceKeys.kt (Mochy Music)
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { IpodTheme } from '../../constants/preferences';
-import { useMochy } from '../../context/MochyContext';
+import { useHolySic } from '../../context/HolySicContext';
 import { useHoldSeek } from '../../hooks/useHoldSeek';
-import { formatTimeSec } from '../MochyIcons';
+import { formatTimeSec } from '../HolySicIcons';
 
 const IPOD_PALETTES: Record<
   IpodTheme,
@@ -71,7 +71,7 @@ export const IpodClassicView: React.FC = () => {
     updatePrefs,
     haptic,
     seekBy,
-  } = useMochy();
+  } = useHolySic();
   const ff = useHoldSeek(seekBy, 1);
   const rw = useHoldSeek(seekBy, -1);
 
@@ -105,7 +105,7 @@ export const IpodClassicView: React.FC = () => {
             ]}
           >
             <Text style={[styles.lcdTopTitle, { color: skin.darkLcd ? '#F4F4F8' : '#1E293B' }]}>
-              {menuOpen ? 'Mochy Queue' : 'Now Playing'}
+              {menuOpen ? 'HolySic Queue' : 'Now Playing'}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
               <Ionicons

@@ -1,4 +1,4 @@
-// Cross-Platform Mochy Audio Engine:
+// Cross-Platform HolySic Audio Engine:
 // - Native iOS/Android: expo-audio (AVPlayer background session, silent switch override, native Lock Screen & Dynamic Island controls!)
 // - Web: HTML5 Audio + WebAudio 10-Band Parametric EQ, Bass Boost, Reverb & 8D Spatial Panning + MediaSession Lock Screen API
 
@@ -18,7 +18,7 @@ export interface EngineStatus {
 type StatusCallback = (status: EngineStatus) => void;
 type RemoteActionCallback = (action: 'next' | 'prev' | 'toggle') => void;
 
-class MochyAudioEngine {
+class HolySicAudioEngine {
   private nativePlayer: AudioPlayer | null = null;
   private webAudio: HTMLAudioElement | null = null;
   private webPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -203,7 +203,7 @@ class MochyAudioEngine {
         if (!a || !ctx) return;
         a.getByteFrequencyData(bins);
         const hzPerBin = ctx.sampleRate / 2 / a.frequencyBinCount;
-        const bands = MochyAudioEngine.SPECTRUM_FREQS.map((f) => {
+        const bands = HolySicAudioEngine.SPECTRUM_FREQS.map((f) => {
           const i = Math.min(a.frequencyBinCount - 1, Math.round(f / hzPerBin));
           const lo = Math.max(0, i - 1);
           const v = Math.max(bins[lo], bins[i], bins[Math.min(a.frequencyBinCount - 1, i + 1)]);
@@ -227,7 +227,7 @@ class MochyAudioEngine {
     const n = Math.min(a.length, 1024);
     if (n < 64) return;
     const sr = 44100;
-    const bands = MochyAudioEngine.SPECTRUM_FREQS.map((f) => {
+    const bands = HolySicAudioEngine.SPECTRUM_FREQS.map((f) => {
       const k = Math.round((n * f) / sr);
       const w = (2 * Math.PI * k) / n;
       const coeff = 2 * Math.cos(w);
@@ -324,7 +324,7 @@ class MochyAudioEngine {
           {
             title: track.title,
             artist: track.artist,
-            albumTitle: track.album || 'Mochy Music',
+            albumTitle: track.album || 'HolySic',
             artworkUrl: track.artworkUrl.startsWith('http') ? track.artworkUrl : undefined,
           },
           {
@@ -358,7 +358,7 @@ class MochyAudioEngine {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: track.title,
         artist: track.artist,
-        album: track.album || 'Mochy Music',
+        album: track.album || 'HolySic',
         artwork,
       });
       navigator.mediaSession.setActionHandler('play', () => this.play());
@@ -656,4 +656,4 @@ class MochyAudioEngine {
   }
 }
 
-export const audioEngine = new MochyAudioEngine();
+export const audioEngine = new HolySicAudioEngine();

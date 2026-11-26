@@ -1,5 +1,5 @@
 // Volume normalisation, modelled on Cog's ReplayGain handling (track gain + clipping prevention,
-// falling back to a neutral level when a file has no gain data). Mochy has no decoder tap on
+// falling back to a neutral level when a file has no gain data). HolySic has no decoder tap on
 // AVPlayer, so it uses the loudness each source already measures:
 //   • YouTube: playerConfig.audioConfig.loudnessDb (how much louder than YouTube's reference)
 //   • Monochrome / TIDAL: track ReplayGain (dB) and sample peak
@@ -9,7 +9,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ResolvedStream, Track } from '../../types/music';
 
-const KEY = '@mochy/loudness_v1';
+const KEY = '@holysic/loudness_v1';
 /** Reference headroom: tracks at/under this correction play at full volume */
 const PREAMP_DB = 6;
 const MAX_ENTRIES = 1500;

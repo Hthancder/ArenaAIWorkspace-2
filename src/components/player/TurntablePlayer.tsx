@@ -1,18 +1,12 @@
-// Mochy Turntable Player Look — Spinning Vinyl LP Record + Pivoted Tonearm Seek Indicator
+// HolySic Turntable Player Look — Spinning Vinyl LP Record + Pivoted Tonearm Seek Indicator
 
 import React, { useEffect, useRef } from 'react';
-import {
-  Animated,
-  Easing,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
-import { useMochy } from '../../context/MochyContext';
+import { useHolySic } from '../../context/HolySicContext';
 
 export const TurntableVinylStage: React.FC = () => {
-  const { currentTrack, isPlaying, positionSec, durationSec, palette } = useMochy();
+  const { currentTrack, isPlaying, positionSec, durationSec, palette } = useHolySic();
   const spinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -51,12 +45,7 @@ export const TurntableVinylStage: React.FC = () => {
     <View style={styles.deckWrap}>
       <View style={[styles.plinth, { borderColor: palette.accent + '28' }]}>
         {/* Vinyl LP Record */}
-        <Animated.View
-          style={[
-            styles.vinylDisc,
-            { transform: [{ rotate: spinDeg }] },
-          ]}
-        >
+        <Animated.View style={[styles.vinylDisc, { transform: [{ rotate: spinDeg }] }]}>
           <View style={styles.groove1} />
           <View style={styles.groove2} />
           <View style={styles.groove3} />
@@ -70,12 +59,7 @@ export const TurntableVinylStage: React.FC = () => {
 
         {/* Tonearm Pivot & Arm */}
         <View style={styles.pivotBase}>
-          <View
-            style={[
-              styles.tonearmAssembly,
-              { transform: [{ rotate: `${armAngle}deg` }] },
-            ]}
-          >
+          <View style={[styles.tonearmAssembly, { transform: [{ rotate: `${armAngle}deg` }] }]}>
             <View style={styles.armShaft} />
             <View style={[styles.cartridgeHead, { backgroundColor: palette.accent }]} />
           </View>
@@ -84,13 +68,8 @@ export const TurntableVinylStage: React.FC = () => {
 
         {/* RPM Indicator */}
         <View style={styles.rpmBadge}>
-          <View
-            style={[
-              styles.rpmDot,
-              { backgroundColor: isPlaying ? '#34D399' : '#71717A' },
-            ]}
-          />
-          <Text style={styles.rpmText}>33⅓ RPM · MOCHY DIRECT DRIVE</Text>
+          <View style={[styles.rpmDot, { backgroundColor: isPlaying ? '#34D399' : '#71717A' }]} />
+          <Text style={styles.rpmText}>33⅓ RPM · HOLYSIC DIRECT DRIVE</Text>
         </View>
       </View>
     </View>

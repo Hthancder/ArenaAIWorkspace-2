@@ -1,4 +1,4 @@
-// ArtworkPalette & Mochy Dark Theme — ported from ArtworkPalette.kt & Theme.kt in realidkroo/Mochy-Music
+// ArtworkPalette & HolySic Dark Theme — ported from ArtworkPalette.kt & Theme.kt in realidkroo/Mochy-Music
 
 import { Platform } from 'react-native';
 import { AppFontStyle } from './preferences';
@@ -15,7 +15,7 @@ export interface ArtworkPalette {
   appleMesh: [string, string, string, string];
 }
 
-export const MOCHY_COLORS = {
+export const HOLYSIC_COLORS = {
   pureBlack: '#000000',
   obsidian: '#0A0A0E',
   surface: '#131319',
@@ -85,7 +85,7 @@ function relativeLuminance(hex: string): number {
 
 /**
  * Deterministic perceptual hue & saturation extractor seeded from track artwork/title,
- * mirroring Mochy's ArtworkPalette.from(seed) tonal palette math so every song paints
+ * mirroring HolySic's ArtworkPalette.from(seed) tonal palette math so every song paints
  * its own cohesive, legible Material-style tonal set.
  */
 export function buildArtworkPalette(seedKey?: string, hintHue?: number): ArtworkPalette {
@@ -104,7 +104,7 @@ export function buildArtworkPalette(seedKey?: string, hintHue?: number): Artwork
   }
 
   let hash = 2166136261;
-  const str = seedKey || 'mochy';
+  const str = seedKey || 'holysic';
   for (let i = 0; i < str.length; i++) {
     hash ^= str.charCodeAt(i);
     hash = Math.imul(hash, 16777619);

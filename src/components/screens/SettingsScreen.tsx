@@ -1,4 +1,4 @@
-// Mochy Tab (Settings, Player Customizer, Source Modules, iOS Install Guide & Complete Open-Source Credits)
+// HolySic Tab (Settings, Player Customizer, Source Modules, iOS Install Guide & Complete Open-Source Credits)
 // Preserves full attribution to realidkroo/Mochy-Music and all upstream open-source contributors.
 
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +13,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { MOCHY_DISCORD_URL, MOCHY_ORIGIN_URL, UPSTREAM_CREDITS } from '../../constants/credits';
+import {
+  UPSTREAM_DISCORD_URL,
+  UPSTREAM_ORIGIN_URL,
+  UPSTREAM_CREDITS,
+} from '../../constants/credits';
 import { t } from '../../constants/i18n';
 import {
   AppFontStyle,
@@ -22,11 +26,11 @@ import {
   PlayerBackgroundStyle,
   PlayerStyle,
 } from '../../constants/preferences';
-import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
 import { StreamFileCache } from '../../services/audio/streamFileCache';
 import { SourceMemory } from '../../services/providers/sourceMemory';
-import { MochyMarkIcon } from '../MochyIcons';
+import { HolySicMarkIcon } from '../HolySicIcons';
 import { MergedSettings } from '../merge/MergedSettings';
 
 export const SettingsScreen: React.FC = () => {
@@ -41,7 +45,7 @@ export const SettingsScreen: React.FC = () => {
     removeMonochromeServer,
     verifyAllServers,
     haptic,
-  } = useMochy();
+  } = useHolySic();
 
   const [newServerUrl, setNewServerUrl] = useState('');
   const [newServerKind, setNewServerKind] = useState<'streamer' | 'relay'>('relay');
@@ -70,10 +74,10 @@ export const SettingsScreen: React.FC = () => {
       {/* Hero Brand Banner */}
       <View style={[styles.brandBanner, { borderColor: palette.accent + '35' }]}>
         <View style={[styles.heroIconWrap, { backgroundColor: palette.container }]}>
-          <MochyMarkIcon size={36} color={palette.accent} filled />
+          <HolySicMarkIcon size={36} color={palette.accent} filled />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.brandName, { fontFamily }]}>Mochy Music · iOS</Text>
+          <Text style={[styles.brandName, { fontFamily }]}>HolySic · iOS</Text>
           <Text style={styles.brandSub}>
             {vi
               ? 'Bản port iOS (Expo / React Native) dựa trên Mochy Music bởi realidkroo · GPL-3.0 >_<'
@@ -81,7 +85,7 @@ export const SettingsScreen: React.FC = () => {
           </Text>
           <View style={styles.bannerLinksRow}>
             <Pressable
-              onPress={() => Linking.openURL(MOCHY_ORIGIN_URL)}
+              onPress={() => Linking.openURL(UPSTREAM_ORIGIN_URL)}
               style={[styles.miniLinkPill, { backgroundColor: palette.accent }]}
             >
               <Ionicons name="logo-github" size={14} color={palette.onAccent} />
@@ -90,7 +94,7 @@ export const SettingsScreen: React.FC = () => {
               </Text>
             </Pressable>
             <Pressable
-              onPress={() => Linking.openURL(MOCHY_DISCORD_URL)}
+              onPress={() => Linking.openURL(UPSTREAM_DISCORD_URL)}
               style={styles.miniLinkPillGhost}
             >
               <Ionicons name="chatbubbles-outline" size={14} color="#FFF" />
@@ -112,7 +116,7 @@ export const SettingsScreen: React.FC = () => {
 
         <Pressable onPress={() => setIsRecapOpen(true)} style={styles.quickToolCard}>
           <Ionicons name="id-card" size={22} color="#34D399" />
-          <Text style={styles.quickToolTitle}>Mochy Recap ID</Text>
+          <Text style={styles.quickToolTitle}>HolySic Recap ID</Text>
           <Text style={styles.quickToolSub}>Stats & Listener Card</Text>
         </Pressable>
       </View>
@@ -175,14 +179,14 @@ export const SettingsScreen: React.FC = () => {
               <Ionicons
                 name={active ? 'checkmark-circle' : 'ellipse-outline'}
                 size={22}
-                color={active ? palette.accent : MOCHY_COLORS.textMuted}
+                color={active ? palette.accent : HOLYSIC_COLORS.textMuted}
               />
             </Pressable>
           );
         })}
       </View>
 
-      {/* Customize Mochy Appearance */}
+      {/* Customize HolySic Appearance */}
       <Text style={[styles.sectionTitle, { fontFamily }]}>
         {t(prefs.language, 'customizeLook')}
       </Text>
@@ -208,7 +212,7 @@ export const SettingsScreen: React.FC = () => {
             <Text style={styles.rowTitle}>{t(prefs.language, 'frostedBlur')}</Text>
             <Text style={styles.rowDesc}>
               {vi
-                ? 'Tắt nếu muốn máy đời cũ chạy siêu mượt (như gợi ý trong FAQ Mochy)'
+                ? 'Tắt nếu muốn máy đời cũ chạy siêu mượt (như gợi ý trong FAQ HolySic)'
                 : 'Disable blur on older devices for maximum frame rate'}
             </Text>
           </View>
@@ -315,7 +319,7 @@ export const SettingsScreen: React.FC = () => {
       <View style={styles.cardGroup}>
         <Text style={styles.rowDesc}>
           {vi
-            ? 'Thứ tự ưu tiên khi Mochy tìm luồng nhạc chất lượng cao nhất cho bài hát:'
+            ? 'Thứ tự ưu tiên khi HolySic tìm luồng nhạc chất lượng cao nhất cho bài hát:'
             : 'Module resolution priority when matching tracks:'}
         </Text>
 
@@ -488,7 +492,7 @@ export const SettingsScreen: React.FC = () => {
                   {srv.name} ({srv.kind})
                 </Text>
                 {srv.lastMessage && (
-                  <Text style={{ color: MOCHY_COLORS.textMuted, fontSize: 11 }}>
+                  <Text style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 11 }}>
                     {srv.lastMessage}
                   </Text>
                 )}
@@ -506,7 +510,7 @@ export const SettingsScreen: React.FC = () => {
               value={newServerUrl}
               onChangeText={setNewServerUrl}
               placeholder="https://your-relay.example.dev"
-              placeholderTextColor={MOCHY_COLORS.textMuted}
+              placeholderTextColor={HOLYSIC_COLORS.textMuted}
               autoCapitalize="none"
               style={styles.srvInput}
             />
@@ -551,8 +555,8 @@ export const SettingsScreen: React.FC = () => {
             2. Sideload file .ipa (AltStore / SideStore / TrollStore):{' '}
           </Text>
           {vi
-            ? 'Mở tab GitHub Actions → chạy workflow "Build iOS IPA" để tải file MochyMusic-iOS-Unsigned.ipa cài trực tiếp lên iPhone mà không cần máy Mac!'
-            : 'Run the included GitHub Actions "Build iOS IPA" workflow to download MochyMusic-iOS-Unsigned.ipa — no Mac required!'}
+            ? 'Mở tab GitHub Actions → chạy workflow "Build iOS IPA" để tải file HolySic-iOS-Unsigned.ipa cài trực tiếp lên iPhone mà không cần máy Mac!'
+            : 'Run the included GitHub Actions "Build iOS IPA" workflow to download HolySic-iOS-Unsigned.ipa — no Mac required!'}
         </Text>
         <Text style={styles.guideStep}>
           <Text style={{ fontWeight: '800', color: '#FFF' }}>3. Safari PWA: </Text>
@@ -590,7 +594,7 @@ export const SettingsScreen: React.FC = () => {
               </Text>
               <Text style={styles.creditDesc}>{vi ? credit.roleVi : credit.roleEn}</Text>
             </View>
-            <Ionicons name="open-outline" size={17} color={MOCHY_COLORS.textSecondary} />
+            <Ionicons name="open-outline" size={17} color={HOLYSIC_COLORS.textSecondary} />
           </Pressable>
         ))}
       </View>
@@ -628,7 +632,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   brandSub: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12.5,
     lineHeight: 18,
     marginTop: 3,
@@ -675,7 +679,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   quickToolSub: {
-    color: MOCHY_COLORS.textMuted,
+    color: HOLYSIC_COLORS.textMuted,
     fontSize: 11.5,
     marginTop: 2,
   },
@@ -728,7 +732,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   rowDesc: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12,
     lineHeight: 17,
     marginTop: 2,
@@ -811,7 +815,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   guideStep: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 13,
     lineHeight: 19.5,
     marginBottom: 10,
@@ -832,7 +836,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   creditDesc: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12,
     marginTop: 2,
     lineHeight: 16.5,

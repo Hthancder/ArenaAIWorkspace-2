@@ -1,4 +1,4 @@
-// Mochy Library Hub — Playlists, Liked Songs, Offline Downloads, History & Playlist Importer
+// HolySic Library Hub — Playlists, Liked Songs, Offline Downloads, History & Playlist Importer
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
@@ -14,8 +14,8 @@ import {
 } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
-import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
 import { TrackRow } from '../TrackRow';
 
 type LibFilter = 'playlists' | 'liked' | 'offline' | 'history';
@@ -33,7 +33,7 @@ export const LibraryScreen: React.FC = () => {
     importLocalFiles,
     openCollection,
     setIsRecapOpen,
-  } = useMochy();
+  } = useHolySic();
 
   const [tab, setTab] = useState<LibFilter>('playlists');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -79,7 +79,7 @@ export const LibraryScreen: React.FC = () => {
           onPress={() => openCollection({ kind: 'liked' })}
           style={[styles.shelfCard, { backgroundColor: 'rgba(255, 77, 121, 0.14)' }]}
         >
-          <Ionicons name="heart" size={22} color={MOCHY_COLORS.roseLike} />
+          <Ionicons name="heart" size={22} color={HOLYSIC_COLORS.roseLike} />
           <Text style={styles.shelfCount}>{likedTracks.length}</Text>
           <Text numberOfLines={1} style={styles.shelfLabel}>
             {vi ? 'Đã thích' : 'Liked'}
@@ -90,7 +90,7 @@ export const LibraryScreen: React.FC = () => {
           onPress={() => openCollection({ kind: 'offline' })}
           style={[styles.shelfCard, { backgroundColor: 'rgba(52, 211, 153, 0.14)' }]}
         >
-          <Ionicons name="arrow-down-circle" size={22} color={MOCHY_COLORS.flacEmerald} />
+          <Ionicons name="arrow-down-circle" size={22} color={HOLYSIC_COLORS.flacEmerald} />
           <Text style={styles.shelfCount}>{offlineList.length}</Text>
           <Text numberOfLines={1} style={styles.shelfLabel}>
             Offline
@@ -178,7 +178,7 @@ export const LibraryScreen: React.FC = () => {
                     {pl.description ? ` · ${pl.description}` : ''}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={MOCHY_COLORS.textMuted} />
+                <Ionicons name="chevron-forward" size={18} color={HOLYSIC_COLORS.textMuted} />
               </Pressable>
             ))}
           </View>
@@ -243,14 +243,14 @@ export const LibraryScreen: React.FC = () => {
               value={plName}
               onChangeText={setPlName}
               placeholder={vi ? 'Tên danh sách phát…' : 'Playlist title…'}
-              placeholderTextColor={MOCHY_COLORS.textMuted}
+              placeholderTextColor={HOLYSIC_COLORS.textMuted}
               style={styles.modalInput}
             />
             <TextInput
               value={plDesc}
               onChangeText={setPlDesc}
               placeholder={vi ? 'Mô tả ngắn (tuỳ chọn)…' : 'Optional description…'}
-              placeholderTextColor={MOCHY_COLORS.textMuted}
+              placeholderTextColor={HOLYSIC_COLORS.textMuted}
               style={styles.modalInput}
             />
             <View style={styles.modalActions}>
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   shelfLabel: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12,
     fontWeight: '600',
     marginTop: 2,
@@ -389,12 +389,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   plSub: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12.5,
     marginTop: 3,
   },
   emptyNote: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     paddingHorizontal: 36,
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modalSub: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12.5,
     lineHeight: 18,
     marginBottom: 12,

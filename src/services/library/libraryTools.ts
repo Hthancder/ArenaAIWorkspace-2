@@ -7,7 +7,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
-import { MochyPreferences } from '../../constants/preferences';
+import { HolySicPreferences } from '../../constants/preferences';
 import {
   AudioLabSettings,
   DownloadedTrackMeta,
@@ -16,7 +16,9 @@ import {
   Track,
 } from '../../types/music';
 
-export const BACKUP_FORMAT = 'mochy-music-backup';
+export const BACKUP_FORMAT = 'holysic-backup';
+/** Backups exported before the app was renamed still import */
+const ACCEPTED_FORMATS = [BACKUP_FORMAT, 'mochy-music-backup'];
 
 export interface LibraryBackup {
   format: typeof BACKUP_FORMAT;
@@ -27,7 +29,7 @@ export interface LibraryBackup {
   playlists: Playlist[];
   history: ListeningEvent[];
   searchHistory: string[];
-  prefs?: Partial<MochyPreferences>;
+  prefs?: Partial<HolySicPreferences>;
   audioLab?: AudioLabSettings;
 }
 
@@ -50,7 +52,7 @@ export function buildBackup(
     format: BACKUP_FORMAT,
     version: 1,
     exportedAt: new Date().toISOString(),
-    app: 'Mochy Music iOS',
+    app: 'HolySic iOS',
     ...data,
   };
 }
@@ -65,7 +67,7 @@ export function parseBackup(text: string): LibraryBackup {
   } catch {
     throw new Error('File không phải JSON hợp lệ');
   }
-  if (j?.format !== BACKUP_FORMAT) throw new Error('Không phải file sao lưu Mochy');
+  if (!ACCEPTED_FORMATS.includes(j?.format)) throw new Error('Không phải file sao lưu HolySic');
   return {
     format: BACKUP_FORMAT,
     version: 1,
@@ -165,7 +167,7 @@ export function mergeLibrary(
 /** Writes the backup to a file and opens the share sheet (Save to Files, AirDrop…); web downloads it */
 export async function exportBackupFile(backup: LibraryBackup): Promise<string> {
   const json = JSON.stringify(backup, null, 1);
-  const name = `mochy-backup-${backup.exportedAt.slice(0, 10)}.json`;
+  const name = `holysic-backup-${backup.exportedAt.slice(0, 10)}.json`;
   if (Platform.OS === 'web') {
     const blob = new Blob([json], { type: 'application/json' });
     const a = document.createElement('a');
@@ -208,7 +210,7 @@ export async function pickBackupFile(): Promise<string | null> {
 // ---------- Files app import (Cog) ----------
 
 const AUDIO_EXT = /\.(mp3|m4a|aac|flac|wav|aif|aiff|caf|alac|mp4|opus|ogg)$/i;
-export const LOCAL_DIR = 'mochy-local';
+export const LOCAL_DIR = 'holysic-local';
 
 function titleFromFileName(name: string): { title: string; artist: string } {
   const base = name

@@ -1,6 +1,6 @@
 // Real charts by country & genre — the "Trending in 75+ countries" idea from OpenSpot Music and
 // "Browse by genre" from Musike, served by Apple's public iTunes RSS feed (CORS-enabled, no key,
-// works for Vietnam; verified by scripts/probe-sources.mjs). Songs play through Mochy's
+// works for Vietnam; verified by scripts/probe-sources.mjs). Songs play through HolySic's
 // full-length source modules — the RSS preview is only kept as an opt-in fallback.
 
 import { Track } from '../../types/music';

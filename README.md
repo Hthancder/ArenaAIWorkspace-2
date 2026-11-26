@@ -1,3 +1,12 @@
+# 🎵 HolySic
+
+**HolySic** là trình phát nhạc iOS mã nguồn mở, miễn phí, không quảng cáo. Ứng dụng khởi đầu là một fork của
+**[Mochy Music](https://github.com/realidkroo/Mochy-Music)** do realidkroo làm, sau đó gộp thêm những điểm mạnh nhất của
+Spotube, OpenSpot, Musike và Cog.
+
+*HolySic began as a fork of Mochy Music (github.com/realidkroo/mochy-music) by realidkroo — renamed, with features
+merged in from Spotube, OpenSpot, Musike and Cog. All original notices are kept below.*
+
 <!-- mochy-credit:start · f208ad37 -->
 <div align="center">
 
@@ -34,7 +43,7 @@
 - **TrackMatcher** port từ Kotlin: `0.5·title + 0.3·artist + 0.2·dur − 0.25·versionMismatch ≥ 0.7` (hoặc ISRC = 1.0)
 - Stream Resolver theo thứ tự ưu tiên + **DiagnosticStep[]** telemetry
 
-### 🎚️ Mochy Audio Lab
+### 🎚️ HolySic Audio Lab
 - 10-band graphic EQ (32 Hz – 16 kHz), AutoEQ headphone presets (AirPods / Audiophile)
 - Sub-Bass Boost, Space Reverb, **8D Spatial Audio** orbit, playback speed/pitch (Nightcore / Slowed+Reverb)
 
@@ -43,7 +52,7 @@
 - LyricsView phát sáng theo từng chữ, cuộn tự động
 
 ### 📚 Thư viện cá nhân
-- Favorites, History, **Mochy Recap** (thống kê + Listener ID Card lật được), Offline Downloads (iOS filesystem + Web CacheStorage), Playlists + text song-list importer
+- Favorites, History, **HolySic Recap** (thống kê + Listener ID Card lật được), Offline Downloads (iOS filesystem + Web CacheStorage), Playlists + text song-list importer
 - Album / Artist / Playlist collection views
 
 ### 🎨 Tùy biến / Customize
@@ -74,7 +83,7 @@ npx expo start
 Cài **Expo Go** từ App Store, quét mã QR bằng Camera iPhone.
 
 ### 2. Build `.ipa` không cần Mac / No-Mac IPA build
-Mở tab **GitHub Actions → "Build iOS IPA"** (`.github/workflows/ios-ipa.yml`) → tải `MochyMusic-iOS-Unsigned.ipa` → cài bằng **AltStore / SideStore / TrollStore**.
+Mở tab **GitHub Actions → "Build iOS IPA"** (`.github/workflows/ios-ipa.yml`) → tải `HolySic-iOS-Unsigned.ipa` → cài bằng **AltStore / SideStore / TrollStore**.
 
 Hoặc với máy Mac + Xcode:
 ```bash
@@ -102,7 +111,7 @@ src/
 │   ├── lyrics/               # synced/word lyrics (LRCLib, YouLyPlus, BetterLyrics)
 │   ├── storage/              # AsyncStorage + offline downloads
 │   └── audio/                # expo-audio (iOS) + HTML5/WebAudio (Web)
-├── context/MochyContext.tsx  # Global state provider
+├── context/HolySicContext.tsx  # Global state provider
 ├── data/curatedCatalog.ts    # EQ bands, AutoEQ presets, mood catalog
 └── components/
     ├── player/               # FullPlayerModal, Turntable, iPod, Bedside, LyricsView

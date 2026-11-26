@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Mochy Music iOS — source probe (runs on GitHub Actions, where YouTube/JioSaavn/Monochrome are reachable)
+// HolySic iOS — source probe (runs on GitHub Actions, where YouTube/JioSaavn/Monochrome are reachable)
 // It checks every full-length source with the same requests the app sends, then range-probes the stream
 // past the ~786 KB "untokened window" (≈30 s) that googlevideo cuts unauthenticated IOS/IPADOS links at.
 // Usage: node --openssl-legacy-provider scripts/probe-sources.mjs

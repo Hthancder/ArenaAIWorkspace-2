@@ -1,10 +1,10 @@
-// Persistent Storage & Offline File Download Manager for Mochy Music iOS
+// Persistent Storage & Offline File Download Manager for HolySic iOS
 // Uses AsyncStorage + Expo FileSystem (iOS native Document directory) + Web Cache API
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
-import { DEFAULT_PREFERENCES, MochyPreferences } from '../../constants/preferences';
+import { DEFAULT_PREFERENCES, HolySicPreferences } from '../../constants/preferences';
 import { DEFAULT_EQ_BANDS } from '../../data/curatedCatalog';
 import {
   AudioLabSettings,
@@ -17,15 +17,15 @@ import {
 import { DEFAULT_MONOCHROME_SERVER } from '../providers/monochromeProvider';
 
 const KEYS = {
-  PREFS: '@mochy/preferences_v1',
-  LIKED: '@mochy/liked_tracks_v1',
-  PLAYLISTS: '@mochy/playlists_v1',
-  HISTORY: '@mochy/history_v1',
-  DOWNLOADS: '@mochy/downloads_v1',
-  AUDIOLAB: '@mochy/audiolab_v1',
-  MONOCHROME_SERVERS: '@mochy/monochrome_servers_v1',
-  SEARCH_HISTORY: '@mochy/search_history_v1',
-  SESSION: '@mochy/playback_session_v1',
+  PREFS: '@holysic/preferences_v1',
+  LIKED: '@holysic/liked_tracks_v1',
+  PLAYLISTS: '@holysic/playlists_v1',
+  HISTORY: '@holysic/history_v1',
+  DOWNLOADS: '@holysic/downloads_v1',
+  AUDIOLAB: '@holysic/audiolab_v1',
+  MONOCHROME_SERVERS: '@holysic/monochrome_servers_v1',
+  SEARCH_HISTORY: '@holysic/search_history_v1',
+  SESSION: '@holysic/playback_session_v1',
 };
 
 export interface PlaybackSession {
@@ -68,8 +68,8 @@ async function writeJson<T>(key: string, value: T): Promise<void> {
 }
 
 export const StorageService = {
-  loadPreferences: async (): Promise<MochyPreferences> => {
-    const saved = await readJson<Partial<MochyPreferences>>(KEYS.PREFS, {});
+  loadPreferences: async (): Promise<HolySicPreferences> => {
+    const saved = await readJson<Partial<HolySicPreferences>>(KEYS.PREFS, {});
     return {
       ...DEFAULT_PREFERENCES,
       ...saved,
@@ -80,7 +80,7 @@ export const StorageService = {
     };
   },
 
-  savePreferences: (prefs: MochyPreferences) => writeJson(KEYS.PREFS, prefs),
+  savePreferences: (prefs: HolySicPreferences) => writeJson(KEYS.PREFS, prefs),
 
   loadLikedTracks: () => readJson<Track[]>(KEYS.LIKED, []),
   saveLikedTracks: (tracks: Track[]) => writeJson(KEYS.LIKED, tracks),
@@ -126,8 +126,8 @@ export const StorageService = {
 
   /**
    * Downloads a resolved stream to persistent device storage:
-   * - iOS Native: Paths.document/mochy-offline/{id}.m4a via File.downloadFileAsync
-   * - Web: Browser Cache API ('mochy-offline-audio-v1') + ObjectURL / cached reference
+   * - iOS Native: Paths.document/holysic-offline/{id}.m4a via File.downloadFileAsync
+   * - Web: Browser Cache API ('holysic-offline-audio-v1') + ObjectURL / cached reference
    */
   downloadTrackFile: async (
     track: Track,
@@ -138,7 +138,7 @@ export const StorageService = {
     const safeId = track.id.replace(/[^a-zA-Z0-9_-]/g, '_');
 
     if (Platform.OS !== 'web') {
-      const offlineDir = new Directory(Paths.document, 'mochy-offline');
+      const offlineDir = new Directory(Paths.document, 'holysic-offline');
       if (!offlineDir.exists) {
         offlineDir.create({ intermediates: true, idempotent: true });
       }
@@ -167,8 +167,8 @@ export const StorageService = {
           const clone = res.clone();
           const blob = await res.blob();
           sizeBytes = blob.size || sizeBytes;
-          const cache = await window.caches.open('mochy-offline-audio-v1');
-          const cacheKey = `/__mochy_offline__/${safeId}`;
+          const cache = await window.caches.open('holysic-offline-audio-v1');
+          const cacheKey = `/__holysic_offline__/${safeId}`;
           await cache.put(cacheKey, clone);
           localUri = URL.createObjectURL(blob);
         }
@@ -198,8 +198,8 @@ export const StorageService = {
     } else if (typeof window !== 'undefined' && 'caches' in window) {
       try {
         const safeId = meta.track.id.replace(/[^a-zA-Z0-9_-]/g, '_');
-        const cache = await window.caches.open('mochy-offline-audio-v1');
-        await cache.delete(`/__mochy_offline__/${safeId}`);
+        const cache = await window.caches.open('holysic-offline-audio-v1');
+        await cache.delete(`/__holysic_offline__/${safeId}`);
       } catch {
         // ignore
       }

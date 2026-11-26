@@ -1,4 +1,4 @@
-// Mochy Music Preferences & Enums — faithfully ported from PreferenceKeys.kt in realidkroo/Mochy-Music
+// HolySic Preferences & Enums — faithfully ported from PreferenceKeys.kt in realidkroo/Mochy-Music
 
 export type MainTab = 'home' | 'search' | 'library' | 'settings';
 
@@ -38,7 +38,7 @@ export interface BlacklistPref {
   tracks: { id: string; title: string; artist: string }[];
 }
 
-/** Accent presets (Musike: 8 presets + custom). 'dynamic' = Mochy's colours from the artwork */
+/** Accent presets (Musike: 8 presets + custom). 'dynamic' = HolySic's colours from the artwork */
 export const ACCENT_PRESETS: { id: string; color: string; vi: string; en: string }[] = [
   { id: 'dynamic', color: 'dynamic', vi: 'Theo bìa', en: 'From artwork' },
   { id: 'rose', color: '#FB7185', vi: 'Hồng', en: 'Rose' },
@@ -51,7 +51,7 @@ export const ACCENT_PRESETS: { id: string; color: string; vi: string; en: string
   { id: 'spotify', color: '#1ED760', vi: 'Xanh lá', en: 'Green' },
 ];
 
-export interface MochyPreferences {
+export interface HolySicPreferences {
   /** 'dynamic' or a #RRGGBB colour (readability is auto-adjusted for the dark UI) */
   accentColor: string;
   hiddenHomeSections: HomeSectionId[];
@@ -71,7 +71,7 @@ export interface MochyPreferences {
   lyricsOffsets: Record<string, number>;
   /** Welcome tour finished */
   onboarded: boolean;
-  /** Mini player look: Mochy card or OpenSpot-style floating capsule */
+  /** Mini player look: HolySic card or OpenSpot-style floating capsule */
   miniPlayerStyle: 'card' | 'capsule';
   language: AppLanguage;
   pureBlack: boolean;
@@ -103,7 +103,7 @@ export interface MochyPreferences {
   };
 }
 
-export const DEFAULT_PREFERENCES: MochyPreferences = {
+export const DEFAULT_PREFERENCES: HolySicPreferences = {
   accentColor: 'dynamic',
   hiddenHomeSections: [],
   normalizeVolume: true,
@@ -154,7 +154,7 @@ export const PLAYER_STYLE_META: {
     id: 'FLAGSHIP',
     titleVi: 'Flagship',
     titleEn: 'Flagship',
-    descVi: 'Mặt kính mờ, chuyển màu động theo bìa đĩa & thanh điều khiển chuẩn Mochy',
+    descVi: 'Mặt kính mờ, chuyển màu động theo bìa đĩa & thanh điều khiển chuẩn HolySic',
     descEn: 'Frosted cover fade, moving cover colours & tonal artwork controls',
     badge: 'Mặc định',
   },

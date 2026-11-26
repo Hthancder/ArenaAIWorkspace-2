@@ -54,3 +54,10 @@ Charts data comes from Apple's public iTunes RSS feeds. Non-music segment data c
 SponsorBlock (https://sponsor.ajay.app, CC BY-NC-SA 4.0 database), and can be turned off in Settings. Scrobbles go to Last.fm and
 ListenBrainz only when you connect your own account.
 
+## Rename notice — HolySic
+
+In November 2026 this fork was renamed to **HolySic**, with a new name, logo, bundle identifier
+(`com.holysic.music`) and internal code names. HolySic is a modified version of Mochy Music:
+realidkroo's original app lives at https://github.com/realidkroo/Mochy-Music and remains under
+GPL-3.0. Every notice above is kept unchanged, and HolySic stays free with no ads or paywalls.
+Library backups exported from the older build can still be imported.

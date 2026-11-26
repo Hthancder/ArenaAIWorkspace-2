@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Track } from '../../types/music';
 import { md5 } from './md5';
 
-const KEY = '@mochy/scrobble_v1';
+const KEY = '@holysic/scrobble_v1';
 
 export interface ScrobbleSettings {
   listenBrainzToken: string;
@@ -99,8 +99,8 @@ async function listenBrainzSubmit(
       ...(s.album ? { release_name: s.album } : {}),
       additional_info: {
         duration_ms: Math.round(s.durationSec * 1000),
-        media_player: 'Mochy Music iOS',
-        submission_client: 'Mochy Music iOS',
+        media_player: 'HolySic iOS',
+        submission_client: 'HolySic iOS',
       },
     },
   }));

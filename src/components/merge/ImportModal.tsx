@@ -2,7 +2,7 @@
 //   • Link: YouTube / YouTube Music video or playlist, Spotify track/album/playlist, Apple Music
 //     (OpenSpot Music's Spotify import + Musike's "paste a YouTube link to play")
 //   • List: Musike's "Search a list". Paste a list of songs, get the best match for each with a
-//     swap option, then play / like / queue / save them as a playlist. This replaces Mochy's
+//     swap option, then play / like / queue / save them as a playlist. This replaces HolySic's
 //     older text import.
 
 import { Ionicons } from '@expo/vector-icons';
@@ -21,8 +21,8 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
 import { parseTextList, TextItem } from '../../services/import/linkImport';
 import { Track } from '../../types/music';
 import { ArtworkImage } from '../ArtworkImage';
@@ -62,7 +62,7 @@ export const ImportModal: React.FC<Props> = ({
     showToast,
     setIsPlayerOpen,
     importLocalFiles,
-  } = useMochy();
+  } = useHolySic();
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const [mode, setMode] = useState<ImportMode>(initialMode);
@@ -221,8 +221,8 @@ export const ImportModal: React.FC<Props> = ({
           <Text style={styles.help}>
             {mode === 'link'
               ? vi
-                ? 'YouTube / YouTube Music (bài hoặc playlist), Spotify (bài, album, playlist công khai), Apple Music. Bài hát được ghép với nguồn phát đầy đủ của Mochy.'
-                : 'YouTube / YouTube Music (song or playlist), Spotify (track, album, public playlist), Apple Music. Songs are matched to Mochy’s full-length sources.'
+                ? 'YouTube / YouTube Music (bài hoặc playlist), Spotify (bài, album, playlist công khai), Apple Music. Bài hát được ghép với nguồn phát đầy đủ của HolySic.'
+                : 'YouTube / YouTube Music (song or playlist), Spotify (track, album, public playlist), Apple Music. Songs are matched to HolySic’s full-length sources.'
               : vi
                 ? 'Mỗi dòng một bài, hoặc ngăn cách bằng dấu phẩy. Dạng "Nghệ sĩ - Tên bài" cho kết quả chính xác nhất.'
                 : 'One song per line or comma separated. "Artist - Title" gives the best matches.'}
@@ -239,7 +239,7 @@ export const ImportModal: React.FC<Props> = ({
                     ? 'Sơn Tùng M-TP - Chúng Ta Của Hiện Tại\nMONO - Waiting For You, Shape of You'
                     : 'Artist - Title, Another song…'
               }
-              placeholderTextColor={MOCHY_COLORS.textMuted}
+              placeholderTextColor={HOLYSIC_COLORS.textMuted}
               style={[
                 styles.input,
                 mode === 'list' && { minHeight: 120, textAlignVertical: 'top' },
@@ -306,11 +306,11 @@ export const ImportModal: React.FC<Props> = ({
                 </Text>
                 <Text style={styles.rowSub}>
                   {vi
-                    ? 'MP3, M4A, FLAC, WAV, AIFF… nghe offline ngay trong Mochy'
-                    : 'MP3, M4A, FLAC, WAV, AIFF… play offline in Mochy'}
+                    ? 'MP3, M4A, FLAC, WAV, AIFF… nghe offline ngay trong HolySic'
+                    : 'MP3, M4A, FLAC, WAV, AIFF… play offline in HolySic'}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={MOCHY_COLORS.textMuted} />
+              <Ionicons name="chevron-forward" size={16} color={HOLYSIC_COLORS.textMuted} />
             </Pressable>
           )}
 
@@ -330,7 +330,7 @@ export const ImportModal: React.FC<Props> = ({
                         <ArtworkImage source={{ uri: t.artworkUrl }} style={styles.art} />
                       ) : (
                         <View style={[styles.art, styles.artEmpty]}>
-                          <Ionicons name="help" size={18} color={MOCHY_COLORS.textMuted} />
+                          <Ionicons name="help" size={18} color={HOLYSIC_COLORS.textMuted} />
                         </View>
                       )}
                       <View style={{ flex: 1 }}>
@@ -366,7 +366,7 @@ export const ImportModal: React.FC<Props> = ({
                         <Ionicons
                           name={r.chosen >= 0 ? 'checkmark-circle' : 'ellipse-outline'}
                           size={18}
-                          color={r.chosen >= 0 ? palette.accent : MOCHY_COLORS.textMuted}
+                          color={r.chosen >= 0 ? palette.accent : HOLYSIC_COLORS.textMuted}
                         />
                       </Pressable>
                     </View>
@@ -385,7 +385,7 @@ export const ImportModal: React.FC<Props> = ({
                           <Text numberOfLines={1} style={{ color: '#FFF', fontSize: 13, flex: 1 }}>
                             {o.title} — {o.artist}
                           </Text>
-                          <Text style={{ color: MOCHY_COLORS.textMuted, fontSize: 11 }}>
+                          <Text style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 11 }}>
                             {o.source}
                           </Text>
                         </Pressable>
@@ -424,7 +424,7 @@ export const ImportModal: React.FC<Props> = ({
                       value={playlistName}
                       onChangeText={setPlaylistName}
                       style={[styles.input, { flex: 1, paddingVertical: 10 }]}
-                      placeholderTextColor={MOCHY_COLORS.textMuted}
+                      placeholderTextColor={HOLYSIC_COLORS.textMuted}
                     />
                     <Pressable
                       onPress={() => {
@@ -485,13 +485,13 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 99,
   },
-  help: { color: MOCHY_COLORS.textSecondary, fontSize: 13, lineHeight: 19, marginBottom: 12 },
+  help: { color: HOLYSIC_COLORS.textSecondary, fontSize: 13, lineHeight: 19, marginBottom: 12 },
   inputWrap: { position: 'relative' },
   input: {
     color: '#FFF',
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: MOCHY_COLORS.glassBorder,
+    borderColor: HOLYSIC_COLORS.glassBorder,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 13,
@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
   },
   message: { color: '#FCA5A5', marginTop: 12, fontSize: 13, lineHeight: 19 },
   resultHead: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     marginTop: 18,
     marginBottom: 8,
     fontSize: 13,
@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
   resultRow: {
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: MOCHY_COLORS.glassBorder,
+    borderBottomColor: HOLYSIC_COLORS.glassBorder,
   },
   rowMain: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   art: { width: 42, height: 42, borderRadius: 8 },
@@ -540,7 +540,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rowTitle: { color: '#FFF', fontWeight: '700', fontSize: 14 },
-  rowSub: { color: MOCHY_COLORS.textMuted, fontSize: 12, marginTop: 1 },
+  rowSub: { color: HOLYSIC_COLORS.textMuted, fontSize: 12, marginTop: 1 },
   smallBtn: {
     paddingHorizontal: 8,
     paddingVertical: 6,
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
     padding: 9,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: MOCHY_COLORS.glassBorder,
+    borderColor: HOLYSIC_COLORS.glassBorder,
   },
   bulkRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   bulkBtn: {
@@ -578,6 +578,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
-    borderColor: MOCHY_COLORS.glassBorder,
+    borderColor: HOLYSIC_COLORS.glassBorder,
   },
 });

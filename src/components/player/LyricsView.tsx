@@ -5,8 +5,8 @@ import React, { useEffect, useRef } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { t } from '../../constants/i18n';
 import { LyricsPosition } from '../../constants/preferences';
-import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
 
 export const LyricsView: React.FC = () => {
   const {
@@ -21,7 +21,7 @@ export const LyricsView: React.FC = () => {
     haptic,
     lyricsOffsetSec,
     nudgeLyricsOffset,
-  } = useMochy();
+  } = useHolySic();
   const vi = prefs.language === 'vi';
 
   const scrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
@@ -55,7 +55,7 @@ export const LyricsView: React.FC = () => {
   if (!lyrics || lyrics.lines.length === 0) {
     return (
       <View style={styles.centerBox}>
-        <Ionicons name="musical-notes-outline" size={44} color={MOCHY_COLORS.textMuted} />
+        <Ionicons name="musical-notes-outline" size={44} color={HOLYSIC_COLORS.textMuted} />
         <Text style={[styles.helperText, { fontFamily }]}>{t(prefs.language, 'noLyrics')}</Text>
       </View>
     );
@@ -199,7 +199,7 @@ export const LyricsView: React.FC = () => {
         })}
 
         <Text style={styles.footerText}>
-          Lyrics powered by {lyrics.provider} · Mochy Music Open Lyrics
+          Lyrics powered by {lyrics.provider} · HolySic Open Lyrics
         </Text>
       </ScrollView>
     </View>
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   helperText: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 14.5,
     textAlign: 'center',
     lineHeight: 21,

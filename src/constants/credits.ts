@@ -9,8 +9,8 @@ export interface CreditProject {
   highlight?: boolean;
 }
 
-export const MOCHY_ORIGIN_URL = 'https://github.com/realidkroo/Mochy-Music';
-export const MOCHY_DISCORD_URL = 'https://discord.gg/4DAafDMxZb';
+export const UPSTREAM_ORIGIN_URL = 'https://github.com/realidkroo/Mochy-Music';
+export const UPSTREAM_DISCORD_URL = 'https://discord.gg/4DAafDMxZb';
 
 export const UPSTREAM_CREDITS: CreditProject[] = [
   {

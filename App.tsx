@@ -1,5 +1,5 @@
 /**
- * Mochy Music — iOS Port (Expo / React Native + TypeScript)
+ * HolySic — iOS music player (Expo / React Native + TypeScript)
  * Started life as an iOS port of Mochy Music by realidkroo (https://github.com/realidkroo/Mochy-Music)
  * Licensed under GNU General Public License v3.0 (GPL-3.0) — Free & Open Source Forever.
  */
@@ -11,7 +11,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassSurface } from './src/components/GlassSurface';
 import { MiniPlayer } from './src/components/MiniPlayer';
-import { MochyMarkIcon } from './src/components/MochyIcons';
+import { HolySicMarkIcon } from './src/components/HolySicIcons';
 import { FullPlayerModal } from './src/components/player/FullPlayerModal';
 import { AudioLabModal } from './src/components/screens/AudioLabModal';
 import { CollectionModal } from './src/components/screens/CollectionScreen';
@@ -26,10 +26,10 @@ import { ImportModal } from './src/components/merge/ImportModal';
 import { WelcomeModal } from './src/components/merge/WelcomeModal';
 import { t } from './src/constants/i18n';
 import { MainTab } from './src/constants/preferences';
-import { MOCHY_COLORS, resolveFontFamily } from './src/constants/theme';
-import { MochyProvider, useMochy } from './src/context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from './src/constants/theme';
+import { HolySicProvider, useHolySic } from './src/context/HolySicContext';
 
-const MochyShell: React.FC = () => {
+const HolySicShell: React.FC = () => {
   const insets = useSafeAreaInsets();
   const {
     activeTab,
@@ -43,17 +43,17 @@ const MochyShell: React.FC = () => {
     closeImport,
     chartsSheet,
     closeCharts,
-  } = useMochy();
+  } = useHolySic();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
-  const bg = prefs.pureBlack ? MOCHY_COLORS.pureBlack : MOCHY_COLORS.obsidian;
+  const bg = prefs.pureBlack ? HOLYSIC_COLORS.pureBlack : HOLYSIC_COLORS.obsidian;
 
   const tabs: {
     id: MainTab;
     label: string;
     icon: keyof typeof Ionicons.glyphMap;
     iconActive: keyof typeof Ionicons.glyphMap;
-    isMochyMark?: boolean;
+    isBrandMark?: boolean;
   }[] = [
     {
       id: 'home',
@@ -78,7 +78,7 @@ const MochyShell: React.FC = () => {
       label: t(prefs.language, 'settings'),
       icon: 'sparkles-outline',
       iconActive: 'sparkles',
-      isMochyMark: true,
+      isBrandMark: true,
     },
   ];
 
@@ -119,7 +119,7 @@ const MochyShell: React.FC = () => {
           <GlassSurface intensity={65} tintColor="rgba(14, 14, 20, 0.84)" style={styles.tabBar}>
             {tabs.map((tab) => {
               const selected = activeTab === tab.id;
-              const tint = selected ? palette.accent : MOCHY_COLORS.textMuted;
+              const tint = selected ? palette.accent : HOLYSIC_COLORS.textMuted;
               return (
                 <Pressable
                   key={tab.id}
@@ -129,8 +129,8 @@ const MochyShell: React.FC = () => {
                   }}
                   style={styles.tabItem}
                 >
-                  {tab.isMochyMark ? (
-                    <MochyMarkIcon size={23} color={tint} filled={selected} />
+                  {tab.isBrandMark ? (
+                    <HolySicMarkIcon size={23} color={tint} filled={selected} />
                   ) : (
                     <Ionicons name={selected ? tab.iconActive : tab.icon} size={22} color={tint} />
                   )}
@@ -189,9 +189,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <MochyProvider>
-        <MochyShell />
-      </MochyProvider>
+      <HolySicProvider>
+        <HolySicShell />
+      </HolySicProvider>
     </SafeAreaProvider>
   );
 }

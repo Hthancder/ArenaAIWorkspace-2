@@ -13,7 +13,7 @@ on:
 
 jobs:
   build-ios-ipa:
-    name: Build Mochy Music iOS (.ipa)
+    name: Build HolySic iOS (.ipa)
     runs-on: macos-26
     steps:
       - name: Checkout repository
@@ -95,17 +95,28 @@ jobs:
             exit 1
           fi
 
-      - name: Package MochyMusic-iOS.ipa
+      - name: Package HolySic-iOS.ipa
         run: |
           mkdir -p Payload
           APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
           cp -R "$APP_PATH" Payload/
-          zip -qry MochyMusic-iOS-Unsigned.ipa Payload
-          ls -lh MochyMusic-iOS-Unsigned.ipa
+          zip -qry HolySic-iOS-Unsigned.ipa Payload
+          ls -lh HolySic-iOS-Unsigned.ipa
 
-      - name: Upload MochyMusic-iOS-Unsigned.ipa Artifact
+      - name: Release notes (credits)
+        run: |
+          {
+            echo "## HolySic iOS — unsigned IPA"
+            echo ""
+            echo "Sideload with AltStore / SideStore / TrollStore. Minimum iOS 15.1."
+            echo ""
+            echo "HolySic started life as a fork of **Mochy Music** by realidkroo — https://github.com/realidkroo/Mochy-Music (GPL-3.0)."
+            echo "Merged ideas from Spotube, OpenSpot, Musike and Cog; see NOTICE for every credit."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload HolySic-iOS-Unsigned.ipa Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MochyMusic-iOS-Unsigned-IPA
-          path: MochyMusic-iOS-Unsigned.ipa
+          name: HolySic-iOS-Unsigned-IPA
+          path: HolySic-iOS-Unsigned.ipa
           retention-days: 30

@@ -9,7 +9,7 @@ import { MusicSourceId, ResolvedStream, Track } from '../../types/music';
 
 export type ModuleId = 'monochrome' | 'jiosaavn' | 'innertube' | 'itunes';
 
-const STORAGE_KEY = '@mochy/source_memory_v1';
+const STORAGE_KEY = '@holysic/source_memory_v1';
 const MAX_TRACKS = 400;
 /** A module that failed this many times in a row is tried last for a while */
 const FAIL_STREAK_DEMOTE = 2;

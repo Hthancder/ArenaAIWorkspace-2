@@ -14,8 +14,8 @@ import {
 } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
-import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
 import { looksLikeLink } from '../../services/import/linkImport';
 import { MOOD_CATEGORIES } from '../../data/curatedCatalog';
 import { AlbumSummary, MusicSourceId, Track } from '../../types/music';
@@ -53,7 +53,7 @@ export const SearchScreen: React.FC = () => {
     openMusicLink,
     openImport,
     searchSuggestions,
-  } = useMochy();
+  } = useHolySic();
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkMsg, setLinkMsg] = useState<string | null>(null);
@@ -134,19 +134,19 @@ export const SearchScreen: React.FC = () => {
         <Text style={[styles.pageTitle, { fontFamily }]}>{t(prefs.language, 'search')}</Text>
 
         <View style={[styles.searchBox, { borderColor: palette.accent + '35' }]}>
-          <Ionicons name="search" size={19} color={MOCHY_COLORS.textSecondary} />
+          <Ionicons name="search" size={19} color={HOLYSIC_COLORS.textSecondary} />
           <TextInput
             value={query}
             onChangeText={setQuery}
             onSubmitEditing={() => addSearchHistory(query)}
             placeholder={t(prefs.language, 'searchPlaceholder')}
-            placeholderTextColor={MOCHY_COLORS.textMuted}
+            placeholderTextColor={HOLYSIC_COLORS.textMuted}
             returnKeyType="search"
             style={[styles.searchInput, { fontFamily }]}
           />
           {query.length > 0 && (
             <Pressable hitSlop={8} onPress={() => setQuery('')}>
-              <Ionicons name="close-circle" size={19} color={MOCHY_COLORS.textMuted} />
+              <Ionicons name="close-circle" size={19} color={HOLYSIC_COLORS.textMuted} />
             </Pressable>
           )}
         </View>
@@ -160,7 +160,7 @@ export const SearchScreen: React.FC = () => {
                 {vi ? 'Liên kết nhạc' : 'Music link'}
               </Text>
               <Text
-                style={{ color: linkMsg ? '#FCA5A5' : MOCHY_COLORS.textMuted, fontSize: 12 }}
+                style={{ color: linkMsg ? '#FCA5A5' : HOLYSIC_COLORS.textMuted, fontSize: 12 }}
                 numberOfLines={2}
               >
                 {linkMsg ||
@@ -194,7 +194,7 @@ export const SearchScreen: React.FC = () => {
                 ? `Tìm từng bài trong danh sách (${listCount})`
                 : `Search each song in the list (${listCount})`}
             </Text>
-            <Ionicons name="chevron-forward" size={16} color={MOCHY_COLORS.textMuted} />
+            <Ionicons name="chevron-forward" size={16} color={HOLYSIC_COLORS.textMuted} />
           </Pressable>
         )}
 
@@ -203,7 +203,7 @@ export const SearchScreen: React.FC = () => {
           <View style={styles.suggestBox}>
             {suggestions.map((s) => (
               <Pressable key={s} onPress={() => submitQuery(s)} style={styles.suggestRow}>
-                <Ionicons name="search-outline" size={14} color={MOCHY_COLORS.textMuted} />
+                <Ionicons name="search-outline" size={14} color={HOLYSIC_COLORS.textMuted} />
                 <Text numberOfLines={1} style={{ color: '#E4E4EC', flex: 1, fontSize: 14 }}>
                   {s}
                 </Text>
@@ -211,7 +211,7 @@ export const SearchScreen: React.FC = () => {
                   <Ionicons
                     name="arrow-up-outline"
                     size={14}
-                    color={MOCHY_COLORS.textMuted}
+                    color={HOLYSIC_COLORS.textMuted}
                     style={{ transform: [{ rotate: '-45deg' }] }}
                   />
                 </Pressable>
@@ -305,7 +305,7 @@ export const SearchScreen: React.FC = () => {
 
             {!loading && results.length === 0 && (
               <View style={styles.emptyWrap}>
-                <Ionicons name="musical-notes" size={36} color={MOCHY_COLORS.textMuted} />
+                <Ionicons name="musical-notes" size={36} color={HOLYSIC_COLORS.textMuted} />
                 <Text style={styles.emptyText}>
                   {vi
                     ? 'Không tìm thấy kết quả trên nguồn đã chọn. Hãy thử "All Sources"!'
@@ -324,7 +324,7 @@ export const SearchScreen: React.FC = () => {
                     {vi ? 'Tìm kiếm gần đây' : 'Recent Searches'}
                   </Text>
                   <Pressable onPress={clearSearchHistory}>
-                    <Text style={{ color: MOCHY_COLORS.textMuted, fontSize: 12.5 }}>
+                    <Text style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 12.5 }}>
                       {vi ? 'Xoá' : 'Clear'}
                     </Text>
                   </Pressable>
@@ -336,7 +336,11 @@ export const SearchScreen: React.FC = () => {
                       onPress={() => submitQuery(item)}
                       style={styles.historyChip}
                     >
-                      <Ionicons name="time-outline" size={14} color={MOCHY_COLORS.textSecondary} />
+                      <Ionicons
+                        name="time-outline"
+                        size={14}
+                        color={HOLYSIC_COLORS.textSecondary}
+                      />
                       <Text style={styles.historyChipText}>{item}</Text>
                     </Pressable>
                   ))}
@@ -494,7 +498,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 46,
     borderRadius: 16,
-    backgroundColor: MOCHY_COLORS.surfaceCard,
+    backgroundColor: HOLYSIC_COLORS.surfaceCard,
     borderWidth: 1,
     gap: 10,
   },
@@ -533,7 +537,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   loadingText: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 13,
   },
   subHeading: {
@@ -599,7 +603,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   artistTag: {
-    color: MOCHY_COLORS.textMuted,
+    color: HOLYSIC_COLORS.textMuted,
     fontSize: 11,
     marginTop: 2,
   },
@@ -639,7 +643,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   albumArtist: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
@@ -650,7 +654,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyText: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,

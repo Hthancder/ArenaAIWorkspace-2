@@ -1,10 +1,10 @@
-// iOS ChromeGlass & Blur Surface Wrapper — respects Mochy's enableBlur & pureBlack switches
+// iOS ChromeGlass & Blur Surface Wrapper — respects HolySic's enableBlur & pureBlack switches
 
 import { BlurView } from 'expo-blur';
 import React from 'react';
 import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { MOCHY_COLORS } from '../constants/theme';
-import { useMochy } from '../context/MochyContext';
+import { HOLYSIC_COLORS } from '../constants/theme';
+import { useHolySic } from '../context/HolySicContext';
 
 interface GlassSurfaceProps {
   children: React.ReactNode;
@@ -19,7 +19,7 @@ export const GlassSurface: React.FC<GlassSurfaceProps> = ({
   intensity = 55,
   tintColor,
 }) => {
-  const { prefs } = useMochy();
+  const { prefs } = useHolySic();
 
   if (!prefs.enableBlur) {
     return (
@@ -29,7 +29,7 @@ export const GlassSurface: React.FC<GlassSurfaceProps> = ({
           {
             backgroundColor: prefs.pureBlack
               ? '#09090D'
-              : tintColor || MOCHY_COLORS.surfaceElevated,
+              : tintColor || HOLYSIC_COLORS.surfaceElevated,
           },
           style,
         ]}
@@ -70,17 +70,17 @@ export const GlassSurface: React.FC<GlassSurfaceProps> = ({
 
 const styles = StyleSheet.create({
   solidFallback: {
-    borderColor: MOCHY_COLORS.glassBorder,
+    borderColor: HOLYSIC_COLORS.glassBorder,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   nativeBlur: {
-    borderColor: MOCHY_COLORS.glassBorder,
+    borderColor: HOLYSIC_COLORS.glassBorder,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   webBlur: {
-    borderColor: MOCHY_COLORS.glassBorder,
+    borderColor: HOLYSIC_COLORS.glassBorder,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     // @ts-ignore web backdropFilter

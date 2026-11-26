@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Mochy Music",
-    "slug": "mochy-music-ios",
+    "name": "HolySic",
+    "slug": "holysic",
     "version": "1.0.0-beta.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "scheme": "mochymusic",
+    "scheme": "holysic",
     "newArchEnabled": true,
     "backgroundColor": "#000000",
     "splash": {
@@ -16,7 +16,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mochyy.mochymusic.ios",
+      "bundleIdentifier": "com.holysic.music",
       "buildNumber": "1",
       "userInterfaceStyle": "dark",
       "infoPlist": {
@@ -30,22 +30,22 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
-        "NSMicrophoneUsageDescription": "Mochy Music only requests audio access when optional visualizer sampling is enabled."
+        "NSMicrophoneUsageDescription": "HolySic only requests audio access when optional visualizer sampling is enabled."
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#141417"
+        "backgroundColor": "#120A24"
       },
-      "package": "com.mochyy.mochymusic.rn"
+      "package": "com.holysic.music"
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro",
       "output": "single",
-      "name": "Mochy Music",
-      "shortName": "Mochy",
+      "name": "HolySic",
+      "shortName": "HolySic",
       "backgroundColor": "#000000",
       "themeColor": "#000000",
       "display": "standalone",
@@ -56,7 +56,7 @@
         "expo-audio",
         {
           "enableBackgroundPlayback": true,
-          "microphonePermission": "Allow Mochy Music to analyze audio for optional visualizers."
+          "microphonePermission": "Allow HolySic to analyze audio for optional visualizers."
         }
       ],
       [

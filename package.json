@@ -1,11 +1,11 @@
 {
-  "name": "mochy-music-ios",
+  "name": "holysic",
   "version": "1.0.0-beta.1",
-  "description": "iOS & Cross-Platform Port of Mochy Music (https://github.com/realidkroo/Mochy-Music) — sleek open-source music player with zero tracking and zero paywalls.",
+  "description": "HolySic — open-source iOS music player built on Mochy Music (https://github.com/realidkroo/Mochy-Music) with the best of Spotube, OpenSpot, Musike and Cog. Zero tracking, zero paywalls.",
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": "https://github.com/realidkroo/Mochy-Music"
+    "url": "https://github.com/Hthancder/ArenaAIWorkspace-2"
   },
   "main": "index.ts",
   "dependencies": {

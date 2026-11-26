@@ -1,34 +1,19 @@
-// Mochy Recap & Flippable Listener ID Card Modal — Inspired by RecapStory.kt & IdCardBack.kt
+// HolySic Recap & Flippable Listener ID Card Modal — Inspired by RecapStory.kt & IdCardBack.kt (Mochy Music)
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useMemo, useState } from 'react';
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MOCHY_COLORS } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
-import { MochyMarkIcon } from '../MochyIcons';
+import { HOLYSIC_COLORS } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
+import { HolySicMarkIcon } from '../HolySicIcons';
 
 export const RecapModal: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const {
-    isRecapOpen,
-    setIsRecapOpen,
-    history,
-    likedTracks,
-    downloads,
-    palette,
-    prefs,
-    haptic,
-  } = useMochy();
+  const { isRecapOpen, setIsRecapOpen, history, likedTracks, downloads, palette, prefs, haptic } =
+    useHolySic();
 
   const [flipped, setFlipped] = useState(false);
   const vi = prefs.language === 'vi';
@@ -38,7 +23,10 @@ export const RecapModal: React.FC = () => {
     const totalMinutes = Math.max(12, Math.round(totalSec / 60));
 
     const artistCounts = new Map<string, { count: number; art: string }>();
-    const songCounts = new Map<string, { title: string; artist: string; count: number; art: string }>();
+    const songCounts = new Map<
+      string,
+      { title: string; artist: string; count: number; art: string }
+    >();
 
     for (const ev of history) {
       const prevA = artistCounts.get(ev.track.artist);
@@ -60,9 +48,7 @@ export const RecapModal: React.FC = () => {
       .sort((a, b) => b[1].count - a[1].count)
       .slice(0, 4);
 
-    const topSongs = [...songCounts.values()]
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 4);
+    const topSongs = [...songCounts.values()].sort((a, b) => b.count - a.count).slice(0, 4);
 
     return { totalMinutes, topArtists, topSongs };
   }, [history]);
@@ -84,7 +70,7 @@ export const RecapModal: React.FC = () => {
         ]}
       >
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Mochy Recap & ID Card</Text>
+          <Text style={styles.headerTitle}>HolySic Recap & ID Card</Text>
           <Pressable onPress={() => setIsRecapOpen(false)} style={styles.closeBtn}>
             <Ionicons name="close" size={21} color="#FFFFFF" />
           </Pressable>
@@ -94,7 +80,7 @@ export const RecapModal: React.FC = () => {
           contentContainerStyle={{ padding: 18, paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}
         >
-          {/* Flippable Mochy Listener ID Card */}
+          {/* Flippable HolySic Listener ID Card */}
           <Pressable
             onPress={() => {
               haptic('selection');
@@ -115,8 +101,8 @@ export const RecapModal: React.FC = () => {
                 <>
                   <View style={styles.idCardTop}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <MochyMarkIcon size={24} color={palette.accent} filled />
-                      <Text style={styles.idIssuer}>MOCHY LISTENER PASS · iOS</Text>
+                      <HolySicMarkIcon size={24} color={palette.accent} filled />
+                      <Text style={styles.idIssuer}>HOLYSIC LISTENER PASS · iOS</Text>
                     </View>
                     <Text style={[styles.tapFlipHint, { color: palette.accent }]}>
                       {vi ? 'Chạm để lật ↻' : 'Tap to flip ↻'}
@@ -137,9 +123,7 @@ export const RecapModal: React.FC = () => {
                     </View>
                     <View>
                       <Text style={styles.idMetaKey}>OFFLINE</Text>
-                      <Text style={styles.idMetaVal}>
-                        {Object.keys(downloads).length} files
-                      </Text>
+                      <Text style={styles.idMetaVal}>{Object.keys(downloads).length} files</Text>
                     </View>
                     <View>
                       <Text style={styles.idMetaKey}>PLAYER</Text>
@@ -148,16 +132,16 @@ export const RecapModal: React.FC = () => {
                   </View>
                 </>
               ) : (
-                /* Back of Mochy ID Card (IdCardBack.kt tribute) */
+                /* Back of the HolySic ID Card (IdCardBack.kt tribute, Mochy Music) */
                 <View style={{ justifyContent: 'space-between', flex: 1 }}>
                   <View style={styles.magneticStrip} />
                   <View style={{ paddingVertical: 10 }}>
                     <Text style={styles.backSerial}>
-                      SERIAL NO · MCHY-IOS-2026-{String(history.length + 108).padStart(4, '0')}
+                      SERIAL NO · HLYS-IOS-2026-{String(history.length + 108).padStart(4, '0')}
                     </Text>
                     <Text style={styles.backTerms}>
-                      Issued under GNU GPL v3.0 · Zero Telemetry · Zero Paywalls · Powered by
-                      Mochy Music Open Ecosystem (github.com/realidkroo/Mochy-Music)
+                      Issued by HolySic under GNU GPL v3.0 · Zero Telemetry · Zero Paywalls ·
+                      Powered by Mochy Music Open Ecosystem (github.com/realidkroo/Mochy-Music)
                     </Text>
                   </View>
                   <View style={styles.barcodeRow}>
@@ -184,8 +168,8 @@ export const RecapModal: React.FC = () => {
           {stats.topSongs.length === 0 ? (
             <Text style={styles.placeholder}>
               {vi
-                ? 'Hãy phát vài bài nhạc để Mochy bắt đầu dựng biểu đồ Recap cho riêng bạn!'
-                : 'Play a few tracks and Mochy will build your personal chart here!'}
+                ? 'Hãy phát vài bài nhạc để HolySic bắt đầu dựng biểu đồ Recap cho riêng bạn!'
+                : 'Play a few tracks and HolySic will build your personal chart here!'}
             </Text>
           ) : (
             stats.topSongs.map((s, idx) => (
@@ -208,15 +192,14 @@ export const RecapModal: React.FC = () => {
           {/* Top Artists */}
           {stats.topArtists.length > 0 && (
             <>
-              <Text style={styles.secTitle}>
-                {vi ? 'Nghệ sĩ đồng hành' : 'Top Artists'}
-              </Text>
+              <Text style={styles.secTitle}>{vi ? 'Nghệ sĩ đồng hành' : 'Top Artists'}</Text>
               {stats.topArtists.map(([artistName, info], idx) => (
                 <View key={artistName} style={styles.rankRow}>
-                  <Text style={[styles.rankNum, { color: palette.accent }]}>
-                    #{idx + 1}
-                  </Text>
-                  <ArtworkImage source={{ uri: info.art }} style={[styles.rankArt, { borderRadius: 22 }]} />
+                  <Text style={[styles.rankNum, { color: palette.accent }]}>#{idx + 1}</Text>
+                  <ArtworkImage
+                    source={{ uri: info.art }}
+                    style={[styles.rankArt, { borderRadius: 22 }]}
+                  />
                   <Text style={[styles.rankTitle, { flex: 1 }]}>{artistName}</Text>
                   <Text style={styles.rankCount}>{info.count} plays</Text>
                 </View>
@@ -321,7 +304,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   backTerms: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 11.5,
     lineHeight: 17,
     marginTop: 6,
@@ -340,7 +323,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   placeholder: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -368,12 +351,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   rankSub: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12.5,
     marginTop: 2,
   },
   rankCount: {
-    color: MOCHY_COLORS.textMuted,
+    color: HOLYSIC_COLORS.textMuted,
     fontSize: 12.5,
     fontWeight: '700',
   },

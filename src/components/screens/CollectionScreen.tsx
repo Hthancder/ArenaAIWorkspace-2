@@ -16,8 +16,8 @@ import {
 import { ArtworkImage } from '../ArtworkImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '../../constants/i18n';
-import { buildArtworkPalette, MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
+import { buildArtworkPalette, HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
 import { AlbumSummary, ArtistSummary, Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
 
@@ -45,7 +45,7 @@ export const CollectionModal: React.FC = () => {
     searchTracks,
     showToast,
     createPlaylist,
-  } = useMochy();
+  } = useHolySic();
 
   const [loading, setLoading] = useState(false);
   // Multi-select (Musike): pick songs, then play / like / queue / add to playlist / remove
@@ -351,19 +351,19 @@ export const CollectionModal: React.FC = () => {
           {canFilter && (
             <View style={styles.filterRow}>
               <View style={styles.filterBox}>
-                <Ionicons name="search" size={15} color={MOCHY_COLORS.textMuted} />
+                <Ionicons name="search" size={15} color={HOLYSIC_COLORS.textMuted} />
                 <TextInput
                   value={filterQ}
                   onChangeText={setFilterQ}
                   placeholder={
                     vi ? `Lọc ${allTracks.length} bài…` : `Filter ${allTracks.length} songs…`
                   }
-                  placeholderTextColor={MOCHY_COLORS.textMuted}
+                  placeholderTextColor={HOLYSIC_COLORS.textMuted}
                   style={styles.filterInput}
                 />
                 {filterQ.length > 0 && (
                   <Pressable hitSlop={8} onPress={() => setFilterQ('')}>
-                    <Ionicons name="close-circle" size={16} color={MOCHY_COLORS.textMuted} />
+                    <Ionicons name="close-circle" size={16} color={HOLYSIC_COLORS.textMuted} />
                   </Pressable>
                 )}
               </View>
@@ -527,14 +527,17 @@ export const CollectionModal: React.FC = () => {
                   <Ionicons
                     name={selected[song.id] ? 'checkmark-circle' : 'ellipse-outline'}
                     size={22}
-                    color={selected[song.id] ? headerPalette.accent : MOCHY_COLORS.textMuted}
+                    color={selected[song.id] ? headerPalette.accent : HOLYSIC_COLORS.textMuted}
                   />
                   <ArtworkImage source={{ uri: song.artworkUrl }} style={styles.selArt} />
                   <View style={{ flex: 1 }}>
                     <Text numberOfLines={1} style={{ color: '#FFF', fontWeight: '700' }}>
                       {song.title}
                     </Text>
-                    <Text numberOfLines={1} style={{ color: MOCHY_COLORS.textMuted, fontSize: 12 }}>
+                    <Text
+                      numberOfLines={1}
+                      style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 12 }}
+                    >
                       {song.artist}
                     </Text>
                   </View>
@@ -597,7 +600,7 @@ export const CollectionModal: React.FC = () => {
                         {alb.title}
                       </Text>
                       {alb.year && (
-                        <Text style={{ color: MOCHY_COLORS.textMuted, fontSize: 12 }}>
+                        <Text style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 12 }}>
                           {alb.year}
                         </Text>
                       )}
@@ -644,7 +647,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
   sortText: { color: '#FFF', fontSize: 12.5, fontWeight: '700' },
-  filterEmpty: { color: MOCHY_COLORS.textMuted, textAlign: 'center', marginVertical: 18 },
+  filterEmpty: { color: HOLYSIC_COLORS.textMuted, textAlign: 'center', marginVertical: 18 },
   root: {
     flex: 1,
   },
@@ -685,7 +688,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   heroSub: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 13.5,
     marginTop: 4,
     textAlign: 'center',

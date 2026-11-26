@@ -1,11 +1,11 @@
-// Floating Glass MiniPlayer with Mochy's MiniLyricsTicker & Artwork Tonal Progress
+// Floating Glass MiniPlayer with HolySic's MiniLyricsTicker & Artwork Tonal Progress
 
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from './ArtworkImage';
-import { MOCHY_COLORS, resolveFontFamily } from '../constants/theme';
-import { useMochy } from '../context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../constants/theme';
+import { useHolySic } from '../context/HolySicContext';
 import { GlassSurface } from './GlassSurface';
 import { useHoldSeek } from '../hooks/useHoldSeek';
 
@@ -26,11 +26,11 @@ export const MiniPlayer: React.FC = () => {
     palette,
     prefs,
     seekBy,
-  } = useMochy();
+  } = useHolySic();
   const ff = useHoldSeek(seekBy, 1);
 
   if (!currentTrack) return null;
-  // OpenSpot-style floating capsule vs. Mochy card
+  // OpenSpot-style floating capsule vs. HolySic card
   const capsule = prefs.miniPlayerStyle === 'capsule';
 
   const progress = durationSec > 0 ? Math.min(1, Math.max(0, positionSec / durationSec)) : 0;
@@ -93,7 +93,7 @@ export const MiniPlayer: React.FC = () => {
             <Ionicons
               name={liked ? 'heart' : 'heart-outline'}
               size={21}
-              color={liked ? MOCHY_COLORS.roseLike : '#FFFFFF'}
+              color={liked ? HOLYSIC_COLORS.roseLike : '#FFFFFF'}
             />
           </Pressable>
 
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   artist: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12.5,
     marginTop: 2,
   },

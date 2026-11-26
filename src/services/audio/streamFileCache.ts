@@ -9,7 +9,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
-const DIR_NAME = 'mochy-stream-cache';
+const DIR_NAME = 'holysic-stream-cache';
 const MAX_FILES = 40;
 const MAX_BYTES = 900 * 1024 * 1024;
 

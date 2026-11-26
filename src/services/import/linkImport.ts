@@ -1,7 +1,7 @@
 // Link & list import — merges three ideas without duplicating them:
 //   • OpenSpot Music: "Import music directly from any public Spotify playlist URL"
 //   • Musike: "Paste a YouTube link to play it right away" and "Search a list" (comma separated)
-//   • Mochy: the existing text playlist import
+//   • HolySic: the existing text playlist import
 // Spotify is read from its public embed page (no account, no third-party transfer service);
 // YouTube / YouTube Music playlists through the InnerTube browse API.
 

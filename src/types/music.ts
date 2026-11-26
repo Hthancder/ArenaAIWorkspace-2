@@ -1,4 +1,4 @@
-// Core domain types for Mochy Music iOS (ported from Mochy Music by realidkroo)
+// Core domain types for HolySic (ported from Mochy Music by realidkroo)
 
 export type MusicSourceId =
   'innertube' | 'monochrome' | 'jiosaavn' | 'itunes' | 'offline' | 'local' | 'synth';

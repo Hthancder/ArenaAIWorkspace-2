@@ -1,4 +1,4 @@
-// Multi-Module Priority Stream Resolver — inspired by Mochy Music's SourceModule pipeline
+// Multi-Module Priority Stream Resolver — inspired by HolySic's SourceModule pipeline
 //
 // Produces an ordered queue of playable stream candidates. Every enabled module starts resolving
 // concurrently and candidates are handed out in priority order — with three speed-ups so a song
@@ -10,7 +10,7 @@
 //   3. On iOS, Monochrome FLAC (which needs a one-time download) waits behind instant-start
 //      sources unless it is already cached. Apple's 30 s previews are only used when allowed.
 
-import { MochyPreferences } from '../../constants/preferences';
+import { HolySicPreferences } from '../../constants/preferences';
 import { getOrCreateSynthWavUri } from '../../data/curatedCatalog';
 import { DiagnosticStep, ModuleServerConfig, ResolvedStream, Track } from '../../types/music';
 import { TrackQueryInput } from '../trackMatcher';
@@ -34,7 +34,7 @@ export interface StreamCandidateQueue {
 
 export function createStreamCandidateQueue(
   track: Track,
-  prefs: MochyPreferences,
+  prefs: HolySicPreferences,
   monochromeServers: ModuleServerConfig[],
   offlineUri?: string
 ): StreamCandidateQueue {
@@ -65,7 +65,7 @@ export function createStreamCandidateQueue(
     );
   }
 
-  // 2. Built-in Mochy Sound Lab showcase track (synthesized locally, no network)
+  // 2. Built-in HolySic Sound Lab showcase track (synthesized locally, no network)
   if (track.source === 'synth' || track.synthPreset) {
     producers.push(
       Promise.resolve().then(() => {
@@ -75,7 +75,7 @@ export function createStreamCandidateQueue(
           track.durationSec || 32
         );
         pushStep({
-          module: 'Mochy Sound Lab',
+          module: 'HolySic Sound Lab',
           step: 'Synthesize stereo PCM',
           ok: true,
           detail: 'PCM 16-bit · 22.05 kHz stereo',
@@ -85,7 +85,7 @@ export function createStreamCandidateQueue(
           {
             url: wavUri,
             source: 'synth',
-            sourceLabel: 'Mochy Sound Lab',
+            sourceLabel: 'HolySic Sound Lab',
             qualityLabel: 'PCM 16-bit · Stereo',
             codec: 'WAV',
           } as Candidate,
@@ -355,7 +355,7 @@ interface Slot {
 function makeQueue(
   producers: Promise<Candidate[]>[],
   diagnostics: DiagnosticStep[],
-  prefs: Pick<MochyPreferences, 'preferInstantStart'>
+  prefs: Pick<HolySicPreferences, 'preferInstantStart'>
 ): StreamCandidateQueue {
   const slots: Slot[] = producers.map((p) => {
     const slot: Slot = { done: false, value: [], promise: Promise.resolve() };
@@ -432,7 +432,7 @@ function makeQueue(
  */
 export async function resolvePlayableStream(
   track: Track,
-  prefs: MochyPreferences,
+  prefs: HolySicPreferences,
   monochromeServers: ModuleServerConfig[],
   offlineUri?: string
 ): Promise<ResolvedStream | null> {

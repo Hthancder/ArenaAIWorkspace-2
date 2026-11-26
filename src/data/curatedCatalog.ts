@@ -1,4 +1,4 @@
-// Curated seed catalog, Moods & Genres, and AutoEQ Headphone Presets for Mochy Music iOS
+// Curated seed catalog, Moods & Genres, and AutoEQ Headphone Presets for HolySic iOS
 
 import { File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
@@ -14,14 +14,70 @@ export interface MoodCategory {
 }
 
 export const MOOD_CATEGORIES: MoodCategory[] = [
-  { id: 'vpop', labelVi: 'V-Pop Thịnh Hành', labelEn: 'V-Pop Hits', query: 'V-Pop hits Sơn Tùng tlinh Vũ', colors: ['#7C3AED', '#2563EB'], icon: 'sparkles' },
-  { id: 'chill', labelVi: 'Thư Giãn & Lo-Fi', labelEn: 'Chill & Lo-Fi', query: 'lofi chill beats study', colors: ['#0F766E', '#1E3A8A'], icon: 'moon' },
-  { id: 'indie-vn', labelVi: 'Indie Việt', labelEn: 'Vietnam Indie', query: 'Ngọt Cá Hồi Hoang Vũ Đen Vâu', colors: ['#B45309', '#7C2D12'], icon: 'musical-notes' },
-  { id: 'rnb', labelVi: 'R&B / Soul Đêm Khuya', labelEn: 'Late Night R&B', query: 'The Weeknd Joji SZA Frank Ocean', colors: ['#9D174D', '#311042'], icon: 'heart' },
-  { id: 'focus', labelVi: 'Tập Trung Sâu', labelEn: 'Deep Focus', query: 'ambient piano focus Hans Zimmer', colors: ['#1D4ED8', '#0F172A'], icon: 'planet' },
-  { id: 'jpop', labelVi: 'J-Pop / Anime', labelEn: 'J-Pop & Anime', query: 'YOASOBI Kenshi Yonezu Ado Fujii Kaze', colors: ['#DB2777', '#4F46E5'], icon: 'flash' },
-  { id: 'kpop', labelVi: 'K-Pop Mới Nhất', labelEn: 'K-Pop Radar', query: 'NewJeans aespa Jennie BTS', colors: ['#059669', '#0284C7'], icon: 'star' },
-  { id: 'electronic', labelVi: 'Synthwave & EDM', labelEn: 'Synth & Electronic', query: 'Daft Punk Fred again Porter Robinson', colors: ['#6D28D9', '#BE185D'], icon: 'pulse' },
+  {
+    id: 'vpop',
+    labelVi: 'V-Pop Thịnh Hành',
+    labelEn: 'V-Pop Hits',
+    query: 'V-Pop hits Sơn Tùng tlinh Vũ',
+    colors: ['#7C3AED', '#2563EB'],
+    icon: 'sparkles',
+  },
+  {
+    id: 'chill',
+    labelVi: 'Thư Giãn & Lo-Fi',
+    labelEn: 'Chill & Lo-Fi',
+    query: 'lofi chill beats study',
+    colors: ['#0F766E', '#1E3A8A'],
+    icon: 'moon',
+  },
+  {
+    id: 'indie-vn',
+    labelVi: 'Indie Việt',
+    labelEn: 'Vietnam Indie',
+    query: 'Ngọt Cá Hồi Hoang Vũ Đen Vâu',
+    colors: ['#B45309', '#7C2D12'],
+    icon: 'musical-notes',
+  },
+  {
+    id: 'rnb',
+    labelVi: 'R&B / Soul Đêm Khuya',
+    labelEn: 'Late Night R&B',
+    query: 'The Weeknd Joji SZA Frank Ocean',
+    colors: ['#9D174D', '#311042'],
+    icon: 'heart',
+  },
+  {
+    id: 'focus',
+    labelVi: 'Tập Trung Sâu',
+    labelEn: 'Deep Focus',
+    query: 'ambient piano focus Hans Zimmer',
+    colors: ['#1D4ED8', '#0F172A'],
+    icon: 'planet',
+  },
+  {
+    id: 'jpop',
+    labelVi: 'J-Pop / Anime',
+    labelEn: 'J-Pop & Anime',
+    query: 'YOASOBI Kenshi Yonezu Ado Fujii Kaze',
+    colors: ['#DB2777', '#4F46E5'],
+    icon: 'flash',
+  },
+  {
+    id: 'kpop',
+    labelVi: 'K-Pop Mới Nhất',
+    labelEn: 'K-Pop Radar',
+    query: 'NewJeans aespa Jennie BTS',
+    colors: ['#059669', '#0284C7'],
+    icon: 'star',
+  },
+  {
+    id: 'electronic',
+    labelVi: 'Synthwave & EDM',
+    labelEn: 'Synth & Electronic',
+    query: 'Daft Punk Fred again Porter Robinson',
+    colors: ['#6D28D9', '#BE185D'],
+    icon: 'pulse',
+  },
 ];
 
 export const DEFAULT_EQ_BANDS: EqualizerBand[] = [
@@ -45,16 +101,66 @@ export interface AutoEqPreset {
 }
 
 export const AUTO_EQ_PRESETS: AutoEqPreset[] = [
-  { id: 'flat', name: 'Flat (Studio Bypass)', category: 'Standard', gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
-  { id: 'bass_boost', name: 'Mochy Sub-Bass Punch', category: 'Standard', gains: [6.5, 5.5, 3.8, 1.5, 0, -0.5, 0.5, 1.5, 2.0, 2.0] },
-  { id: 'vocal_glow', name: 'Vocal & Lyrics Clarity', category: 'Standard', gains: [-1.5, -1.0, 0, 1.5, 3.2, 4.2, 3.5, 2.0, 1.0, 0.5] },
-  { id: 'lofi_warm', name: 'Vinyl Warmth', category: 'Standard', gains: [3.0, 3.5, 2.5, 1.2, 0.5, -0.8, -1.5, -2.5, -3.5, -4.5] },
-  { id: 'v_shape', name: 'Harman Dynamic V', category: 'Standard', gains: [4.8, 4.0, 1.8, -0.8, -1.5, -0.5, 1.8, 3.5, 4.2, 3.8] },
-  { id: 'airpods_pro_2', name: 'AirPods Pro (2nd Gen) · AutoEQ', category: 'AutoEQ Apple', gains: [1.5, 1.0, -0.5, -1.2, -0.4, 0.8, 1.9, 2.4, 1.2, 2.5] },
-  { id: 'airpods_max', name: 'AirPods Max · AutoEQ', category: 'AutoEQ Apple', gains: [0.8, 0.2, -1.2, -1.5, 0.4, 1.8, 3.1, 2.2, 0.5, 1.4] },
-  { id: 'earpods', name: 'Apple EarPods (USB-C/Lightning) · AutoEQ', category: 'AutoEQ Apple', gains: [5.8, 3.4, -1.5, -2.6, -0.8, 0.5, 1.2, -1.4, 1.6, 3.2] },
-  { id: 'wh1000xm5', name: 'Sony WH-1000XM5 · AutoEQ', category: 'AutoEQ Audiophile', gains: [-2.8, -4.2, -3.6, -1.4, 0.8, 1.6, 2.8, 2.2, 1.4, 2.0] },
-  { id: 'hd600', name: 'Sennheiser HD 600 · AutoEQ', category: 'AutoEQ Audiophile', gains: [5.5, 3.2, 0.8, -0.6, -0.4, -0.8, -1.2, 0.6, 1.4, 2.2] },
+  {
+    id: 'flat',
+    name: 'Flat (Studio Bypass)',
+    category: 'Standard',
+    gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  },
+  {
+    id: 'bass_boost',
+    name: 'HolySic Sub-Bass Punch',
+    category: 'Standard',
+    gains: [6.5, 5.5, 3.8, 1.5, 0, -0.5, 0.5, 1.5, 2.0, 2.0],
+  },
+  {
+    id: 'vocal_glow',
+    name: 'Vocal & Lyrics Clarity',
+    category: 'Standard',
+    gains: [-1.5, -1.0, 0, 1.5, 3.2, 4.2, 3.5, 2.0, 1.0, 0.5],
+  },
+  {
+    id: 'lofi_warm',
+    name: 'Vinyl Warmth',
+    category: 'Standard',
+    gains: [3.0, 3.5, 2.5, 1.2, 0.5, -0.8, -1.5, -2.5, -3.5, -4.5],
+  },
+  {
+    id: 'v_shape',
+    name: 'Harman Dynamic V',
+    category: 'Standard',
+    gains: [4.8, 4.0, 1.8, -0.8, -1.5, -0.5, 1.8, 3.5, 4.2, 3.8],
+  },
+  {
+    id: 'airpods_pro_2',
+    name: 'AirPods Pro (2nd Gen) · AutoEQ',
+    category: 'AutoEQ Apple',
+    gains: [1.5, 1.0, -0.5, -1.2, -0.4, 0.8, 1.9, 2.4, 1.2, 2.5],
+  },
+  {
+    id: 'airpods_max',
+    name: 'AirPods Max · AutoEQ',
+    category: 'AutoEQ Apple',
+    gains: [0.8, 0.2, -1.2, -1.5, 0.4, 1.8, 3.1, 2.2, 0.5, 1.4],
+  },
+  {
+    id: 'earpods',
+    name: 'Apple EarPods (USB-C/Lightning) · AutoEQ',
+    category: 'AutoEQ Apple',
+    gains: [5.8, 3.4, -1.5, -2.6, -0.8, 0.5, 1.2, -1.4, 1.6, 3.2],
+  },
+  {
+    id: 'wh1000xm5',
+    name: 'Sony WH-1000XM5 · AutoEQ',
+    category: 'AutoEQ Audiophile',
+    gains: [-2.8, -4.2, -3.6, -1.4, 0.8, 1.6, 2.8, 2.2, 1.4, 2.0],
+  },
+  {
+    id: 'hd600',
+    name: 'Sennheiser HD 600 · AutoEQ',
+    category: 'AutoEQ Audiophile',
+    gains: [5.5, 3.2, 0.8, -0.6, -0.4, -0.8, -1.2, 0.6, 1.4, 2.2],
+  },
 ];
 
 function makeCoverDataSvg(title: string, sub: string, c1: string, c2: string): string {
@@ -77,17 +183,17 @@ function makeCoverDataSvg(title: string, sub: string, c1: string, c2: string): s
 }
 
 /**
- * Built-in Mochy Acoustic Lab Showcase tracks — playable 100% offline with zero network
+ * Built-in HolySic Acoustic Lab Showcase tracks — playable 100% offline with zero network
  * (via synthesized stereo WAV buffer) while live charts & search populate from real APIs!
  */
 export const OFFLINE_SHOWCASE_TRACKS: Track[] = [
   {
-    id: 'mochy-synth-midnight-hanoi',
+    id: 'holysic-synth-midnight-hanoi',
     title: 'Midnight Over West Lake',
-    artist: 'Mochy Sound Lab',
-    artists: ['Mochy Sound Lab'],
-    album: 'Mochy Sessions Vol. 1',
-    artworkUrl: makeCoverDataSvg('Midnight Over', 'West Lake · Mochy Lab', '#4F46E5', '#0F172A'),
+    artist: 'HolySic Sound Lab',
+    artists: ['HolySic Sound Lab'],
+    album: 'HolySic Sessions Vol. 1',
+    artworkUrl: makeCoverDataSvg('Midnight Over', 'West Lake · HolySic Lab', '#4F46E5', '#0F172A'),
     durationSec: 32,
     source: 'synth',
     synthPreset: 'dreamy',
@@ -96,12 +202,12 @@ export const OFFLINE_SHOWCASE_TRACKS: Track[] = [
     releaseYear: 2026,
   },
   {
-    id: 'mochy-synth-neon-rain',
+    id: 'holysic-synth-neon-rain',
     title: 'Neon Rain in Shibuya',
-    artist: 'Mochy Sound Lab',
-    artists: ['Mochy Sound Lab'],
-    album: 'Mochy Sessions Vol. 1',
-    artworkUrl: makeCoverDataSvg('Neon Rain', 'City Pop Synth · Mochy', '#DB2777', '#311042'),
+    artist: 'HolySic Sound Lab',
+    artists: ['HolySic Sound Lab'],
+    album: 'HolySic Sessions Vol. 1',
+    artworkUrl: makeCoverDataSvg('Neon Rain', 'City Pop Synth · HolySic', '#DB2777', '#311042'),
     durationSec: 32,
     source: 'synth',
     synthPreset: 'citypop',
@@ -110,12 +216,12 @@ export const OFFLINE_SHOWCASE_TRACKS: Track[] = [
     releaseYear: 2026,
   },
   {
-    id: 'mochy-synth-velvet-sunrise',
+    id: 'holysic-synth-velvet-sunrise',
     title: 'Velvet Espresso',
-    artist: 'Mochy Sound Lab',
-    artists: ['Mochy Sound Lab'],
-    album: 'Mochy Sessions Vol. 1',
-    artworkUrl: makeCoverDataSvg('Velvet Espresso', 'Warm Rhodes · Mochy', '#D97706', '#451A03'),
+    artist: 'HolySic Sound Lab',
+    artists: ['HolySic Sound Lab'],
+    album: 'HolySic Sessions Vol. 1',
+    artworkUrl: makeCoverDataSvg('Velvet Espresso', 'Warm Rhodes · HolySic', '#D97706', '#451A03'),
     durationSec: 32,
     source: 'synth',
     synthPreset: 'warm',
@@ -126,7 +232,7 @@ export const OFFLINE_SHOWCASE_TRACKS: Track[] = [
 ];
 
 export const BUILTIN_LYRICS_MAP: Record<string, LyricLine[]> = {
-  'mochy-synth-midnight-hanoi': [
+  'holysic-synth-midnight-hanoi': [
     {
       id: 'l1',
       startSec: 0.5,
@@ -170,7 +276,7 @@ export const BUILTIN_LYRICS_MAP: Record<string, LyricLine[]> = {
       id: 'l4',
       startSec: 21.0,
       endSec: 27.5,
-      text: '(Mochy Music keeps spinning into the dawn)',
+      text: '(HolySic keeps spinning into the dawn)',
       isBackground: true,
     },
     {
@@ -195,7 +301,7 @@ export function getOrCreateSynthWavUri(preset = 'dreamy', durationSec = 32): str
 
   if (Platform.OS !== 'web') {
     try {
-      const file = new File(Paths.cache, `mochy-synth-${cacheKey}-v2.wav`);
+      const file = new File(Paths.cache, `holysic-synth-${cacheKey}-v2.wav`);
       if (!file.exists || (file.size ?? 0) < 1024) {
         if (file.exists) file.delete();
         file.create();
@@ -215,7 +321,6 @@ export function getOrCreateSynthWavUri(preset = 'dreamy', durationSec = 32): str
 }
 
 function buildSynthWavBytes(preset: string, durationSec: number): Uint8Array {
-
   const sampleRate = 22050;
   const numChannels = 2;
   const totalSamples = sampleRate * durationSec;
@@ -244,15 +349,15 @@ function buildSynthWavBytes(preset: string, durationSec: number): Uint8Array {
   const progressions: Record<string, number[][]> = {
     dreamy: [
       [261.63, 329.63, 392.0, 493.88], // Cmaj7
-      [220.0, 261.63, 329.63, 392.0],  // Am7
+      [220.0, 261.63, 329.63, 392.0], // Am7
       [174.61, 220.0, 261.63, 349.23], // Fmaj7
-      [196.0, 246.94, 293.66, 392.0],  // G6
+      [196.0, 246.94, 293.66, 392.0], // G6
     ],
     citypop: [
       [293.66, 349.23, 440.0, 523.25], // Dm7
-      [196.0, 246.94, 329.63, 392.0],  // G13
+      [196.0, 246.94, 329.63, 392.0], // G13
       [261.63, 329.63, 392.0, 493.88], // Cmaj7
-      [220.0, 277.18, 329.63, 415.3],  // A7maj
+      [220.0, 277.18, 329.63, 415.3], // A7maj
     ],
     warm: [
       [233.08, 293.66, 349.23, 440.0], // Bbmaj7
@@ -278,8 +383,9 @@ function buildSynthWavBytes(preset: string, durationSec: number): Uint8Array {
     for (let n = 0; n < chord.length; n++) {
       const f = chord[n];
       const vibrato = 1 + 0.0018 * Math.sin(2 * Math.PI * 4.2 * t + n);
-      const s = Math.sin(2 * Math.PI * f * vibrato * t) * 0.16 +
-                Math.sin(2 * Math.PI * f * 2 * t) * 0.03 * Math.exp(-barPhase * 3);
+      const s =
+        Math.sin(2 * Math.PI * f * vibrato * t) * 0.16 +
+        Math.sin(2 * Math.PI * f * 2 * t) * 0.03 * Math.exp(-barPhase * 3);
       padL += s * (n % 2 === 0 ? 1.08 : 0.88);
       padR += s * (n % 2 === 1 ? 1.08 : 0.88);
     }
@@ -319,9 +425,9 @@ function bytesToBase64(bytes: Uint8Array): string {
     const b3 = i + 2 < bytes.length ? bytes[i + 2] : 0;
     chunks.push(
       chars[b1 >> 2] +
-      chars[((b1 & 3) << 4) | (b2 >> 4)] +
-      (i + 1 < bytes.length ? chars[((b2 & 15) << 2) | (b3 >> 6)] : '=') +
-      (i + 2 < bytes.length ? chars[b3 & 63] : '=')
+        chars[((b1 & 3) << 4) | (b2 >> 4)] +
+        (i + 1 < bytes.length ? chars[((b2 & 15) << 2) | (b3 >> 6)] : '=') +
+        (i + 2 < bytes.length ? chars[b3 & 63] : '=')
     );
   }
   return chunks.join('');

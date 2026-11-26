@@ -1,11 +1,11 @@
-// Up Next — Mochy's queue with the editing tools of Spotube & Musike:
+// Up Next — HolySic's queue with the editing tools of Spotube & Musike:
 // tap to jump, move up/down, remove, clear everything after the current song, save as playlist.
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
 import { ArtworkImage } from '../ArtworkImage';
 
 const ROW_H = 60;
@@ -23,7 +23,7 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     showToast,
     palette,
     prefs,
-  } = useMochy();
+  } = useHolySic();
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const scrollRef = useRef<ScrollView | null>(null);
@@ -142,7 +142,7 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
                 style={[styles.iconBtn, current && { opacity: 0.25 }]}
                 accessibilityLabel={vi ? 'Xoá khỏi hàng chờ' : 'Remove'}
               >
-                <Ionicons name="close" size={17} color={MOCHY_COLORS.textSecondary} />
+                <Ionicons name="close" size={17} color={HOLYSIC_COLORS.textSecondary} />
               </Pressable>
             </Pressable>
           );
@@ -156,7 +156,7 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   title: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
-  sub: { color: MOCHY_COLORS.textMuted, fontSize: 12, marginTop: 2 },
+  sub: { color: HOLYSIC_COLORS.textMuted, fontSize: 12, marginTop: 2 },
   tools: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   tool: {
     flexDirection: 'row',
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rowTitle: { color: '#FFF', fontSize: 14.5, fontWeight: '700' },
-  rowArtist: { color: MOCHY_COLORS.textSecondary, fontSize: 12.5, marginTop: 2 },
+  rowArtist: { color: HOLYSIC_COLORS.textSecondary, fontSize: 12.5, marginTop: 2 },
   iconBtn: {
     width: 30,
     height: 30,

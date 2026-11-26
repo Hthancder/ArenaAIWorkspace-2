@@ -1,4 +1,4 @@
-// Mochy Music Home Screen — Greeting, Mood Chips, Quick Picks, Mix It, VN/Global Charts, Albums & Recap Banner
+// HolySic Home Screen — Greeting, Mood Chips, Quick Picks, Mix It, VN/Global Charts, Albums & Recap Banner
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,13 +6,13 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
-import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
 import { MOOD_CATEGORIES } from '../../data/curatedCatalog';
 import { Track } from '../../types/music';
 import { CHART_COUNTRIES, CHART_GENRES } from '../../services/discovery/chartsService';
 import { HomeSectionId } from '../../constants/preferences';
-import { MochyMarkIcon } from '../MochyIcons';
+import { HolySicMarkIcon } from '../HolySicIcons';
 import { TrackRow } from '../TrackRow';
 
 export const HomeScreen: React.FC = () => {
@@ -38,7 +38,7 @@ export const HomeScreen: React.FC = () => {
     importLocalFiles,
     likedTracks,
     downloads,
-  } = useMochy();
+  } = useHolySic();
 
   const shown = (id: HomeSectionId) => !prefs.hiddenHomeSections.includes(id);
   const country = CHART_COUNTRIES.find((c) => c.code === prefs.chartCountry) || CHART_COUNTRIES[0];
@@ -85,7 +85,7 @@ export const HomeScreen: React.FC = () => {
     setLoadingMood(false);
   };
 
-  // Chunk Quick Picks into columns of 3 for Mochy's horizontal swipe grid
+  // Chunk Quick Picks into columns of 3 for HolySic's horizontal swipe grid
   const activePicks = moodTracks && moodTracks.length > 0 ? moodTracks : quickPicks;
   const pickColumns: Track[][] = [];
   for (let i = 0; i < Math.min(activePicks.length, 12); i += 3) {
@@ -102,11 +102,11 @@ export const HomeScreen: React.FC = () => {
       <View style={styles.headerRow}>
         <View style={styles.brandLeft}>
           <View style={[styles.logoBadge, { backgroundColor: palette.container }]}>
-            <MochyMarkIcon size={22} color={palette.accent} filled />
+            <HolySicMarkIcon size={22} color={palette.accent} filled />
           </View>
           <View>
             <Text style={[styles.greetingSub, { fontFamily }]}>{greeting}</Text>
-            <Text style={[styles.brandTitle, { fontFamily }]}>Mochy Music</Text>
+            <Text style={[styles.brandTitle, { fontFamily }]}>HolySic</Text>
           </View>
         </View>
 
@@ -166,14 +166,14 @@ export const HomeScreen: React.FC = () => {
           {[
             {
               icon: 'heart',
-              tint: MOCHY_COLORS.roseLike,
+              tint: HOLYSIC_COLORS.roseLike,
               label: vi ? 'Đã thích' : 'Liked',
               sub: String(likedTracks.length),
               onPress: () => openCollection({ kind: 'liked' }),
             },
             {
               icon: 'arrow-down-circle',
-              tint: MOCHY_COLORS.flacEmerald,
+              tint: HOLYSIC_COLORS.flacEmerald,
               label: vi ? 'Tải xuống' : 'Downloads',
               sub: String(Object.keys(downloads).length),
               onPress: () => openCollection({ kind: 'offline' }),
@@ -377,7 +377,7 @@ export const HomeScreen: React.FC = () => {
                   ? `Thịnh hành ${country.flag} ${country.vi}`
                   : `Trending ${country.flag} ${country.en}`}
               </Text>
-              <Ionicons name="chevron-down" size={15} color={MOCHY_COLORS.textMuted} />
+              <Ionicons name="chevron-down" size={15} color={HOLYSIC_COLORS.textMuted} />
             </Pressable>
             <Pressable onPress={() => chartLocal[0] && playTrack(chartLocal[0], chartLocal)}>
               <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   qaLabel: { color: '#FFF', fontWeight: '800', fontSize: 13 },
-  qaSub: { color: MOCHY_COLORS.textMuted, fontSize: 11, marginTop: 1 },
+  qaSub: { color: HOLYSIC_COLORS.textMuted, fontSize: 11, marginTop: 1 },
   seeAll: { alignItems: 'center', paddingVertical: 12 },
   genreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
   genreTile: {
@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
   },
   greetingSub: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -540,9 +540,9 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: MOCHY_COLORS.surfaceCard,
+    backgroundColor: HOLYSIC_COLORS.surfaceCard,
     borderWidth: 1,
-    borderColor: MOCHY_COLORS.glassBorder,
+    borderColor: HOLYSIC_COLORS.glassBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -555,9 +555,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 99,
-    backgroundColor: MOCHY_COLORS.surfaceCard,
+    backgroundColor: HOLYSIC_COLORS.surfaceCard,
     borderWidth: 1,
-    borderColor: MOCHY_COLORS.glassBorder,
+    borderColor: HOLYSIC_COLORS.glassBorder,
   },
   moodChipText: {
     fontSize: 13,
@@ -639,7 +639,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   squareSub: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },

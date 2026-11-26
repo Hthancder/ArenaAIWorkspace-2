@@ -1,19 +1,11 @@
-// Mochy Audio Lab & Equalizer Modal — Ported from AudioLabScreen.kt, FxPresets.kt & EightDAudioCard.kt
+// HolySic Audio Lab & Equalizer Modal — Ported from AudioLabScreen.kt, FxPresets.kt & EightDAudioCard.kt (Mochy Music)
 
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
 import { AUTO_EQ_PRESETS } from '../../data/curatedCatalog';
 
 export const AudioLabModal: React.FC = () => {
@@ -27,7 +19,7 @@ export const AudioLabModal: React.FC = () => {
     palette,
     prefs,
     haptic,
-  } = useMochy();
+  } = useHolySic();
 
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -60,10 +52,8 @@ export const AudioLabModal: React.FC = () => {
       >
         <View style={styles.header}>
           <View>
-            <Text style={[styles.title, { fontFamily }]}>Mochy Audio Lab</Text>
-            <Text style={styles.sub}>
-              10-Band EQ · AutoEQ · Bass · Reverb · 8D · Speed
-            </Text>
+            <Text style={[styles.title, { fontFamily }]}>HolySic Audio Lab</Text>
+            <Text style={styles.sub}>10-Band EQ · AutoEQ · Bass · Reverb · 8D · Speed</Text>
           </View>
           <View style={styles.headerRight}>
             <Switch
@@ -74,10 +64,7 @@ export const AudioLabModal: React.FC = () => {
               }}
               trackColor={{ false: '#2A2A36', true: palette.accent }}
             />
-            <Pressable
-              onPress={() => setIsAudioLabOpen(false)}
-              style={styles.closeBtn}
-            >
+            <Pressable onPress={() => setIsAudioLabOpen(false)} style={styles.closeBtn}>
               <Ionicons name="close" size={21} color="#FFFFFF" />
             </Pressable>
           </View>
@@ -87,9 +74,11 @@ export const AudioLabModal: React.FC = () => {
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}
         >
-          {/* AutoEQ & Mochy Presets */}
+          {/* AutoEQ & HolySic Presets */}
           <Text style={[styles.sectionLabel, { fontFamily }]}>
-            {vi ? 'Cấu hình AutoEQ & Tai nghe (AirPods / Audiophile)' : 'AutoEQ & Headphone Profiles'}
+            {vi
+              ? 'Cấu hình AutoEQ & Tai nghe (AirPods / Audiophile)'
+              : 'AutoEQ & Headphone Profiles'}
           </Text>
           <ScrollView
             horizontal
@@ -141,10 +130,7 @@ export const AudioLabModal: React.FC = () => {
                   const pct = ((band.gainDb + 12) / 24) * 100;
                   return (
                     <View key={band.freqHz} style={styles.bandCol}>
-                      <Pressable
-                        onPress={() => adjustBand(idx, 1.5)}
-                        style={styles.stepMiniBtn}
-                      >
+                      <Pressable onPress={() => adjustBand(idx, 1.5)} style={styles.stepMiniBtn}>
                         <Ionicons name="add" size={14} color="#FFFFFF" />
                       </Pressable>
 
@@ -154,18 +140,13 @@ export const AudioLabModal: React.FC = () => {
                             styles.bandBarFill,
                             {
                               height: `${pct}%`,
-                              backgroundColor: audioLab.enabled
-                                ? palette.accent
-                                : '#52525B',
+                              backgroundColor: audioLab.enabled ? palette.accent : '#52525B',
                             },
                           ]}
                         />
                       </View>
 
-                      <Pressable
-                        onPress={() => adjustBand(idx, -1.5)}
-                        style={styles.stepMiniBtn}
-                      >
+                      <Pressable onPress={() => adjustBand(idx, -1.5)} style={styles.stepMiniBtn}>
                         <Ionicons name="remove" size={14} color="#FFFFFF" />
                       </Pressable>
 
@@ -195,10 +176,7 @@ export const AudioLabModal: React.FC = () => {
                     <Pressable
                       key={val}
                       onPress={() => updateAudioLab({ enabled: true, bassBoost: val })}
-                      style={[
-                        styles.levelPill,
-                        active && { backgroundColor: palette.accent },
-                      ]}
+                      style={[styles.levelPill, active && { backgroundColor: palette.accent }]}
                     >
                       <Text
                         style={{
@@ -224,10 +202,7 @@ export const AudioLabModal: React.FC = () => {
                     <Pressable
                       key={val}
                       onPress={() => updateAudioLab({ enabled: true, reverbMix: val })}
-                      style={[
-                        styles.levelPill,
-                        active && { backgroundColor: palette.accent },
-                      ]}
+                      style={[styles.levelPill, active && { backgroundColor: palette.accent }]}
                     >
                       <Text
                         style={{
@@ -258,9 +233,7 @@ export const AudioLabModal: React.FC = () => {
               </View>
               <Switch
                 value={audioLab.eightDEnabled}
-                onValueChange={(v) =>
-                  updateAudioLab({ enabled: true, eightDEnabled: v })
-                }
+                onValueChange={(v) => updateAudioLab({ enabled: true, eightDEnabled: v })}
                 trackColor={{ false: '#2A2A36', true: palette.accent }}
               />
             </View>
@@ -290,10 +263,7 @@ export const AudioLabModal: React.FC = () => {
                         reverbMix: opt.rev,
                       })
                     }
-                    style={[
-                      styles.speedChip,
-                      active && { backgroundColor: palette.accent },
-                    ]}
+                    style={[styles.speedChip, active && { backgroundColor: palette.accent }]}
                   >
                     <Text
                       style={{
@@ -334,7 +304,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   sub: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
@@ -385,7 +355,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   subNote: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12.5,
     marginTop: 3,
   },
@@ -426,7 +396,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   freqText: {
-    color: MOCHY_COLORS.textMuted,
+    color: HOLYSIC_COLORS.textMuted,
     fontSize: 10,
     marginTop: 2,
   },
@@ -434,7 +404,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   knobLabel: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 8,

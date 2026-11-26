@@ -13,8 +13,8 @@ import {
   View,
 } from 'react-native';
 import { ArtworkImage } from './ArtworkImage';
-import { MOCHY_COLORS } from '../constants/theme';
-import { useMochy } from '../context/MochyContext';
+import { HOLYSIC_COLORS } from '../constants/theme';
+import { useHolySic } from '../context/HolySicContext';
 import { GlassSurface } from './GlassSurface';
 
 export const TrackActionSheet: React.FC = () => {
@@ -40,7 +40,7 @@ export const TrackActionSheet: React.FC = () => {
     startInstantMix,
     shareTrack,
     exportDownload,
-  } = useMochy();
+  } = useHolySic();
 
   const [pickingPlaylist, setPickingPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -87,7 +87,7 @@ export const TrackActionSheet: React.FC = () => {
                     value={newPlaylistName}
                     onChangeText={setNewPlaylistName}
                     placeholder={vi ? 'Tên playlist mới…' : 'New playlist name…'}
-                    placeholderTextColor={MOCHY_COLORS.textMuted}
+                    placeholderTextColor={HOLYSIC_COLORS.textMuted}
                     style={styles.input}
                   />
                   <Pressable
@@ -161,7 +161,7 @@ export const TrackActionSheet: React.FC = () => {
                   <Ionicons
                     name={liked ? 'heart-dislike-outline' : 'heart-outline'}
                     size={21}
-                    color={liked ? MOCHY_COLORS.roseLike : '#FFFFFF'}
+                    color={liked ? HOLYSIC_COLORS.roseLike : '#FFFFFF'}
                   />
                   <Text style={styles.menuLabel}>
                     {liked
@@ -195,7 +195,7 @@ export const TrackActionSheet: React.FC = () => {
                   <Ionicons
                     name={isOffline ? 'trash-outline' : 'arrow-down-circle-outline'}
                     size={21}
-                    color={isOffline ? '#F87171' : MOCHY_COLORS.flacEmerald}
+                    color={isOffline ? '#F87171' : HOLYSIC_COLORS.flacEmerald}
                   />
                   <Text style={styles.menuLabel}>
                     {isOffline
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   artist: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 13,
     marginTop: 2,
   },

@@ -1,4 +1,4 @@
-// Mochy Bedside Nightstand Clock Player — Ported from BedsideClockFace & BedsideNightTint in PreferenceKeys.kt
+// HolySic Bedside Nightstand Clock Player — Ported from BedsideClockFace & BedsideNightTint in PreferenceKeys.kt (Mochy Music)
 
 import { Ionicons } from '@expo/vector-icons';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { BedsideClockFace, BedsideNightTint } from '../../constants/preferences';
-import { useMochy } from '../../context/MochyContext';
+import { useHolySic } from '../../context/HolySicContext';
 import { useHoldSeek } from '../../hooks/useHoldSeek';
 
 export const BedsideClockView: React.FC = () => {
@@ -24,7 +24,7 @@ export const BedsideClockView: React.FC = () => {
     updatePrefs,
     haptic,
     seekBy,
-  } = useMochy();
+  } = useHolySic();
   const ff = useHoldSeek(seekBy, 1);
   const rw = useHoldSeek(seekBy, -1);
 

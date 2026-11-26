@@ -14,8 +14,8 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
 import { CHART_COUNTRIES, CHART_GENRES } from '../../services/discovery/chartsService';
 import { Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
@@ -29,7 +29,7 @@ interface Props {
 export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = null }) => {
   const insets = useSafeAreaInsets();
   const { prefs, updatePrefs, palette, fetchChart, playTrack, savePlaylistFromTracks, showToast } =
-    useMochy();
+    useHolySic();
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const [genre, setGenre] = useState<number | null>(initialGenre);
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: { color: '#FFF', fontSize: 22, fontWeight: '800' },
-  sub: { color: MOCHY_COLORS.textSecondary, fontSize: 13, marginTop: 2 },
+  sub: { color: HOLYSIC_COLORS.textSecondary, fontSize: 13, marginTop: 2 },
   countryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 99,
     borderWidth: 1,
-    borderColor: MOCHY_COLORS.glassBorder,
+    borderColor: HOLYSIC_COLORS.glassBorder,
     backgroundColor: 'rgba(255,255,255,0.05)',
   },
   genreRow: { gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 99,
     borderWidth: 1,
-    borderColor: MOCHY_COLORS.glassBorder,
+    borderColor: HOLYSIC_COLORS.glassBorder,
     backgroundColor: 'rgba(255,255,255,0.05)',
   },
   actions: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingBottom: 8 },
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
   empty: {
-    color: MOCHY_COLORS.textMuted,
+    color: HOLYSIC_COLORS.textMuted,
     textAlign: 'center',
     marginTop: 40,
     paddingHorizontal: 30,

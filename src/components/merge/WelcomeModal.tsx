@@ -1,5 +1,5 @@
 // First-run welcome (Spotube's welcome module): choose language and accent colour, then a quick
-// tour of what Mochy can do, including the features merged from OpenSpot, Musike and Cog.
+// tour of what HolySic can do, including the features merged from OpenSpot, Musike and Cog.
 // Shown once. Existing users see it once after updating, as a "what's new".
 
 import { Ionicons } from '@expo/vector-icons';
@@ -8,9 +8,9 @@ import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ACCENT_PRESETS } from '../../constants/preferences';
-import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
-import { MochyMarkIcon } from '../MochyIcons';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
+import { HolySicMarkIcon } from '../HolySicIcons';
 
 const FEATURES: { icon: string; vi: string; en: string; dvi: string; den: string }[] = [
   {
@@ -73,7 +73,7 @@ const FEATURES: { icon: string; vi: string; en: string; dvi: string; den: string
 
 export const WelcomeModal: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { prefs, updatePrefs, palette } = useMochy();
+  const { prefs, updatePrefs, palette } = useHolySic();
   const [step, setStep] = useState(0);
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -91,15 +91,15 @@ export const WelcomeModal: React.FC = () => {
           contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: insets.bottom + 120 }}
         >
           <View style={[styles.logo, { backgroundColor: palette.container }]}>
-            <MochyMarkIcon size={40} color={palette.accent} filled />
+            <HolySicMarkIcon size={40} color={palette.accent} filled />
           </View>
           <Text style={[styles.h1, { fontFamily }]}>
-            {vi ? 'Chào mừng đến Mochy' : 'Welcome to Mochy'}
+            {vi ? 'Chào mừng đến HolySic' : 'Welcome to HolySic'}
           </Text>
           <Text style={styles.lead}>
             {vi
-              ? 'Mochy Music cho iOS: ghép những điểm mạnh nhất của Mochy, Spotube, OpenSpot, Musike và Cog. Miễn phí, mã nguồn mở, không quảng cáo.'
-              : 'Mochy Music for iOS: the best of Mochy, Spotube, OpenSpot, Musike and Cog. Free, open source, no ads.'}
+              ? 'Trình phát nhạc iOS gom những điểm mạnh nhất của nhiều dự án mã nguồn mở. Miễn phí, không quảng cáo, không theo dõi.'
+              : 'An iOS music player with the best ideas from several open-source projects. Free, no ads, no tracking.'}
           </Text>
 
           {step === 0 ? (
@@ -171,7 +171,7 @@ export const WelcomeModal: React.FC = () => {
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
           <Pressable onPress={finish}>
-            <Text style={{ color: MOCHY_COLORS.textMuted, fontWeight: '700' }}>
+            <Text style={{ color: HOLYSIC_COLORS.textMuted, fontWeight: '700' }}>
               {vi ? 'Bỏ qua' : 'Skip'}
             </Text>
           </Pressable>
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   h1: { color: '#FFF', fontSize: 30, fontWeight: '900' },
-  lead: { color: MOCHY_COLORS.textSecondary, fontSize: 15, lineHeight: 22, marginTop: 8 },
+  lead: { color: HOLYSIC_COLORS.textSecondary, fontSize: 15, lineHeight: 22, marginTop: 8 },
   label: { color: '#FFF', fontWeight: '800', fontSize: 15, marginTop: 26, marginBottom: 10 },
   row: { flexDirection: 'row', gap: 10 },
   choice: {
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: MOCHY_COLORS.glassBorder,
+    borderColor: HOLYSIC_COLORS.glassBorder,
     alignItems: 'center',
   },
   choiceText: { color: '#FFF', fontWeight: '700' },
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   swatchLabel: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 11,
     marginTop: 4,
     textAlign: 'center',
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   featureTitle: { color: '#FFF', fontWeight: '800', fontSize: 14 },
-  featureDesc: { color: MOCHY_COLORS.textSecondary, fontSize: 12.5, marginTop: 2 },
+  featureDesc: { color: HOLYSIC_COLORS.textSecondary, fontSize: 12.5, marginTop: 2 },
   footer: {
     position: 'absolute',
     left: 0,

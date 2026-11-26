@@ -1,4 +1,4 @@
-// Full-Screen Mochy Player Modal — Flagship, Turntable, iPod, Poster & Bedside Presets + Queue, Lyrics, Sleep Timer & Diagnostics
+// Full-Screen HolySic Player Modal — Flagship, Turntable, iPod, Poster & Bedside Presets + Queue, Lyrics, Sleep Timer & Diagnostics
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,9 +16,9 @@ import {
 import { ArtworkImage } from '../ArtworkImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PLAYER_STYLE_META, PlayerStyle } from '../../constants/preferences';
-import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useMochy } from '../../context/MochyContext';
-import { formatTimeSec } from '../MochyIcons';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { useHolySic } from '../../context/HolySicContext';
+import { formatTimeSec } from '../HolySicIcons';
 import { useHoldSeek } from '../../hooks/useHoldSeek';
 import { QueuePane } from './QueuePane';
 import { SpectrumBars } from './SpectrumBars';
@@ -64,7 +64,7 @@ export const FullPlayerModal: React.FC = () => {
     updatePrefs,
     seekBy,
     loudnessLabel,
-  } = useMochy();
+  } = useHolySic();
   const ff = useHoldSeek(seekBy, 1);
   const rw = useHoldSeek(seekBy, -1);
 
@@ -127,7 +127,7 @@ export const FullPlayerModal: React.FC = () => {
             <Ionicons name="chevron-down" size={24} color="#FFFFFF" />
           </Pressable>
 
-          {/* Interactive Stream Quality Pill -> Opens Mochy Diagnostics */}
+          {/* Interactive Stream Quality Pill -> Opens HolySic Diagnostics */}
           <Pressable
             onPress={() => setPane((p) => (p === 'diagnostics' ? 'artwork' : 'diagnostics'))}
             style={[styles.qualityBadgeBtn, { borderColor: palette.accent + '40' }]}
@@ -138,7 +138,7 @@ export const FullPlayerModal: React.FC = () => {
               color={palette.accent}
             />
             <Text numberOfLines={1} style={[styles.qualityBadgeLabel, { color: palette.accent }]}>
-              {resolvedStream?.qualityLabel || currentTrack.qualityBadge || 'Mochy Stream'}
+              {resolvedStream?.qualityLabel || currentTrack.qualityBadge || 'HolySic Stream'}
               {loudnessLabel ? ` · RG ${loudnessLabel}` : ''}
             </Text>
           </Pressable>
@@ -190,8 +190,8 @@ export const FullPlayerModal: React.FC = () => {
                       ? `Còn lại: ${formatTimeSec(sleepRemainingSec)}`
                       : `Remaining: ${formatTimeSec(sleepRemainingSec)}`
                     : vi
-                      ? 'Chọn thời gian để Mochy tự động dừng phát nhạc'
-                      : 'Choose when Mochy gently pauses playback'}
+                      ? 'Chọn thời gian để HolySic tự động dừng phát nhạc'
+                      : 'Choose when HolySic gently pauses playback'}
               </Text>
               <View style={styles.sleepGrid}>
                 {[5, 15, 30, 45, 60].map((mins) => (
@@ -270,7 +270,7 @@ export const FullPlayerModal: React.FC = () => {
             <View style={styles.overlayCard}>
               <View style={styles.paneHeaderRow}>
                 <Text style={[styles.paneTitle, { fontFamily }]}>
-                  {vi ? 'Chọn giao diện Player Mochy' : 'Mochy Player Presets'}
+                  {vi ? 'Chọn giao diện Player HolySic' : 'HolySic Player Presets'}
                 </Text>
                 <Pressable onPress={() => setPane('artwork')}>
                   <Ionicons name="close" size={22} color="#FFF" />
@@ -379,7 +379,7 @@ export const FullPlayerModal: React.FC = () => {
                 <Ionicons
                   name={liked ? 'heart' : 'heart-outline'}
                   size={24}
-                  color={liked ? MOCHY_COLORS.roseLike : '#FFFFFF'}
+                  color={liked ? HOLYSIC_COLORS.roseLike : '#FFFFFF'}
                 />
               </Pressable>
             </View>
@@ -508,7 +508,7 @@ export const FullPlayerModal: React.FC = () => {
           </View>
         )}
 
-        {/* Bottom Mochy Action Deck (Lyrics · Queue · Audio Lab · Sleep Timer) */}
+        {/* Bottom HolySic Action Deck (Lyrics · Queue · Audio Lab · Sleep Timer) */}
         <View style={styles.bottomDeck}>
           <Pressable
             onPress={() => setPane((p) => (p === 'lyrics' ? 'artwork' : 'lyrics'))}
@@ -686,7 +686,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   subHelper: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 13,
     lineHeight: 19,
   },
@@ -729,7 +729,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   diagDetail: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
@@ -750,7 +750,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   styleCardDesc: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 12,
     marginTop: 3,
     lineHeight: 17,

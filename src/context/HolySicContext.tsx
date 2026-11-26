@@ -1,4 +1,4 @@
-// Global Reactive State & Playback Controller for Mochy Music iOS
+// Global Reactive State & Playback Controller for HolySic iOS
 
 import * as Haptics from 'expo-haptics';
 import React, {
@@ -14,7 +14,7 @@ import { Platform } from 'react-native';
 import {
   DEFAULT_PREFERENCES,
   MainTab,
-  MochyPreferences,
+  HolySicPreferences,
   RepeatMode,
 } from '../constants/preferences';
 import { ArtworkPalette, buildArtworkPalette, hexToHue } from '../constants/theme';
@@ -99,7 +99,7 @@ export type LinkResult =
   | { kind: 'none'; message: string };
 
 /** Features merged from Spotube, OpenSpot Music, Musike and Cog (see NOTICE) */
-interface MochyExtras {
+interface HolySicExtras {
   isOnline: boolean;
   importSheet: { mode: 'link' | 'list'; text: string } | null;
   openImport: (mode: 'link' | 'list', text?: string) => void;
@@ -163,7 +163,7 @@ interface MochyExtras {
   loudnessLabel: string | null;
 }
 
-interface MochyContextValue extends MochyExtras {
+interface HolySicContextValue extends HolySicExtras {
   // Navigation & UI overlays
   activeTab: MainTab;
   setActiveTab: (tab: MainTab) => void;
@@ -181,8 +181,8 @@ interface MochyContextValue extends MochyExtras {
   showToast: (msg: string) => void;
 
   // Preferences & Theme
-  prefs: MochyPreferences;
-  updatePrefs: (patch: Partial<MochyPreferences>) => void;
+  prefs: HolySicPreferences;
+  updatePrefs: (patch: Partial<HolySicPreferences>) => void;
   palette: ArtworkPalette;
 
   // Discovery Feeds & Search
@@ -275,7 +275,7 @@ interface MochyContextValue extends MochyExtras {
   loadArtistFull: (idOrName: string) => Promise<ArtistSummary | null>;
 }
 
-const MochyContext = createContext<MochyContextValue | null>(null);
+const HolySicContext = createContext<HolySicContextValue | null>(null);
 
 export function triggerHaptic(kind: 'light' | 'medium' | 'selection' = 'light'): void {
   if (Platform.OS === 'web') return;
@@ -292,7 +292,7 @@ export function triggerHaptic(kind: 'light' | 'medium' | 'selection' = 'light'):
   }
 }
 
-export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<MainTab>('home');
   const [collectionTarget, setCollectionTarget] = useState<CollectionTarget | null>(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
@@ -301,7 +301,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [actionTrack, setActionTrack] = useState<Track | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const [prefs, setPrefs] = useState<MochyPreferences>(DEFAULT_PREFERENCES);
+  const [prefs, setPrefs] = useState<HolySicPreferences>(DEFAULT_PREFERENCES);
   const [quickPicks, setQuickPicks] = useState<Track[]>(OFFLINE_SHOWCASE_TRACKS);
   const [vnTrending, setVnTrending] = useState<Track[]>(OFFLINE_SHOWCASE_TRACKS);
   const [globalTrending, setGlobalTrending] = useState<Track[]>(OFFLINE_SHOWCASE_TRACKS);
@@ -395,7 +395,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const palette = useMemo(() => {
-    const seed = currentTrack ? `${currentTrack.title}-${currentTrack.artist}` : 'mochy-default';
+    const seed = currentTrack ? `${currentTrack.title}-${currentTrack.artist}` : 'holysic-default';
     // Fixed accent (Musike-style presets / custom colour): the hue is kept, lightness is
     // re-derived by the tonal palette so text on it always stays readable on the dark UI
     const hue =
@@ -443,7 +443,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const starter: Playlist = {
           id: 'pl-late-night',
           name: 'Đêm Hà Nội Chill >_<',
-          description: 'Giai điệu êm dịu nghe lúc nửa đêm trên Mochy',
+          description: 'Giai điệu êm dịu nghe lúc nửa đêm trên HolySic',
           coverTint: '#6366F1',
           trackIds: OFFLINE_SHOWCASE_TRACKS.map((t) => t.id),
           tracks: OFFLINE_SHOWCASE_TRACKS,
@@ -774,7 +774,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
       if (!played.isPreview) Scrobbler.nowPlaying(track).catch(() => undefined);
 
-      // Log listening event for Mochy Recap & History
+      // Log listening event for HolySic Recap & History
       setHistory((prev) => {
         const event: ListeningEvent = {
           id: `ev-${Date.now()}-${track.id}`,
@@ -1143,7 +1143,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [currentTrack, playTrack, prefs.language, showToast, vnTrending]
   );
 
-  const updatePrefs = useCallback((patch: Partial<MochyPreferences>) => {
+  const updatePrefs = useCallback((patch: Partial<HolySicPreferences>) => {
     setPrefs((prev) => {
       const next = { ...prev, ...patch };
       StorageService.savePreferences(next);
@@ -1292,7 +1292,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const hues = ['#6366F1', '#EC4899', '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6'];
       const pl: Playlist = {
         id: `pl-${Date.now()}`,
-        name: name.trim() || 'Mochy Playlist',
+        name: name.trim() || 'HolySic Playlist',
         description: description?.trim(),
         coverTint: hues[playlists.length % hues.length],
         trackIds: [],
@@ -1914,7 +1914,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       StorageService.saveSearchHistory(merged.searchHistory);
       if (includeSettings && backup.prefs) {
         const { onboarded: _o, ...rest } = backup.prefs;
-        updatePrefs({ ...rest, onboarded: true } as Partial<MochyPreferences>);
+        updatePrefs({ ...rest, onboarded: true } as Partial<HolySicPreferences>);
       }
       if (includeSettings && backup.audioLab) {
         const lab = { ...DEFAULT_AUDIO_LAB, ...backup.audioLab };
@@ -2056,7 +2056,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [showToast]
   );
 
-  const extras = useMemo<MochyExtras>(
+  const extras = useMemo<HolySicExtras>(
     () => ({
       isOnline,
       importSheet,
@@ -2132,7 +2132,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCollectionTarget(target);
   }, []);
 
-  const baseValue = useMemo<Omit<MochyContextValue, keyof MochyExtras>>(
+  const baseValue = useMemo<Omit<HolySicContextValue, keyof HolySicExtras>>(
     () => ({
       activeTab,
       setActiveTab,
@@ -2303,16 +2303,16 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     ]
   );
 
-  const value = useMemo<MochyContextValue>(
+  const value = useMemo<HolySicContextValue>(
     () => ({ ...baseValue, ...extras }),
     [baseValue, extras]
   );
 
-  return <MochyContext.Provider value={value}>{children}</MochyContext.Provider>;
+  return <HolySicContext.Provider value={value}>{children}</HolySicContext.Provider>;
 };
 
-export function useMochy(): MochyContextValue {
-  const ctx = useContext(MochyContext);
-  if (!ctx) throw new Error('useMochy must be used inside MochyProvider');
+export function useHolySic(): HolySicContextValue {
+  const ctx = useContext(HolySicContext);
+  if (!ctx) throw new Error('useHolySic must be used inside HolySicProvider');
   return ctx;
 }

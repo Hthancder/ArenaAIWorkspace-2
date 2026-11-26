@@ -1,4 +1,4 @@
-// Robust artwork renderer for Mochy Music iOS
+// Robust artwork renderer for HolySic iOS
 // - `data:image/svg+xml` covers: iOS UIImage cannot decode SVG, so they are drawn with react-native-svg
 // - Protocol-relative / http URLs are normalised
 // - Failed or missing images fall back to a deterministic gradient cover instead of an empty box
@@ -29,7 +29,10 @@ export function normalizeArtworkUrl(raw?: string | null): string {
   let url = String(raw).trim();
   if (url.startsWith('//')) url = `https:${url}`;
   // Upgrade known CDNs to https (ATS-friendly and avoids mixed content on the web preview)
-  if (url.startsWith('http://') && /(mzstatic|ytimg|googleusercontent|saavncdn|jiosaavn)/.test(url)) {
+  if (
+    url.startsWith('http://') &&
+    /(mzstatic|ytimg|googleusercontent|saavncdn|jiosaavn)/.test(url)
+  ) {
     url = url.replace(/^http:\/\//, 'https://');
   }
   return url;
@@ -57,7 +60,12 @@ export interface ArtworkImageProps extends Omit<ImageProps, 'source'> {
   fallbackSeed?: string;
 }
 
-export const ArtworkImage: React.FC<ArtworkImageProps> = ({ source, style, fallbackSeed, ...rest }) => {
+export const ArtworkImage: React.FC<ArtworkImageProps> = ({
+  source,
+  style,
+  fallbackSeed,
+  ...rest
+}) => {
   const uri = normalizeArtworkUrl(source?.uri);
   const [failed, setFailed] = useState(false);
 
@@ -66,10 +74,7 @@ export const ArtworkImage: React.FC<ArtworkImageProps> = ({ source, style, fallb
   }, [uri]);
 
   const isSvgData = uri.startsWith('data:image/svg+xml');
-  const svgXml = useMemo(
-    () => (isSvgData ? decodeSvgDataUri(uri) : null),
-    [isSvgData, uri]
-  );
+  const svgXml = useMemo(() => (isSvgData ? decodeSvgDataUri(uri) : null), [isSvgData, uri]);
 
   const flat = (StyleSheet.flatten(style) || {}) as ImageStyle;
   const containerStyle: StyleProp<any> = [
@@ -92,7 +97,8 @@ export const ArtworkImage: React.FC<ArtworkImageProps> = ({ source, style, fallb
   }
 
   if (!uri || failed || (isSvgData && !svgXml)) {
-    const colors = FALLBACK_GRADIENTS[hashString(fallbackSeed || uri || 'mochy') % FALLBACK_GRADIENTS.length];
+    const colors =
+      FALLBACK_GRADIENTS[hashString(fallbackSeed || uri || 'holysic') % FALLBACK_GRADIENTS.length];
     const w = typeof flat.width === 'number' ? flat.width : 48;
     return (
       <View style={containerStyle}>

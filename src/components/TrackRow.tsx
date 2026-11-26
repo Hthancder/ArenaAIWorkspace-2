@@ -2,17 +2,12 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from './ArtworkImage';
-import { MOCHY_COLORS, resolveFontFamily } from '../constants/theme';
-import { useMochy } from '../context/MochyContext';
+import { HOLYSIC_COLORS, resolveFontFamily } from '../constants/theme';
+import { useHolySic } from '../context/HolySicContext';
 import { Track } from '../types/music';
-import { formatTimeSec } from './MochyIcons';
+import { formatTimeSec } from './HolySicIcons';
 
 interface TrackRowProps {
   track: Track;
@@ -41,7 +36,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
     downloadingIds,
     palette,
     prefs,
-  } = useMochy();
+  } = useHolySic();
 
   const active = currentTrack?.id === track.id;
   const liked = isLiked(track.id);
@@ -71,7 +66,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         <Text
           style={[
             styles.indexNum,
-            { color: active ? palette.accent : MOCHY_COLORS.textMuted, fontFamily },
+            { color: active ? palette.accent : HOLYSIC_COLORS.textMuted, fontFamily },
           ]}
         >
           {indexBadge}
@@ -82,11 +77,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         <ArtworkImage source={{ uri: track.artworkUrl }} style={styles.art} />
         {active && (
           <View style={styles.playingOverlay}>
-            <Ionicons
-              name={isPlaying ? 'stats-chart' : 'pause'}
-              size={16}
-              color={palette.accent}
-            />
+            <Ionicons name={isPlaying ? 'stats-chart' : 'pause'} size={16} color={palette.accent} />
           </View>
         )}
       </View>
@@ -98,7 +89,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
             style={[
               styles.title,
               {
-                color: active ? palette.accent : MOCHY_COLORS.textPrimary,
+                color: active ? palette.accent : HOLYSIC_COLORS.textPrimary,
                 fontFamily,
               },
             ]}
@@ -117,7 +108,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
             <Ionicons
               name="arrow-down-circle"
               size={13}
-              color={MOCHY_COLORS.flacEmerald}
+              color={HOLYSIC_COLORS.flacEmerald}
               style={{ marginRight: 4 }}
             />
           )}
@@ -125,14 +116,11 @@ export const TrackRow: React.FC<TrackRowProps> = ({
             <Ionicons
               name="cloud-download-outline"
               size={13}
-              color={MOCHY_COLORS.iosBlue}
+              color={HOLYSIC_COLORS.iosBlue}
               style={{ marginRight: 4 }}
             />
           )}
-          <Text
-            numberOfLines={1}
-            style={[styles.subtitle, { fontFamily }]}
-          >
+          <Text numberOfLines={1} style={[styles.subtitle, { fontFamily }]}>
             {track.artist}
             {track.album ? ` · ${track.album}` : ''}
           </Text>
@@ -152,7 +140,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           <Text
             style={[
               styles.qualityText,
-              track.qualityBadge.includes('FLAC') && { color: MOCHY_COLORS.flacEmerald },
+              track.qualityBadge.includes('FLAC') && { color: HOLYSIC_COLORS.flacEmerald },
             ]}
           >
             {track.qualityBadge.includes('FLAC')
@@ -166,9 +154,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         </View>
       )}
 
-      <Text style={[styles.duration, { fontFamily }]}>
-        {formatTimeSec(track.durationSec)}
-      </Text>
+      <Text style={[styles.duration, { fontFamily }]}>{formatTimeSec(track.durationSec)}</Text>
 
       <Pressable
         hitSlop={8}
@@ -181,7 +167,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         <Ionicons
           name={liked ? 'heart' : 'heart-outline'}
           size={19}
-          color={liked ? MOCHY_COLORS.roseLike : MOCHY_COLORS.textMuted}
+          color={liked ? HOLYSIC_COLORS.roseLike : HOLYSIC_COLORS.textMuted}
         />
       </Pressable>
 
@@ -194,7 +180,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           }}
           style={styles.iconBtn}
         >
-          <Ionicons name="close-circle-outline" size={19} color={MOCHY_COLORS.textMuted} />
+          <Ionicons name="close-circle-outline" size={19} color={HOLYSIC_COLORS.textMuted} />
         </Pressable>
       ) : (
         <Pressable
@@ -205,7 +191,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           }}
           style={styles.iconBtn}
         >
-          <Ionicons name="ellipsis-horizontal" size={18} color={MOCHY_COLORS.textSecondary} />
+          <Ionicons name="ellipsis-horizontal" size={18} color={HOLYSIC_COLORS.textSecondary} />
         </Pressable>
       )}
     </Pressable>
@@ -286,7 +272,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 12.5,
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     flexShrink: 1,
   },
   qualityPill: {
@@ -299,14 +285,14 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   qualityText: {
-    color: MOCHY_COLORS.textSecondary,
+    color: HOLYSIC_COLORS.textSecondary,
     fontSize: 9.5,
     fontWeight: '700',
     letterSpacing: 0.4,
   },
   duration: {
     fontSize: 12,
-    color: MOCHY_COLORS.textMuted,
+    color: HOLYSIC_COLORS.textMuted,
     marginRight: 6,
     minWidth: 34,
     textAlign: 'right',
