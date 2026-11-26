@@ -239,6 +239,14 @@ async function probeMonochrome(q) {
         console.log(`     /track/${id} http=${head.res.status} ${head.ms}ms ctype=${head.res.headers.get('content-type')} magic=${buf.subarray(0, 4).toString()} len=${head.res.headers.get('content-range')}`);
         const past = await rangeProbe(url, { 'User-Agent': 'AppleCoreMedia/1.0.0.19H12 (iPhone; U; CPU OS 15_7 like Mac OS X; en_us)' }, UNTOKENED_PROBE_BYTE * 3);
         console.log(`     byte3MiB (iOS UA)=${past}`);
+        for (const v of [`${url}.flac`, `${url}/track.flac`, `${url}?f=.flac`, `${url}?format=flac`]) {
+          const r = await timed(v, { headers: { 'User-Agent': DESKTOP_UA, Range: 'bytes=0-3' } });
+          const b = r.res ? Buffer.from(await r.res.arrayBuffer()).toString() : '';
+          console.log(`     variant ${v.replace(base, '')} -> ${r.res?.status ?? r.err} ctype=${r.res?.headers.get('content-type')} magic=${b}`);
+        }
+        const hd = await timed(url, { method: 'HEAD', headers: { 'User-Agent': DESKTOP_UA } });
+        console.log(`     HEAD ${hd.res?.status} ctype=${hd.res?.headers.get('content-type')} len=${hd.res?.headers.get('content-length')} accept-ranges=${hd.res?.headers.get('accept-ranges')} disp=${hd.res?.headers.get('content-disposition')}`);
+        console.log(`     artwork=${t.artwork}`);
       } else console.log(`     /track ERR ${head.err}`);
     }
   }
@@ -259,9 +267,8 @@ const SONGS = [
     if (vid) ids.push([vid, s.q]);
   }
   if (ids.length === 0) ids.push(['JGwWNGJdvx8', 'Shape of You (fallback id)']);
-  for (const [vid, label] of ids) await probeYouTube(vid, label);
-  await probeJioSaavn('Shape of You Ed Sheeran');
-  await probeJioSaavn('Chúng Ta Của Hiện Tại');
+  if (!process.env.SKIP_YT) for (const [vid, label] of ids) await probeYouTube(vid, label);
+  if (!process.env.SKIP_SAAVN) { await probeJioSaavn('Shape of You Ed Sheeran'); await probeJioSaavn('Chúng Ta Của Hiện Tại'); }
   await probeMonochrome('Ed Sheeran Shape of You');
   await probeMonochrome('Sơn Tùng M-TP Chúng Ta Của Hiện Tại');
   console.log('\nProbe done.');
