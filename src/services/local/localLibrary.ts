@@ -15,6 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
 import { AppState, Linking, Platform } from 'react-native';
 import { Track } from '../../types/music';
+import { buildM3U, locationParts } from '../import/m3u';
 import { bestMatch, MetaCandidate } from './metadataLookup';
 import { ByteReader, decodeText, readTags, TagMeta } from './tagReader';
 
@@ -69,6 +70,8 @@ export interface FolderNode {
   coverUri?: string;
   /** the folder's own cover file (cover.jpg, folder.png…), if it has one */
   coverPath?: string;
+  /** .m3u / .m3u8 playlists in this folder */
+  playlists: string[];
   mtime: number;
 }
 
@@ -125,6 +128,7 @@ interface Backend {
   /** download (http) or copy (file/blob) an image into the art cache */
   saveArt(uri: string, name: string): Promise<void>;
   removeArt?(name: string): void;
+  writeText(rel: string, text: string): void;
 }
 
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
@@ -242,6 +246,13 @@ function nativeBackend(): Backend {
         : new File(Paths.cache, ART_DIR, name);
       return f.exists ? f.uri : undefined;
     },
+    writeText(rel, text) {
+      const d = dirOf(rel);
+      if (d && !dirFor(d).exists) dirFor(d).create({ intermediates: true, idempotent: true });
+      const f = fileFor(rel);
+      if (!f.exists) f.create();
+      f.write(text);
+    },
     removeArt(name) {
       try {
         const f = new File(isKept(name) ? keptDir() : artDir(), name);
@@ -352,6 +363,20 @@ function webBackend(): Backend {
     coverUri(rel) {
       return fs.has(rel) ? this.uri(rel) : undefined;
     },
+    writeText(rel, text) {
+      let acc = '';
+      for (const p of parts(dirOf(rel))) {
+        acc = join(acc, p);
+        if (!fs.has(acc)) fs.set(acc, { isDir: true, mtime: Date.now() });
+      }
+      const old = fs.get(rel);
+      if (old?.url) URL.revokeObjectURL(old.url);
+      fs.set(rel, {
+        isDir: false,
+        blob: new Blob([text], { type: 'audio/x-mpegurl' }),
+        mtime: Date.now(),
+      });
+    },
     async saveArt(uri, name) {
       const blob = await (await fetch(uri)).blob();
       const old = art.get(name);
@@ -461,7 +486,16 @@ class LocalLibraryStore {
     ready: false,
     scanning: false,
     progress: { done: 0, total: 0 },
-    root: { path: '', name: '', folders: [], files: [], total: 0, totalSec: 0, mtime: 0 },
+    root: {
+      path: '',
+      name: '',
+      folders: [],
+      files: [],
+      playlists: [],
+      total: 0,
+      totalSec: 0,
+      mtime: 0,
+    },
     files: [],
     lastScanAt: 0,
     openAt: null,
@@ -603,11 +637,12 @@ class LocalLibraryStore {
       cover?: string;
       coverEntry?: Entry;
       lrcs: string[];
+      m3us: string[];
       mtime: number;
     };
     const walk = async (rel: string, depth: number): Promise<RawDir> => {
       const entries = await this.backend.list(rel);
-      const node: RawDir = { path: rel, files: [], dirs: [], lrcs: [], mtime: 0 };
+      const node: RawDir = { path: rel, files: [], dirs: [], lrcs: [], m3us: [], mtime: 0 };
       for (const e of entries) {
         if (e.name.startsWith('.')) continue;
         if (e.isDir) {
@@ -615,6 +650,7 @@ class LocalLibraryStore {
           if (depth < 12) node.dirs.push(await walk(join(rel, e.name), depth + 1));
         } else if (AUDIO_EXT.test(e.name)) node.files.push(e);
         else if (/\.lrc$/i.test(e.name)) node.lrcs.push(join(rel, e.name));
+        else if (/\.m3u8?$/i.test(e.name)) node.m3us.push(join(rel, e.name));
         else if (COVER_NAME.test(e.name) && !node.cover) {
           node.cover = join(rel, e.name);
           node.coverEntry = e;
@@ -701,6 +737,7 @@ class LocalLibraryStore {
         totalSec: 0,
         coverUri,
         coverPath: d.cover,
+        playlists: [...d.m3us].sort(compareNames),
         mtime: 0,
       };
       for (const e of d.files) {
@@ -869,7 +906,7 @@ class LocalLibraryStore {
   async remove(paths: string[]): Promise<number> {
     let n = 0;
     for (const rel of paths) {
-      const isDir = !this.state.files.some((f) => f.path === rel);
+      const isDir = !!rel && !!this.folder(rel) && !this.state.files.some((f) => f.path === rel);
       try {
         this.backend.remove(rel, isDir);
         n++;
@@ -898,7 +935,8 @@ class LocalLibraryStore {
     const taken = new Set(this.namesIn(toDir));
     let n = 0;
     for (const a of res.assets) {
-      const isLrc = /\.lrc$/i.test(a.name); // lyrics picked together with their song
+      // lyrics picked together with their song, or playlists
+      const isLrc = /\.(lrc|m3u8?)$/i.test(a.name);
       const isAudio = AUDIO_EXT.test(a.name) || (a.mimeType || '').startsWith('audio/');
       if (!isAudio && !isLrc) continue;
       let name = sanitizeName(a.name) || `audio-${Date.now()}.m4a`;
@@ -936,6 +974,77 @@ class LocalLibraryStore {
       }
     }
     return out;
+  }
+
+  // ---- playlists (.m3u / .m3u8) ----
+
+  async readText(rel: string): Promise<string> {
+    const r = await this.backend.reader(rel);
+    try {
+      return decodeText(await r.read(0, Math.min(r.size, 4 * 1024 * 1024)));
+    } finally {
+      r.close();
+    }
+  }
+
+  /**
+   * Find the song a playlist line points to. `baseDir`: folder of the .m3u inside the library
+   * (relative lines are resolved from there). Falls back to the longest matching tail of the path
+   * — so playlists made on a computer ("D:/Music/Album/01 Song.flac") still find "Album/01 Song.flac".
+   */
+  matchLocation(location: string, baseDir = ''): LocalFile | undefined {
+    const ps = locationParts(location);
+    if (!ps.length) return undefined;
+    const byPath = new Map<string, LocalFile>();
+    for (const f of this.state.files) byPath.set(f.path.toLowerCase(), f);
+    const abs = /^(\/|[a-z]:[\\/]|file:)/i.test(location.trim());
+    if (!abs) {
+      const rel = locationParts((baseDir ? baseDir + '/' : '') + location.trim()).join('/');
+      const hit = byPath.get(rel.toLowerCase());
+      if (hit) return hit;
+    }
+    const docs = ps.findIndex((p) => p === 'Documents');
+    if (docs >= 0) {
+      const hit = byPath.get(
+        ps
+          .slice(docs + 1)
+          .join('/')
+          .toLowerCase()
+      );
+      if (hit) return hit;
+    }
+    for (let k = Math.min(ps.length, 6); k >= 1; k--) {
+      const tail = ps.slice(-k).join('/').toLowerCase();
+      const hits = this.state.files.filter((f) => {
+        const p = f.path.toLowerCase();
+        return p === tail || p.endsWith('/' + tail);
+      });
+      if (hits.length) return hits[0];
+    }
+    // same song, other format/extension (e.g. the playlist says .mp3, the device has .m4a)
+    const stem = stripExt(ps[ps.length - 1]).toLowerCase();
+    return this.state.files.find((f) => stripExt(f.name).toLowerCase() === stem);
+  }
+
+  /**
+   * Save a playlist as "Playlists/<name>.m3u8" inside the HolySic folder (visible in Files, and
+   * readable by other players). Returns the file's path in the library.
+   */
+  async savePlaylistFile(name: string, tracks: Track[]): Promise<string> {
+    const dir = 'Playlists';
+    const fileName = (sanitizeName(name) || 'Playlist') + '.m3u8';
+    const rel = join(dir, fileName);
+    const text = buildM3U(name, tracks, (t) =>
+      isLocalTrack(t) ? '../' + localPathOf(t) : undefined
+    );
+    this.backend.writeText(rel, text);
+    await this.scan();
+    return rel;
+  }
+
+  /** Native URI of a library file (for the share sheet). */
+  fileUri(rel: string): string {
+    return this.backend.uri(rel);
   }
 
   // ---- "Sửa thông tin" (edits) & online auto-fill ----

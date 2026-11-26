@@ -34,6 +34,8 @@ import {
 import { Track } from '../../types/music';
 import { ArtworkImage } from '../ArtworkImage';
 import { openSongEditor } from './SongInfoEditor';
+import { queueM3UImport } from '../merge/ImportModal';
+import { exportPlaylistM3U } from '../../services/import/playlistFiles';
 
 export const useLocalLibrary = (): LocalState =>
   useSyncExternalStore(LocalLibrary.subscribe, LocalLibrary.getState, LocalLibrary.getState);
@@ -173,6 +175,7 @@ export const LocalLibraryScreen: React.FC = () => {
     haptic,
     currentTrack,
     isPlaying,
+    openImport,
   } = useHolySic();
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -484,6 +487,14 @@ export const LocalLibraryScreen: React.FC = () => {
                 label: vi ? 'Lưu thành playlist' : 'Save as playlist',
                 onPress: () => savePlaylist(scopeTracks, title),
               },
+              {
+                icon: 'share-outline' as const,
+                label: vi ? 'Xuất playlist M3U' : 'Export M3U playlist',
+                onPress: async () => {
+                  const rel = await exportPlaylistM3U(title, scopeTracks);
+                  if (rel) showToast(vi ? `Đã lưu ${rel}` : `Saved ${rel}`);
+                },
+              },
             ]
           : []),
         ...(Platform.OS === 'ios'
@@ -775,13 +786,95 @@ export const LocalLibraryScreen: React.FC = () => {
   const crumbs = nav.kind === 'folder' && nav.path ? nav.path.split('/') : [];
 
   const isEmptyLibrary = st.ready && st.files.length === 0 && st.root.folders.length === 0;
-  type Item = { k: string; node?: FolderNode; file?: LocalFile; group?: Group; idx?: number };
+  type Item = {
+    k: string;
+    node?: FolderNode;
+    file?: LocalFile;
+    group?: Group;
+    idx?: number;
+    pl?: string;
+  };
+  const playlistFiles =
+    nav.kind === 'folder' && folder && !selecting
+      ? folder.playlists.filter((p) => !query.trim() || fold(baseName(p)).includes(fold(query)))
+      : [];
   const items: Item[] = groups
     ? groups.map((g) => ({ k: 'g' + g.key, group: g }))
     : [
         ...folders.map((f) => ({ k: 'd' + f.path, node: f })),
+        ...playlistFiles.map((p) => ({ k: 'p' + p, pl: p })),
         ...files.map((f, idx) => ({ k: 'f' + f.path, file: f, idx })),
       ];
+
+  const openPlaylistFile = async (rel: string) => {
+    try {
+      const text = await LocalLibrary.readText(rel);
+      const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
+      queueM3UImport({ text, name: baseName(rel), baseDir: dir });
+      openImport('list');
+    } catch (e: any) {
+      showToast(
+        (vi ? 'Không đọc được playlist: ' : 'Could not read the playlist: ') + (e?.message || e)
+      );
+    }
+  };
+  const renderPlaylist = (rel: string) => (
+    <Pressable
+      key={'p:' + rel}
+      onPress={() => openPlaylistFile(rel)}
+      onLongPress={() => playlistMenu(rel)}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      accessibilityLabel={'Playlist ' + baseName(rel)}
+    >
+      <LinearGradient colors={[palette.accent, palette.container]} style={styles.art}>
+        <Ionicons name="list" size={22} color={palette.onAccent} />
+      </LinearGradient>
+      <View style={styles.rowText}>
+        <Text numberOfLines={1} style={[styles.rowTitle, { fontFamily }]}>
+          {baseName(rel).replace(/\.m3u8?$/i, '')}
+        </Text>
+        <Text numberOfLines={1} style={styles.rowSub}>
+          {vi ? 'Playlist M3U · chạm để mở' : 'M3U playlist · tap to open'}
+        </Text>
+      </View>
+      <Pressable
+        hitSlop={10}
+        onPress={() => playlistMenu(rel)}
+        style={styles.moreBtn}
+        accessibilityLabel={(vi ? 'Tuỳ chọn ' : 'Options for ') + baseName(rel)}
+      >
+        <Ionicons name="ellipsis-horizontal" size={18} color="rgba(255,255,255,0.6)" />
+      </Pressable>
+    </Pressable>
+  );
+  const playlistMenu = (rel: string) =>
+    setOverlay({
+      type: 'actions',
+      title: baseName(rel),
+      subtitle: rel,
+      items: [
+        {
+          icon: 'open-outline',
+          label: vi ? 'Mở / lưu vào Thư viện' : 'Open / save to Library',
+          onPress: () => openPlaylistFile(rel),
+        },
+        {
+          icon: 'trash-outline',
+          label: vi ? 'Xoá tệp playlist' : 'Delete playlist file',
+          danger: true,
+          onPress: () =>
+            setOverlay({
+              type: 'confirm',
+              title: vi ? 'Xoá tệp playlist?' : 'Delete playlist file?',
+              message: vi
+                ? 'Chỉ xoá tệp .m3u, các bài hát vẫn còn.'
+                : 'Only the .m3u file is deleted, the songs stay.',
+              confirm: vi ? 'Xoá' : 'Delete',
+              onConfirm: () => LocalLibrary.remove([rel]),
+            }),
+        },
+      ],
+    });
 
   const header = (
     <View>
@@ -1109,7 +1202,9 @@ export const LocalLibraryScreen: React.FC = () => {
             ? renderGroup(item.group)
             : item.node
               ? renderFolder(item.node)
-              : renderFile(item.file!, item.idx || 0)
+              : item.pl
+                ? renderPlaylist(item.pl)
+                : renderFile(item.file!, item.idx || 0)
         }
         contentContainerStyle={{ paddingBottom: 190 + insets.bottom }}
         keyboardShouldPersistTaps="handled"

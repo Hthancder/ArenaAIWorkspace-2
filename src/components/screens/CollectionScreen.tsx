@@ -22,6 +22,7 @@ import { useHolySic } from '../../context/HolySicContext';
 import { AlbumSummary, ArtistSummary, Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
+import { exportPlaylistM3U } from '../../services/import/playlistFiles';
 
 export const CollectionModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -339,6 +340,22 @@ export const CollectionModal: React.FC = () => {
                       </Text>
                     </Pressable>
                   )}
+                  <Pressable
+                    onPress={async () => {
+                      const rel = await exportPlaylistM3U(title, allTracks);
+                      if (rel)
+                        showToast(
+                          vi
+                            ? `Đã lưu ${rel.split('/').pop()} vào Tệp › HolySic › Playlists`
+                            : `Saved ${rel.split('/').pop()} to Files › HolySic › Playlists`
+                        );
+                    }}
+                    style={styles.chipBtn}
+                    accessibilityLabel={vi ? 'Xuất M3U' : 'Export M3U'}
+                  >
+                    <Ionicons name="share-outline" size={15} color="#FFF" />
+                    <Text style={styles.chipText}>{vi ? 'Xuất M3U' : 'Export M3U'}</Text>
+                  </Pressable>
                 </View>
               )}
             </View>
@@ -709,6 +726,7 @@ const styles = StyleSheet.create({
   heroBtns: {
     flexDirection: 'row',
     gap: 12,
+    flexWrap: 'wrap',
     marginTop: 18,
   },
   primaryBtn: {

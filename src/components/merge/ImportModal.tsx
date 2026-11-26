@@ -28,6 +28,18 @@ import { Track } from '../../types/music';
 import { ArtworkImage } from '../ArtworkImage';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 import { LocalLibrary } from '../../services/local/localLibrary';
+import { parseM3U } from '../../services/import/m3u';
+import { resolveM3U, ResolvedHow } from '../../services/import/playlistFiles';
+import * as DocumentPicker from 'expo-document-picker';
+import { File as FsFile } from 'expo-file-system';
+
+/** A playlist file to open in the import screen (from Local Files or "Open with HolySic"). */
+type PendingM3U = { text: string; name: string; baseDir?: string };
+let pendingM3U: PendingM3U | null = null;
+export function queueM3UImport(p: PendingM3U) {
+  pendingM3U = p;
+}
+const stripPlaylistExt = (n: string) => n.replace(/\.m3u8?$/i, '');
 
 export type ImportMode = 'link' | 'list';
 
@@ -42,6 +54,7 @@ interface Row {
   item: TextItem;
   options: Track[];
   chosen: number; // -1 = skipped
+  how?: ResolvedHow;
 }
 
 export const ImportModal: React.FC<Props> = ({
@@ -76,6 +89,7 @@ export const ImportModal: React.FC<Props> = ({
   const [rows, setRows] = useState<Row[]>([]);
   const [swapIdx, setSwapIdx] = useState<number | null>(null);
   const [playlistName, setPlaylistName] = useState('');
+  const [fromFile, setFromFile] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -85,8 +99,84 @@ export const ImportModal: React.FC<Props> = ({
       setRows([]);
       setProgress(null);
       setSwapIdx(null);
+      setFromFile(null);
+      if (pendingM3U) {
+        const p = pendingM3U;
+        pendingM3U = null;
+        runM3U(p);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, initialMode, initialText]);
+
+  const runM3U = async (p: PendingM3U) => {
+    const pl = parseM3U(p.text);
+    setFromFile(p.name);
+    setMode('list');
+    setText('');
+    if (!pl.entries.length) {
+      setMessage(
+        vi ? 'Tệp playlist trống hoặc không đúng định dạng M3U.' : 'Empty or invalid M3U file.'
+      );
+      return;
+    }
+    setBusy(true);
+    setRows([]);
+    setMessage(null);
+    setProgress({ done: 0, total: pl.entries.length });
+    try {
+      const res = await resolveM3U(
+        pl,
+        p.baseDir,
+        async (q) => (await searchTracks(q, 'all')).tracks,
+        (done, total) => setProgress({ done, total })
+      );
+      setRows(
+        res.map((r) => ({
+          item: {
+            title: r.entry.track?.title || r.entry.title || r.entry.location,
+            artist: r.entry.track?.artist || r.entry.artist || '',
+          },
+          options: r.options,
+          chosen: r.options.length ? 0 : -1,
+          how: r.how,
+        }))
+      );
+      setPlaylistName(pl.name || stripPlaylistExt(p.name));
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+  };
+
+  const pickM3U = async () => {
+    const res = await DocumentPicker.getDocumentAsync({
+      type:
+        Platform.OS === 'web'
+          ? ['.m3u', '.m3u8', 'audio/x-mpegurl', 'application/vnd.apple.mpegurl']
+          : [
+              'public.m3u-playlist',
+              'public.m3u8-playlist',
+              'audio/x-mpegurl',
+              'public.plain-text',
+              'public.data',
+            ],
+      copyToCacheDirectory: true,
+    });
+    const a = res.canceled ? undefined : res.assets?.[0];
+    if (!a) return;
+    try {
+      const body =
+        Platform.OS === 'web'
+          ? a.file
+            ? await a.file.text()
+            : await (await fetch(a.uri)).text()
+          : await new FsFile(a.uri).text();
+      runM3U({ text: body, name: a.name || 'Playlist' });
+    } catch (e: any) {
+      setMessage((vi ? 'Không đọc được tệp: ' : 'Could not read the file: ') + (e?.message || e));
+    }
+  };
 
   const paste = async () => {
     try {
@@ -190,6 +280,10 @@ export const ImportModal: React.FC<Props> = ({
               onPress={() => {
                 setMode(m);
                 setMessage(null);
+                if (fromFile) {
+                  setFromFile(null);
+                  setRows([]);
+                }
               }}
               style={[styles.segBtn, mode === m && { backgroundColor: palette.accent }]}
             >
@@ -221,73 +315,94 @@ export const ImportModal: React.FC<Props> = ({
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.help}>
-            {mode === 'link'
-              ? vi
-                ? 'YouTube / YouTube Music (bài hoặc playlist), Spotify (bài, album, playlist công khai), Apple Music. Bài hát được ghép với nguồn phát đầy đủ của HolySic.'
-                : 'YouTube / YouTube Music (song or playlist), Spotify (track, album, public playlist), Apple Music. Songs are matched to HolySic’s full-length sources.'
-              : vi
-                ? 'Mỗi dòng một bài, hoặc ngăn cách bằng dấu phẩy. Dạng "Nghệ sĩ - Tên bài" cho kết quả chính xác nhất.'
-                : 'One song per line or comma separated. "Artist - Title" gives the best matches.'}
-          </Text>
-
-          <View style={styles.inputWrap}>
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              placeholder={
-                mode === 'link'
-                  ? 'https://open.spotify.com/playlist/…'
-                  : vi
-                    ? 'Sơn Tùng M-TP - Chúng Ta Của Hiện Tại\nMONO - Waiting For You, Shape of You'
-                    : 'Artist - Title, Another song…'
-              }
-              placeholderTextColor={HOLYSIC_COLORS.textMuted}
-              style={[
-                styles.input,
-                mode === 'list' && { minHeight: 120, textAlignVertical: 'top' },
-              ]}
-              multiline={mode === 'list'}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Pressable onPress={paste} style={styles.pasteBtn}>
-              <Ionicons name="clipboard-outline" size={16} color="#FFF" />
-              <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 12 }}>
-                {vi ? 'Dán' : 'Paste'}
-              </Text>
-            </Pressable>
-          </View>
-
-          <Pressable
-            disabled={busy || !text.trim()}
-            onPress={mode === 'link' ? runLink : runList}
-            style={[
-              styles.goBtn,
-              { backgroundColor: palette.accent, opacity: busy || !text.trim() ? 0.5 : 1 },
-            ]}
-          >
-            {busy ? (
-              <ActivityIndicator color={palette.onAccent} />
-            ) : (
-              <Ionicons
-                name={mode === 'link' ? 'arrow-forward' : 'search'}
-                size={17}
-                color={palette.onAccent}
-              />
-            )}
-            <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
-              {progress
-                ? `${progress.done}/${progress.total}`
-                : mode === 'link'
+          {fromFile ? (
+            <View style={styles.fileCard}>
+              <Ionicons name="document-text" size={22} color={palette.accent} />
+              <View style={{ flex: 1 }}>
+                <Text numberOfLines={1} style={styles.rowTitle}>
+                  {fromFile}
+                </Text>
+                <Text style={styles.rowSub}>
+                  {busy && progress
+                    ? `${vi ? 'Đang ghép bài' : 'Matching songs'} ${progress.done}/${progress.total}…`
+                    : vi
+                      ? 'Playlist M3U — bài trên máy ghép theo đường dẫn, bài còn lại tự tìm'
+                      : 'M3U playlist — device songs matched by path, the rest searched'}
+                </Text>
+              </View>
+              {busy ? <ActivityIndicator color={palette.accent} /> : null}
+            </View>
+          ) : (
+            <>
+              <Text style={styles.help}>
+                {mode === 'link'
                   ? vi
-                    ? 'Mở'
-                    : 'Open'
+                    ? 'YouTube / YouTube Music (bài hoặc playlist), Spotify (bài, album, playlist công khai), Apple Music. Bài hát được ghép với nguồn phát đầy đủ của HolySic.'
+                    : 'YouTube / YouTube Music (song or playlist), Spotify (track, album, public playlist), Apple Music. Songs are matched to HolySic’s full-length sources.'
                   : vi
-                    ? 'Tìm tất cả'
-                    : 'Find all'}
-            </Text>
-          </Pressable>
+                    ? 'Mỗi dòng một bài, hoặc ngăn cách bằng dấu phẩy. Dạng "Nghệ sĩ - Tên bài" cho kết quả chính xác nhất.'
+                    : 'One song per line or comma separated. "Artist - Title" gives the best matches.'}
+              </Text>
+
+              <View style={styles.inputWrap}>
+                <TextInput
+                  value={text}
+                  onChangeText={setText}
+                  placeholder={
+                    mode === 'link'
+                      ? 'https://open.spotify.com/playlist/…'
+                      : vi
+                        ? 'Sơn Tùng M-TP - Chúng Ta Của Hiện Tại\nMONO - Waiting For You, Shape of You'
+                        : 'Artist - Title, Another song…'
+                  }
+                  placeholderTextColor={HOLYSIC_COLORS.textMuted}
+                  style={[
+                    styles.input,
+                    mode === 'list' && { minHeight: 120, textAlignVertical: 'top' },
+                  ]}
+                  multiline={mode === 'list'}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Pressable onPress={paste} style={styles.pasteBtn}>
+                  <Ionicons name="clipboard-outline" size={16} color="#FFF" />
+                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 12 }}>
+                    {vi ? 'Dán' : 'Paste'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <Pressable
+                disabled={busy || !text.trim()}
+                onPress={mode === 'link' ? runLink : runList}
+                style={[
+                  styles.goBtn,
+                  { backgroundColor: palette.accent, opacity: busy || !text.trim() ? 0.5 : 1 },
+                ]}
+              >
+                {busy ? (
+                  <ActivityIndicator color={palette.onAccent} />
+                ) : (
+                  <Ionicons
+                    name={mode === 'link' ? 'arrow-forward' : 'search'}
+                    size={17}
+                    color={palette.onAccent}
+                  />
+                )}
+                <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
+                  {progress
+                    ? `${progress.done}/${progress.total}`
+                    : mode === 'link'
+                      ? vi
+                        ? 'Mở'
+                        : 'Open'
+                      : vi
+                        ? 'Tìm tất cả'
+                        : 'Find all'}
+                </Text>
+              </Pressable>
+            </>
+          )}
 
           {message && <Text style={styles.message}>{message}</Text>}
 
@@ -316,6 +431,22 @@ export const ImportModal: React.FC<Props> = ({
               <Ionicons name="chevron-forward" size={16} color={HOLYSIC_COLORS.textMuted} />
             </Pressable>
           )}
+          {!fromFile && (mode !== 'list' || rows.length === 0) ? (
+            <Pressable onPress={pickM3U} style={styles.filesRow} accessibilityLabel="M3U">
+              <Ionicons name="document-text-outline" size={20} color={palette.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>
+                  {vi ? 'Mở tệp playlist (M3U / M3U8)' : 'Open a playlist file (M3U / M3U8)'}
+                </Text>
+                <Text style={styles.rowSub}>
+                  {vi
+                    ? 'Từ HolySic, VLC, foobar2000, Winamp, iTunes… — bài trên máy được ghép theo đường dẫn, bài còn lại tự tìm'
+                    : 'From HolySic, VLC, foobar2000, Winamp, iTunes… — device songs matched by path, the rest searched'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={HOLYSIC_COLORS.textMuted} />
+            </Pressable>
+          ) : null}
 
           {mode === 'list' && rows.length > 0 && (
             <>
@@ -341,7 +472,13 @@ export const ImportModal: React.FC<Props> = ({
                           {t ? t.title : r.item.title}
                         </Text>
                         <Text numberOfLines={1} style={styles.rowSub}>
-                          {t ? `${t.artist} · ${t.source}` : vi ? 'Không tìm thấy' : 'No match'}
+                          {t
+                            ? `${t.artist} · ${
+                                t.source === 'local' ? (vi ? 'Trên máy' : 'On device') : t.source
+                              }`
+                            : vi
+                              ? `Không tìm thấy${r.item.artist ? ` · ${r.item.artist}` : ''}`
+                              : `No match${r.item.artist ? ` · ${r.item.artist}` : ''}`}
                         </Text>
                       </View>
                       {r.options.length > 1 && (
@@ -426,7 +563,7 @@ export const ImportModal: React.FC<Props> = ({
                     <TextInput
                       value={playlistName}
                       onChangeText={setPlaylistName}
-                      style={[styles.input, { flex: 1, paddingVertical: 10 }]}
+                      style={[styles.input, { flex: 1, minWidth: 0, paddingVertical: 10 }]}
                       placeholderTextColor={HOLYSIC_COLORS.textMuted}
                     />
                     <Pressable
@@ -563,6 +700,15 @@ const styles = StyleSheet.create({
     borderColor: HOLYSIC_COLORS.glassBorder,
   },
   bulkRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  fileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 6,
+  },
   bulkBtn: {
     flexDirection: 'row',
     alignItems: 'center',
