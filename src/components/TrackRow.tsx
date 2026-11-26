@@ -52,6 +52,20 @@ export const TrackRow: React.FC<TrackRowProps> = ({
     }
   };
 
+  // Local Files carry their real codec ("MP3 · 44.1 kHz · Trên máy") — show it, not a guess
+  const qb = track.qualityBadge || '';
+  const badgeLabel =
+    track.source === 'local'
+      ? qb.split(' · ')[0] || 'Local'
+      : qb.includes('FLAC')
+        ? 'FLAC'
+        : qb.includes('320')
+          ? '320k'
+          : track.source === 'synth'
+            ? 'LAB'
+            : 'AAC';
+  const lossless = /FLAC|ALAC|WAV|AIFF/.test(track.source === 'local' ? badgeLabel : qb);
+
   return (
     <Pressable
       onPress={handlePress}
@@ -131,25 +145,14 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         <View
           style={[
             styles.qualityPill,
-            track.qualityBadge.includes('FLAC') && {
+            lossless && {
               borderColor: 'rgba(52, 211, 153, 0.4)',
               backgroundColor: 'rgba(52, 211, 153, 0.10)',
             },
           ]}
         >
-          <Text
-            style={[
-              styles.qualityText,
-              track.qualityBadge.includes('FLAC') && { color: HOLYSIC_COLORS.flacEmerald },
-            ]}
-          >
-            {track.qualityBadge.includes('FLAC')
-              ? 'FLAC'
-              : track.qualityBadge.includes('320')
-                ? '320k'
-                : track.source === 'synth'
-                  ? 'LAB'
-                  : 'AAC'}
+          <Text style={[styles.qualityText, lossless && { color: HOLYSIC_COLORS.flacEmerald }]}>
+            {badgeLabel}
           </Text>
         </View>
       )}

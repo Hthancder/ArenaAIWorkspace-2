@@ -74,7 +74,7 @@ export const LyricsView: React.FC = () => {
         <View style={styles.providerBadge}>
           <Ionicons name="sparkles" size={12} color={palette.accent} />
           <Text numberOfLines={1} style={[styles.providerText, { color: palette.accent }]}>
-            {lyrics.provider}
+            {lyrics.provider === 'Local' ? 'Local file' : lyrics.provider}
             {lyrics.wordSynced ? ' · Word-Synced' : lyrics.synced ? ' · Synced LRC' : ' · Plain'}
           </Text>
         </View>
@@ -199,7 +199,9 @@ export const LyricsView: React.FC = () => {
         })}
 
         <Text style={styles.footerText}>
-          Lyrics powered by {lyrics.provider} · HolySic Open Lyrics
+          {lyrics.provider === 'Local'
+            ? 'Lyrics from the song file (.lrc / embedded tags) · HolySic'
+            : `Lyrics powered by ${lyrics.provider} · HolySic Open Lyrics`}
         </Text>
       </ScrollView>
     </View>

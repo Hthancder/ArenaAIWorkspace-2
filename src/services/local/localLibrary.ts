@@ -15,7 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
 import { AppState, Linking, Platform } from 'react-native';
 import { Track } from '../../types/music';
-import { ByteReader, readTags, TagMeta } from './tagReader';
+import { ByteReader, decodeText, readTags, TagMeta } from './tagReader';
 
 export const AUDIO_EXT = /\.(mp3|m4a|aac|flac|wav|aif|aiff|caf|alac|mp4|m4b)$/i;
 const COVER_NAME = /^(cover|folder|front|album|artwork|albumart)\.(jpe?g|png)$/i;
@@ -51,7 +51,9 @@ export interface FolderNode {
   mtime: number;
 }
 
-interface CachedMeta extends Omit<TagMeta, 'picture'> {
+interface CachedMeta extends Omit<TagMeta, 'picture' | 'lyrics'> {
+  /** lyrics are embedded (read on demand, not cached) */
+  hasLyrics?: boolean;
   size: number;
   mtime: number;
   art?: string; // file name inside the art cache
@@ -100,6 +102,14 @@ interface Backend {
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 const dirOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '');
 const baseOf = (rel: string) => rel.slice(rel.lastIndexOf('/') + 1);
+/** lower-case, no diacritics (đ → d) — for accent-insensitive search */
+export const foldText = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
+const stripExt = (rel: string) => rel.replace(/\.[^./]+$/, '');
 const parts = (rel: string) => rel.split('/').filter(Boolean);
 
 // ---------- native backend (iOS/Android Documents) ----------
@@ -380,6 +390,8 @@ class LocalLibraryStore {
   private scanPromise: Promise<void> | null = null;
   private rescanQueued = false;
   private byName = new Map<string, string>();
+  /** "dir/song" (lower-case, no extension) → "dir/Song.lrc" */
+  private lrcByBase = new Map<string, string>();
   private appStateHooked = false;
 
   state: LocalState = {
@@ -517,17 +529,19 @@ class LocalLibraryStore {
       dirs: RawDir[];
       cover?: string;
       coverEntry?: Entry;
+      lrcs: string[];
       mtime: number;
     };
     const walk = async (rel: string, depth: number): Promise<RawDir> => {
       const entries = await this.backend.list(rel);
-      const node: RawDir = { path: rel, files: [], dirs: [], mtime: 0 };
+      const node: RawDir = { path: rel, files: [], dirs: [], lrcs: [], mtime: 0 };
       for (const e of entries) {
         if (e.name.startsWith('.')) continue;
         if (e.isDir) {
           if (depth === 0 && INTERNAL_DIRS.has(e.name)) continue;
           if (depth < 12) node.dirs.push(await walk(join(rel, e.name), depth + 1));
         } else if (AUDIO_EXT.test(e.name)) node.files.push(e);
+        else if (/\.lrc$/i.test(e.name)) node.lrcs.push(join(rel, e.name));
         else if (COVER_NAME.test(e.name) && !node.cover) {
           node.cover = join(rel, e.name);
           node.coverEntry = e;
@@ -564,7 +578,7 @@ class LocalLibraryStore {
       } catch {
         // unreadable file: still listed, named from the file name
       }
-      const { picture, ...rest } = meta;
+      const { picture, lyrics, ...rest } = meta;
       let artName: string | undefined;
       if (picture && picture.data.length > 64) {
         artName = `${hash(rel + e.size + e.mtime)}.${picture.mime === 'image/png' ? 'png' : 'jpg'}`;
@@ -576,6 +590,7 @@ class LocalLibraryStore {
       }
       this.metaCache[rel] = {
         ...rest,
+        hasLyrics: !!lyrics || undefined,
         size: e.size,
         mtime: e.mtime,
         art: artName,
@@ -594,6 +609,12 @@ class LocalLibraryStore {
 
     // 3) build the tree
     this.byName.clear();
+    this.lrcByBase.clear();
+    const addLrcs = (d: RawDir) => {
+      d.lrcs.forEach((l) => this.lrcByBase.set(stripExt(l).toLowerCase(), l));
+      d.dirs.forEach(addLrcs);
+    };
+    addLrcs(raw);
     const files: LocalFile[] = [];
     const build = (d: RawDir, parentCover?: string): FolderNode => {
       const coverUri =
@@ -671,6 +692,8 @@ class LocalLibraryStore {
       qualityBadge: `${codec}${khz} · ${Platform.OS === 'web' ? 'Local' : 'Trên máy'}`,
       genre: meta.genre,
       releaseYear: meta.year,
+      replayGainDb: meta.replayGainDb,
+      replayPeak: meta.replayPeak,
     };
     if (!meta.trackNo && guess.trackNo) meta.trackNo = guess.trackNo;
     return { path: rel, name: e.name, dir, size: e.size, mtime: e.mtime, meta, track };
@@ -718,6 +741,7 @@ class LocalLibraryStore {
       const name = this.uniqueName(toDir, baseOf(rel), taken);
       taken.add(name.toLowerCase());
       this.backend.move(rel, toDir, name);
+      this.carrySidecar(rel, toDir, name);
       renamedMeta.push([rel, join(toDir, name)]);
       n++;
     }
@@ -739,6 +763,7 @@ class LocalLibraryStore {
     const others = new Set(this.namesIn(dir).filter((x) => x !== baseOf(rel).toLowerCase()));
     const finalName = this.uniqueName(dir, target, others);
     this.backend.move(rel, dir, finalName);
+    if (isFile) this.carrySidecar(rel, dir, finalName);
     const remap: Record<string, Track> = {};
     const to = join(dir, finalName);
     this.applyRenames([[rel, to]], remap);
@@ -754,6 +779,8 @@ class LocalLibraryStore {
       try {
         this.backend.remove(rel, isDir);
         n++;
+        const lrc = !isDir && this.lrcByBase.get(stripExt(rel).toLowerCase());
+        if (lrc) this.backend.remove(lrc, false);
       } catch {
         // already gone
       }
@@ -774,17 +801,84 @@ class LocalLibraryStore {
     const taken = new Set(this.namesIn(toDir));
     let n = 0;
     for (const a of res.assets) {
+      const isLrc = /\.lrc$/i.test(a.name); // lyrics picked together with their song
       const isAudio = AUDIO_EXT.test(a.name) || (a.mimeType || '').startsWith('audio/');
-      if (!isAudio) continue;
+      if (!isAudio && !isLrc) continue;
       let name = sanitizeName(a.name) || `audio-${Date.now()}.m4a`;
-      if (!AUDIO_EXT.test(name)) name += '.m4a';
+      if (!isLrc && !AUDIO_EXT.test(name)) name += '.m4a';
       name = this.uniqueName(toDir, name, taken);
       taken.add(name.toLowerCase());
       await this.backend.importAsset(a, join(toDir, name));
-      n++;
+      if (!isLrc) n++;
     }
     await this.scan();
     return n;
+  }
+
+  /** Keep "Song.lrc" with "Song.mp3" when the song is moved or renamed in the app */
+  private carrySidecar(rel: string, toDir: string, newName: string) {
+    const lrc = this.lrcByBase.get(stripExt(rel).toLowerCase());
+    if (!lrc || !AUDIO_EXT.test(rel)) return;
+    try {
+      this.backend.move(lrc, toDir, stripExt(newName) + (lrc.match(/\.[^.]+$/)?.[0] || '.lrc'));
+    } catch {
+      // a same-named .lrc already there: leave it
+    }
+  }
+
+  /** Search every local song (title, artist, album, file name — accents optional). */
+  search(q: string, max = 50): LocalFile[] {
+    const words = foldText(q).split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const out: LocalFile[] = [];
+    for (const f of this.state.files) {
+      const hay = foldText(`${f.track.title} ${f.track.artist} ${f.track.album || ''} ${f.name}`);
+      if (words.every((w) => hay.includes(w))) {
+        out.push(f);
+        if (out.length >= max) break;
+      }
+    }
+    return out;
+  }
+
+  // ---- lyrics ----
+
+  /**
+   * Lyrics that come with a local song: a sidecar "Song.lrc" next to "Song.mp3" (synced or plain),
+   * otherwise lyrics embedded in its tags. Null when there are none (→ online lyrics).
+   */
+  async lyricsFor(track: Track): Promise<{ text: string; from: 'lrc' | 'tags' } | null> {
+    if (!isLocalTrack(track)) return null;
+    let rel = localPathOf(track);
+    if (!this.backend.exists(rel)) rel = this.byName.get(baseOf(rel).toLowerCase()) || rel;
+    const lrc = this.lrcByBase.get(stripExt(rel).toLowerCase());
+    if (lrc) {
+      try {
+        const r = await this.backend.reader(lrc);
+        try {
+          const text = decodeText(await r.read(0, Math.min(r.size, 512 * 1024))).trim();
+          if (text) return { text, from: 'lrc' };
+        } finally {
+          r.close();
+        }
+      } catch {
+        // unreadable sidecar → try the tags
+      }
+    }
+    if (this.metaCache[rel]?.hasLyrics) {
+      try {
+        const r = await this.backend.reader(rel);
+        try {
+          const meta = await readTags(r, baseOf(rel));
+          if (meta.lyrics) return { text: meta.lyrics, from: 'tags' };
+        } finally {
+          r.close();
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return null;
   }
 
   // ---- folder covers ----

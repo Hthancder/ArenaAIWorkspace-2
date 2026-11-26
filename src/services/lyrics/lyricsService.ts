@@ -2,6 +2,7 @@
 
 import { BUILTIN_LYRICS_MAP } from '../../data/curatedCatalog';
 import { LyricLine, LyricsData, LyricWord, Track } from '../../types/music';
+import { isLocalTrack, LocalLibrary } from '../local/localLibrary';
 
 const TITLE_CLEANUP_PATTERNS = [
   /\s*\(.*?(official|video|audio|lyrics|lyric|visualizer|hd|hq|4k|remaster|remix|live|acoustic|version|edit|extended|radio|clean|explicit).*?\)/gi,
@@ -326,6 +327,69 @@ async function tryLrcLib(
   return null;
 }
 
+/**
+ * Normalise hand-made .lrc files: "[00:12.00][01:30.00]Chorus" → one line per timestamp,
+ * [offset:±ms] applied, lines sorted by time.
+ */
+function expandLrc(text: string): string {
+  const offMs = Number(text.match(/^\s*\[offset:\s*([+-]?\d+)\s*\]/im)?.[1] || 0);
+  const out: { t: number; line: string }[] = [];
+  const stamp = /^\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/;
+  for (const raw of text.split(/\r?\n/)) {
+    let rest = raw.trim();
+    const times: number[] = [];
+    let m: RegExpMatchArray | null;
+    while ((m = rest.match(stamp))) {
+      const frac = m[3] ? Number(m[3]) / Math.pow(10, m[3].length) : 0;
+      times.push(Number(m[1]) * 60 + Number(m[2]) + frac - offMs / 1000); // +offset = earlier
+      rest = rest.slice(m[0].length);
+    }
+    for (const t of times) {
+      const c = Math.max(0, t);
+      const mm = Math.floor(c / 60);
+      const ss = (c - mm * 60).toFixed(2).padStart(5, '0');
+      out.push({ t: c, line: `[${String(mm).padStart(2, '0')}:${ss}]${rest}` });
+    }
+  }
+  out.sort((x, y) => x.t - y.t);
+  return out.map((o) => o.line).join('\n');
+}
+
+/** LRC text (timed) or plain lyrics → LyricsData; plain lines are spread across the song */
+export function lyricsFromText(text: string, durationSec: number): LyricsData | null {
+  if (/\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\]/.test(text)) {
+    const parsed = parseLrcText(expandLrc(text));
+    if (parsed.lines.length > 0) {
+      return {
+        trackId: '',
+        provider: 'Local',
+        synced: true,
+        wordSynced: parsed.wordSynced,
+        lines: parsed.lines,
+      };
+    }
+  }
+  const rawLines = text
+    .split(/\r?\n/)
+    .map((s) => s.replace(/^\[[a-z]+:.*\]$/i, '').trim())
+    .filter(Boolean);
+  if (rawLines.length === 0) return null;
+  const step = Math.max(3, (durationSec || 180) / Math.max(1, rawLines.length));
+  return {
+    trackId: '',
+    provider: 'Local',
+    synced: false,
+    wordSynced: false,
+    plainText: rawLines.join('\n'),
+    lines: rawLines.map((t, idx) => ({
+      id: `local-${idx}`,
+      startSec: idx * step,
+      endSec: (idx + 1) * step,
+      text: t,
+    })),
+  };
+}
+
 export async function fetchLyricsForTrack(track: Track): Promise<LyricsData> {
   const cached = lyricsCache.get(track.id);
   if (cached) return cached;
@@ -340,6 +404,17 @@ export async function fetchLyricsForTrack(track: Track): Promise<LyricsData> {
     };
     lyricsCache.set(track.id, builtIn);
     return builtIn;
+  }
+
+  // Local Files: a sidecar .lrc next to the song, or lyrics embedded in its tags, win over online
+  if (isLocalTrack(track)) {
+    const own = await LocalLibrary.lyricsFor(track).catch(() => null);
+    const local = own ? lyricsFromText(own.text, track.durationSec) : null;
+    if (local) {
+      const finalLocal = { ...local, trackId: track.id };
+      lyricsCache.set(track.id, finalLocal);
+      return finalLocal;
+    }
   }
 
   // Race / cascade: YouLyPlus (word-timed syllable lyrics) -> LRCLib (LRC synced lyrics)

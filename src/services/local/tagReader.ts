@@ -27,6 +27,11 @@ export interface TagMeta {
   bitrateKbps?: number;
   codec?: string;
   picture?: TagPicture;
+  /** embedded lyrics (ID3 USLT, Vorbis LYRICS, MP4 ©lyr) — may be LRC-timed */
+  lyrics?: string;
+  /** ReplayGain track gain in dB and sample peak (0..1+) */
+  replayGainDb?: number;
+  replayPeak?: number;
 }
 
 /** Random-access byte source (native FileHandle, or a browser File/Blob). */
@@ -85,6 +90,58 @@ const clean = (s: string | undefined): string | undefined => {
     .replace(/[\u0000-\u001f]/g, ' ')
     .trim();
   return t || undefined;
+};
+
+/** Multi-line text (lyrics): keeps line breaks, drops other control characters */
+const cleanMultiline = (str: string | undefined): string | undefined => {
+  if (!str) return undefined;
+  const t = str
+    .replace(/\r\n?/g, '\n')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000b-\u001f]/g, '')
+    .trim();
+  return t || undefined;
+};
+
+/** Decode a text file (.lrc): UTF-8 / UTF-16 with BOM. */
+export function decodeText(b: Uint8Array): string {
+  if (b[0] === 0xff && b[1] === 0xfe) return utf16(b, 2, b.length, false);
+  if (b[0] === 0xfe && b[1] === 0xff) return utf16(b, 2, b.length, true);
+  const s = b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf ? 3 : 0;
+  return utf8(b, s, b.length);
+}
+
+/** Raw ID3 string in a given encoding (no splitting at NULs) */
+function id3Decode(b: Uint8Array, s: number, e: number, enc: number): string {
+  if (s >= e) return '';
+  if (enc === 0) return latin1(b, s, e);
+  if (enc === 3) return utf8(b, s, e);
+  if (enc === 1) {
+    if (b[s] === 0xfe && b[s + 1] === 0xff) return utf16(b, s + 2, e, true);
+    if (b[s] === 0xff && b[s + 1] === 0xfe) return utf16(b, s + 2, e, false);
+    return utf16(b, s, e, false);
+  }
+  return utf16(b, s, e, true);
+}
+
+/** Position after an encoding-dependent NUL-terminated string */
+function skipId3String(b: Uint8Array, q: number, e: number, enc: number): number {
+  if (enc === 1 || enc === 2) {
+    while (q + 1 < e && !(b[q] === 0 && b[q + 1] === 0)) q += 2;
+    return q + 2;
+  }
+  while (q < e && b[q] !== 0) q++;
+  return q + 1;
+}
+
+/** "-7.32 dB" → -7.32 */
+const parseGain = (v: string | undefined): number | undefined => {
+  const n = v ? parseFloat(v.replace(',', '.')) : NaN;
+  return Number.isFinite(n) && Math.abs(n) < 60 ? n : undefined;
+};
+const parsePeak = (v: string | undefined): number | undefined => {
+  const n = v ? parseFloat(v.replace(',', '.')) : NaN;
+  return Number.isFinite(n) && n > 0 && n < 10 ? n : undefined;
 };
 
 /** ID3 text with an encoding byte; returns the first string (multi-value → first) */
@@ -312,6 +369,26 @@ function parseId3v2(tag: Uint8Array, major: number, flags: number, meta: TagMeta
         if (ms && ms > 1000) meta.durationSec = meta.durationSec || Math.round(ms / 1000);
         break;
       }
+      case 'USLT':
+      case 'ULT': {
+        // encoding, 3-byte language, descriptor, text
+        const enc = frame[fs];
+        const q = skipId3String(frame, fs + 4, fe, enc);
+        if (!meta.lyrics && q < fe) meta.lyrics = cleanMultiline(id3Decode(frame, q, fe, enc));
+        break;
+      }
+      case 'TXXX':
+      case 'TXX': {
+        const enc = frame[fs];
+        const q = skipId3String(frame, fs + 1, fe, enc);
+        const desc = clean(id3Decode(frame, fs + 1, q, enc).split('\u0000')[0])?.toUpperCase();
+        const val = clean(id3Decode(frame, q, fe, enc).split('\u0000')[0]);
+        if (desc === 'REPLAYGAIN_TRACK_GAIN') meta.replayGainDb = parseGain(val);
+        else if (desc === 'REPLAYGAIN_TRACK_PEAK') meta.replayPeak = parsePeak(val);
+        else if ((desc === 'LYRICS' || desc === 'UNSYNCEDLYRICS') && !meta.lyrics)
+          meta.lyrics = cleanMultiline(id3Decode(frame, q, fe, enc));
+        break;
+      }
       case 'APIC':
       case 'PIC': {
         const enc = frame[fs];
@@ -487,12 +564,14 @@ function walkAtoms(
         if (sr > 0) meta.sampleRateHz = sr;
       }
     } else if (path.endsWith('ilst')) {
-      // item atom → find its 'data' child
+      // item atom → find its 'data' child ('----' freeform items carry mean/name first)
       let q = cs;
+      let freeName = '';
       while (q + 16 <= ce) {
         const ds = u32be(b, q);
         const dt = latin1(b, q + 4, q + 8);
-        if (ds < 16 || q + ds > ce) break;
+        if (ds < 12 || q + ds > ce) break;
+        if (dt === 'name') freeName = utf8(b, q + 12, q + ds).toLowerCase();
         if (dt === 'data') {
           const kind = u24be(b, q + 9);
           const vs = q + 16;
@@ -525,6 +604,13 @@ function walkAtoms(
               break;
             case 'disk':
               if (ve - vs >= 4) meta.discNo = u16be(b, vs + 2) || undefined;
+              break;
+            case '\u00a9lyr':
+              meta.lyrics = meta.lyrics || cleanMultiline(utf8(b, vs, ve));
+              break;
+            case '----':
+              if (freeName === 'replaygain_track_gain') meta.replayGainDb = parseGain(text());
+              else if (freeName === 'replaygain_track_peak') meta.replayPeak = parsePeak(text());
               break;
             case 'covr':
               if (!meta.picture && ve - vs <= MAX_PICTURE_BYTES) {
@@ -589,6 +675,10 @@ function parseVorbisComments(b: Uint8Array, s: number, e: number, meta: TagMeta)
     else if (k === 'DISCNUMBER') meta.discNo = meta.discNo || numPart(v);
     else if (k === 'DATE' || k === 'YEAR') meta.year = meta.year || numPart(v.slice(0, 4));
     else if (k === 'GENRE') meta.genre = meta.genre || v;
+    else if (k === 'REPLAYGAIN_TRACK_GAIN') meta.replayGainDb = parseGain(v);
+    else if (k === 'REPLAYGAIN_TRACK_PEAK') meta.replayPeak = parsePeak(v);
+    else if ((k === 'LYRICS' || k === 'UNSYNCEDLYRICS' || k === 'UNSYNCED LYRICS') && !meta.lyrics)
+      meta.lyrics = cleanMultiline(kv.slice(eq + 1));
   }
 }
 

@@ -3,6 +3,7 @@
 // AVPlayer, so it uses the loudness each source already measures:
 //   • YouTube: playerConfig.audioConfig.loudnessDb (how much louder than YouTube's reference)
 //   • Monochrome / TIDAL: track ReplayGain (dB) and sample peak
+//   • Local Files: the REPLAYGAIN_TRACK_GAIN / _PEAK tags inside the file
 // AVPlayer volume can only go down (≤ 1.0), so loud masters are brought down to the level of
 // quiet ones instead of boosting quiet ones above 0 dBFS — the same no-clipping rule Cog follows.
 
@@ -46,8 +47,12 @@ export const Loudness = {
   /** Linear volume multiplier for a stream (1 = unchanged) */
   multiplier(track: Track, stream: ResolvedStream | null, enabled: boolean): number {
     if (!enabled) return 1;
-    const g = typeof stream?.gainDb === 'number' ? stream.gainDb : memory[track.id]?.g;
-    const peak = typeof stream?.peak === 'number' ? stream.peak : memory[track.id]?.p;
+    const g =
+      typeof stream?.gainDb === 'number'
+        ? stream.gainDb
+        : (memory[track.id]?.g ?? track.replayGainDb); // Local Files: ReplayGain tag
+    const peak =
+      typeof stream?.peak === 'number' ? stream.peak : (memory[track.id]?.p ?? track.replayPeak);
     if (typeof g !== 'number' || !Number.isFinite(g)) return 1;
     let mult = Math.pow(10, (g + PREAMP_DB) / 20);
     // clipping prevention: never let gain × peak exceed full scale
@@ -56,7 +61,10 @@ export const Loudness = {
   },
 
   describe(track: Track, stream: ResolvedStream | null): string | null {
-    const g = typeof stream?.gainDb === 'number' ? stream.gainDb : memory[track.id]?.g;
+    const g =
+      typeof stream?.gainDb === 'number'
+        ? stream.gainDb
+        : (memory[track.id]?.g ?? track.replayGainDb);
     if (typeof g !== 'number') return null;
     return `${g >= 0 ? '+' : ''}${g.toFixed(1)} dB`;
   },

@@ -508,7 +508,9 @@ class HolySicAudioEngine {
             title: track.title,
             artist: track.artist,
             albumTitle: track.album || 'HolySic',
-            artworkUrl: track.artworkUrl.startsWith('http') ? track.artworkUrl : undefined,
+            // http covers + on-device ones (Local Files art, folder covers): MediaController loads
+            // them with URLSession, which reads file:// URLs too
+            artworkUrl: /^(https?|file):/.test(track.artworkUrl) ? track.artworkUrl : undefined,
           },
           {
             showSeekForward: true,
@@ -535,7 +537,7 @@ class HolySicAudioEngine {
   private setupWebMediaSession(track: Track): void {
     if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
     try {
-      const artwork = track.artworkUrl.startsWith('http')
+      const artwork = /^(https?|blob):/.test(track.artworkUrl)
         ? [{ src: track.artworkUrl, sizes: '512x512', type: 'image/jpeg' }]
         : [];
       navigator.mediaSession.metadata = new MediaMetadata({

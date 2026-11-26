@@ -2,7 +2,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -20,6 +20,8 @@ import { looksLikeLink } from '../../services/import/linkImport';
 import { MOOD_CATEGORIES } from '../../data/curatedCatalog';
 import { AlbumSummary, MusicSourceId, Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
+import { useLocalLibrary } from '../local/LocalLibraryScreen';
+import { LocalLibrary } from '../../services/local/localLibrary';
 
 const SOURCE_FILTERS: { id: 'all' | MusicSourceId; label: string }[] = [
   { id: 'all', label: 'All Sources' },
@@ -66,6 +68,14 @@ export const SearchScreen: React.FC = () => {
   const [albumResults, setAlbumResults] = useState<AlbumSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const isLink = looksLikeLink(query);
+  const localState = useLocalLibrary();
+  // Local Files matches show instantly, above the online results
+  const localHits = useMemo(
+    () => (isLink || query.trim().length < 2 ? [] : LocalLibrary.search(query, 30)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [query, isLink, localState.files]
+  );
+  const localTracks = useMemo(() => localHits.map((f) => f.track), [localHits]);
   const listCount =
     !isLink && /[,;\n]/.test(query)
       ? query.split(/[,;\n]/).filter((x) => x.trim().length > 1).length
@@ -270,6 +280,31 @@ export const SearchScreen: React.FC = () => {
               </View>
             )}
 
+            {localTracks.length > 0 && (
+              <>
+                <View style={styles.localHead}>
+                  <Ionicons name="phone-portrait-outline" size={16} color={palette.accent} />
+                  <Text style={[styles.subHeading, styles.localTitle, { fontFamily }]}>
+                    {vi
+                      ? `Trên máy (${localTracks.length})`
+                      : `On this device (${localTracks.length})`}
+                  </Text>
+                  <Pressable
+                    onPress={() => LocalLibrary.open('')}
+                    hitSlop={8}
+                    accessibilityLabel={vi ? 'Mở Nhạc trên máy' : 'Open Local Files'}
+                  >
+                    <Text style={[styles.localMore, { color: palette.accent }]}>
+                      {vi ? 'Mở thư viện' : 'Open'}
+                    </Text>
+                  </Pressable>
+                </View>
+                {localTracks.slice(0, 6).map((song) => (
+                  <TrackRow key={song.id} track={song} queueContext={localTracks} />
+                ))}
+              </>
+            )}
+
             {albumResults.length > 0 && (
               <>
                 <Text style={[styles.subHeading, { fontFamily }]}>Albums</Text>
@@ -305,7 +340,7 @@ export const SearchScreen: React.FC = () => {
               <TrackRow key={song.id} track={song} queueContext={results} />
             ))}
 
-            {!loading && results.length === 0 && (
+            {!loading && results.length === 0 && localTracks.length === 0 && (
               <View style={styles.emptyWrap}>
                 <Ionicons name="musical-notes" size={36} color={HOLYSIC_COLORS.textMuted} />
                 <Text style={styles.emptyText}>
@@ -550,6 +585,16 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 10,
   },
+  localHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  localTitle: { flex: 1, marginHorizontal: 0, marginTop: 0, marginBottom: 0 },
+  localMore: { fontSize: 13, fontWeight: '800' },
   historyBlock: {
     paddingHorizontal: 18,
     marginBottom: 12,

@@ -34,6 +34,9 @@ export interface Track {
   qualityBadge?: string;
   genre?: string;
   releaseYear?: number;
+  /** ReplayGain from the file's own tags (Local Files), in dB, and its sample peak */
+  replayGainDb?: number;
+  replayPeak?: number;
 }
 
 export interface ResolvedStream {
@@ -123,7 +126,7 @@ export interface LyricLine {
 
 export interface LyricsData {
   trackId: string;
-  provider: 'LRCLib' | 'YouLyPlus' | 'BetterLyrics' | 'Built-in' | 'None';
+  provider: 'LRCLib' | 'YouLyPlus' | 'BetterLyrics' | 'Built-in' | 'Local' | 'None';
   synced: boolean;
   wordSynced: boolean;
   lines: LyricLine[];
