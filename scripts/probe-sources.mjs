@@ -252,6 +252,47 @@ async function probeMonochrome(q) {
   }
 }
 
+async function probeDiscovery() {
+  console.log('\n=== Discovery endpoints ===');
+  const show = async (label, url, init = {}, peek = (t) => t.slice(0, 160)) => {
+    const { res, err, ms } = await timed(url, init);
+    if (err) return console.log(`  ${label}: ERR ${err}`);
+    const text = await res.text();
+    console.log(`  ${label}: ${res.status} ${ms}ms cors=${res.headers.get('access-control-allow-origin')} ctype=${res.headers.get('content-type')} | ${peek(text).replace(/\s+/g, ' ')}`);
+    return text;
+  };
+  for (const cc of ['vn', 'us', 'kr', 'jp']) {
+    await show(`appleRSS v2 ${cc}`, `https://rss.marketingtools.apple.com/api/v2/${cc}/music/most-played/25/songs.json`, {}, (t) => {
+      try { const j = JSON.parse(t); return `${j.feed.results.length} items; first=${j.feed.results[0].name} — ${j.feed.results[0].artistName} keys=${Object.keys(j.feed.results[0]).join(',')}`; } catch { return t.slice(0, 120); }
+    });
+  }
+  await show('itunes legacy RSS vn genre 14 (pop)', 'https://itunes.apple.com/vn/rss/topsongs/limit=10/genre=14/json', {}, (t) => {
+    try { const j = JSON.parse(t); const e = j.feed.entry; return `${e.length} entries; first=${e[0]['im:name'].label} — ${e[0]['im:artist'].label} keys=${Object.keys(e[0]).join(',')}`; } catch { return t.slice(0, 120); }
+  });
+  await show('itunes legacy RSS vn all', 'https://itunes.apple.com/vn/rss/topsongs/limit=10/json', {}, (t) => {
+    try { const j = JSON.parse(t); return `${j.feed.entry.length} entries`; } catch { return t.slice(0, 120); }
+  });
+  // public Spotify playlist (Today's Top Hits)
+  const pid = '37i9dQZF1DXcBWIGoYBM5M';
+  await show('spotify embed playlist', `https://open.spotify.com/embed/playlist/${pid}`, { headers: { 'User-Agent': DESKTOP_UA } }, (t) => {
+    const m = t.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!m) return 'no __NEXT_DATA__; len=' + t.length;
+    try {
+      const j = JSON.parse(m[1]);
+      const ent = j?.props?.pageProps?.state?.data?.entity;
+      return `entity name=${ent?.name} tracks=${ent?.trackList?.length} first=${JSON.stringify(ent?.trackList?.[0]).slice(0, 200)}`;
+    } catch (e) { return 'parse err ' + e.message; }
+  });
+  await show('spotify oembed track', 'https://open.spotify.com/oembed?url=' + encodeURIComponent('https://open.spotify.com/track/7qiZfU4dY1lWllzX7mPBI3'));
+  await show('piped playlist', 'https://pipedapi.kavin.rocks/playlists/PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI', {}, (t) => t.slice(0, 120));
+  await show('listenbrainz validate', 'https://api.listenbrainz.org/1/validate-token', { headers: { Authorization: 'Token invalid' } });
+  await show('innertube music browse (VL playlist) WEB_REMIX', 'https://music.youtube.com/youtubei/v1/browse?prettyPrint=false', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': DESKTOP_UA, Origin: 'https://music.youtube.com' },
+    body: JSON.stringify({ browseId: 'VLPLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI', context: { client: { clientName: 'WEB_REMIX', clientVersion: '1.20260707.12.00', hl: 'en', gl: 'US' } } }),
+  }, (t) => `len=${t.length} videoIds=${(t.match(/"videoId":"/g) || []).length}`);
+  await show('lrclib', 'https://lrclib.net/api/search?q=shape%20of%20you', {}, (t) => t.slice(0, 80));
+}
+
 const SONGS = [
   { q: 'Sơn Tùng M-TP Chúng Ta Của Hiện Tại', saavn: 'Shape of You Ed Sheeran', mono: 'Ed Sheeran Shape of You' },
   { q: 'Ed Sheeran Shape of You' },
@@ -261,6 +302,7 @@ const SONGS = [
   console.log(`Probe @ ${new Date().toISOString()} node ${process.version}`);
   const ip = await timed('https://api.ipify.org?format=json');
   if (ip.res) console.log('runner IP', await ip.res.text());
+  if (process.env.ONLY_DISCOVERY) { await probeDiscovery(); console.log('\nProbe done.'); return; }
   const ids = [];
   for (const s of SONGS) {
     const vid = await ytMusicSearch(s.q);
