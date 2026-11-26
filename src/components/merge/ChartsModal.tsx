@@ -19,6 +19,7 @@ import { useHolySic } from '../../context/HolySicContext';
 import { CHART_COUNTRIES, CHART_GENRES } from '../../services/discovery/chartsService';
 import { Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
+import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 
 interface Props {
   visible: boolean;
@@ -30,6 +31,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
   const insets = useSafeAreaInsets();
   const { prefs, updatePrefs, palette, fetchChart, playTrack, savePlaylistFromTracks, showToast } =
     useHolySic();
+  useModalLayer('charts', visible);
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const [genre, setGenre] = useState<number | null>(initialGenre);
@@ -197,6 +199,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
           />
         )}
       </View>
+      <SheetSlot layer="charts" />
     </Modal>
   );
 };

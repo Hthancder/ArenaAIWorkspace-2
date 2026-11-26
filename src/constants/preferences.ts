@@ -194,9 +194,9 @@ export const PLAYER_STYLE_META: {
   {
     id: 'POSTER',
     titleVi: 'Poster & Visualizer',
-    titleEn: 'Poster Stage',
-    descVi: 'Ảnh bìa tràn viền kết hợp dải sóng nhạc đồng bộ nhịp điệu',
-    descEn: 'Full-bleed poster artwork with reactive audio spectrum bars',
+    titleEn: 'Poster & Visualizer',
+    descVi: 'Ảnh bìa + phổ âm thật 32 dải (FFT từ âm thanh đang phát), có vạch đỉnh',
+    descEn: 'Artwork + a real 32-band spectrum (FFT of the playing audio) with peak caps',
     badge: 'Stage',
   },
   {

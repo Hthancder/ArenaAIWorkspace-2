@@ -9,18 +9,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HOLYSIC_COLORS } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { HolySicMarkIcon } from '../HolySicIcons';
+import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 
 export const RecapModal: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { isRecapOpen, setIsRecapOpen, history, likedTracks, downloads, palette, prefs, haptic } =
     useHolySic();
+  useModalLayer('recap', isRecapOpen);
 
   const [flipped, setFlipped] = useState(false);
   const vi = prefs.language === 'vi';
 
   const stats = useMemo(() => {
-    const totalSec = history.reduce((acc, e) => acc + (e.listenedSec || 180), 0);
-    const totalMinutes = Math.max(12, Math.round(totalSec / 60));
+    // real listened time only (no padding / no minimum)
+    const totalSec = history.reduce((acc, e) => acc + (e.listenedSec || 0), 0);
+    const totalMinutes = Math.round(totalSec / 60);
 
     const artistCounts = new Map<string, { count: number; art: string }>();
     const songCounts = new Map<
@@ -208,6 +211,7 @@ export const RecapModal: React.FC = () => {
           )}
         </ScrollView>
       </View>
+      <SheetSlot layer="recap" />
     </Modal>
   );
 };

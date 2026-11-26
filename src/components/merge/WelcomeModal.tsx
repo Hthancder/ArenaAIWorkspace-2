@@ -11,6 +11,7 @@ import { ACCENT_PRESETS } from '../../constants/preferences';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { HolySicMarkIcon } from '../HolySicIcons';
+import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 
 const FEATURES: { icon: string; vi: string; en: string; dvi: string; den: string }[] = [
   {
@@ -74,6 +75,7 @@ const FEATURES: { icon: string; vi: string; en: string; dvi: string; den: string
 export const WelcomeModal: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { prefs, updatePrefs, palette } = useHolySic();
+  useModalLayer('welcome', !prefs.onboarded);
   const [step, setStep] = useState(0);
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -186,6 +188,7 @@ export const WelcomeModal: React.FC = () => {
           </Pressable>
         </View>
       </LinearGradient>
+      <SheetSlot layer="welcome" />
     </Modal>
   );
 };

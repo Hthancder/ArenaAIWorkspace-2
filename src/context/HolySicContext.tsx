@@ -388,7 +388,27 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     listened: number;
     lastPos: number;
     scrobbled: boolean;
+    /** History event this play writes its REAL listened time into (Recap minutes) */
+    eventId?: string;
+    flushed?: number;
   } | null>(null);
+  /** Write the real listened seconds of the current play into its history event */
+  const flushListenTime = useCallback(() => {
+    const log = playLogRef.current;
+    if (!log?.eventId) return;
+    const sec = Math.round(log.listened);
+    if (sec === log.flushed) return;
+    log.flushed = sec;
+    const id = log.eventId;
+    setHistory((prev) => {
+      const i = prev.findIndex((e) => e.id === id);
+      if (i < 0 || prev[i].listenedSec === sec) return prev;
+      const updated = [...prev];
+      updated[i] = { ...updated[i], listenedSec: sec };
+      StorageService.saveHistory(updated);
+      return updated;
+    });
+  }, []);
   /** Next-track preload (Musike): a resolved stream ready before the current song ends */
   const preloadRef = useRef<{ trackId: string; stream: ResolvedStream; at: number } | null>(null);
   const preloadingRef = useRef<string | null>(null);
@@ -686,6 +706,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const internalStartTrack = useCallback(
     async (track: Track, startAtSec = 0) => {
       const token = ++playTokenRef.current;
+      flushListenTime();
       playLogRef.current = null;
       const isCurrent = () => token === playTokenRef.current;
       const vi = prefsRef.current.language === 'vi';
@@ -865,12 +886,15 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         );
       }
 
+      const eventId = `ev-${Date.now()}-${track.id}`;
       playLogRef.current = {
         track,
         startedAt: Date.now(),
         listened: 0,
         lastPos: startAtSec,
         scrobbled: played.isPreview === true || track.isLive === true,
+        eventId,
+        flushed: 0,
       };
       if (track.isLive) registerStationClick(track.id);
       else if (!played.isPreview) Scrobbler.nowPlaying(track).catch(() => undefined);
@@ -878,10 +902,11 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Log listening event for HolySic Recap & History
       setHistory((prev) => {
         const event: ListeningEvent = {
-          id: `ev-${Date.now()}-${track.id}`,
+          id: eventId,
           track,
           playedAt: Date.now(),
-          listenedSec: Math.min(track.durationSec || 180, 180),
+          // real time is filled in as the song actually plays (flushListenTime)
+          listenedSec: 0,
         };
         const updated = [
           event,
@@ -1028,6 +1053,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     log.lastPos = pos;
     // count only real forward progress (seeks jump by more than a few seconds)
     if (playing && delta > 0 && delta < 3) log.listened += delta;
+    if (log.listened - (log.flushed || 0) >= 15) flushListenTime();
     const total = dur > 0 ? dur : log.track.durationSec;
     if (!log.scrobbled && Scrobbler.qualifies(total, log.listened)) {
       log.scrobbled = true;

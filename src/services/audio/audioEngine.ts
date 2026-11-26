@@ -6,6 +6,53 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-aud
 import { Platform } from 'react-native';
 import { AudioLabSettings, Track } from '../../types/music';
 
+export interface SpectrumStatus {
+  /** live = real samples flowing; waiting = arming the tap; unsupported = can't read this stream */
+  state: 'idle' | 'waiting' | 'live' | 'unsupported';
+  /** hls = Apple gives no PCM for HLS streams; cors = browser blocks a cross-origin stream; tap = iOS tap failed */
+  reason?: 'hls' | 'cors' | 'tap';
+}
+
+/** In-place iterative radix-2 FFT (n must be a power of two) */
+function fftInPlace(re: Float64Array, im: Float64Array): void {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i];
+      re[i] = re[j];
+      re[j] = t;
+      t = im[i];
+      im[i] = im[j];
+      im[j] = t;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len;
+    const wr = Math.cos(ang);
+    const wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1;
+      let ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k;
+        const b = a + len / 2;
+        const tr = re[b] * cr - im[b] * ci;
+        const ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr;
+        im[b] = im[a] - ti;
+        re[a] += tr;
+        im[a] += ti;
+        const ncr = cr * wr - ci * wi;
+        ci = cr * wi + ci * wr;
+        cr = ncr;
+      }
+    }
+  }
+}
+
 export interface EngineStatus {
   isPlaying: boolean;
   isBuffering: boolean;
@@ -152,17 +199,51 @@ class HolySicAudioEngine {
     }
   }
 
-  // ───── Spectrum visualizer (Cog) — PCM taps on iOS, AnalyserNode on web ─────
+  // ───── Spectrum visualizer (Cog) — real PCM on iOS, AnalyserNode on web ─────
+  // iOS: expo-audio installs an MTAudioProcessingTap on the AVPlayerItem and hands us PCM frames;
+  // we run a real FFT and fold it into 32 log-spaced bands. Apple's tap only works for
+  // progressive files (MP3/AAC/M4A/FLAC, downloads, local files) — HLS streams expose no audio
+  // track, so for those the status says so honestly instead of animating fake bars.
   private spectrumListeners = new Set<(bands: number[]) => void>();
+  private spectrumStatusListeners = new Set<(s: SpectrumStatus) => void>();
+  private spectrumStatus: SpectrumStatus = { state: 'idle' };
   private sampleSub: { remove: () => void } | null = null;
   private analyser: AnalyserNode | null = null;
+  private analyserEl: HTMLAudioElement | null = null;
   private spectrumTimer: ReturnType<typeof setInterval> | null = null;
+  private tapWatchdog: ReturnType<typeof setInterval> | null = null;
   private lastSpectrumAt = 0;
-  private static readonly SPECTRUM_FREQS = [
-    55, 110, 220, 350, 560, 900, 1400, 2200, 3500, 5600, 9000, 14000,
-  ];
+  private lastSampleAt = 0;
+  private tapAttempts = 0;
+  private tapEnabledAt = 0;
+  private nativePlaying = false;
+  private currentIsHls = false;
+  private srFrames = 0;
+  private srSince = 0;
+  private sampleRate = 44100;
+  static readonly SPECTRUM_BANDS = 32;
+  private static bandEdges(sr: number, n: number): [number, number][] {
+    const lo = 40;
+    const hi = Math.min(16000, sr / 2 - 100);
+    const N = HolySicAudioEngine.SPECTRUM_BANDS;
+    const out: [number, number][] = [];
+    for (let i = 0; i < N; i++) {
+      const f0 = lo * Math.pow(hi / lo, i / N);
+      const f1 = lo * Math.pow(hi / lo, (i + 1) / N);
+      const k0 = Math.max(1, Math.floor((f0 * n) / sr));
+      const k1 = Math.max(k0, Math.min(n / 2 - 1, Math.ceil((f1 * n) / sr) - 1));
+      out.push([k0, k1]);
+    }
+    return out;
+  }
+  /** Gentle +3 dB/octave tilt around 1 kHz so highs are visible next to the bass */
+  private static tilt(i: number): number {
+    const N = HolySicAudioEngine.SPECTRUM_BANDS;
+    const fc = 40 * Math.pow(16000 / 40, (i + 0.5) / N);
+    return 3 * Math.log2(fc / 1000);
+  }
 
-  /** Live 12-band spectrum (0..1). Sampling only runs while someone listens. */
+  /** Live 32-band spectrum (0..1). Sampling only runs while someone listens. */
   subscribeSpectrum(cb: (bands: number[]) => void): () => void {
     this.spectrumListeners.add(cb);
     this.updateSampling();
@@ -172,8 +253,39 @@ class HolySicAudioEngine {
     };
   }
 
+  /** Whether the spectrum is real right now, and if not, why. */
+  subscribeSpectrumStatus(cb: (s: SpectrumStatus) => void): () => void {
+    this.spectrumStatusListeners.add(cb);
+    cb(this.spectrumStatus);
+    return () => {
+      this.spectrumStatusListeners.delete(cb);
+    };
+  }
+
+  private setSpectrumStatus(next: SpectrumStatus): void {
+    if (next.state === this.spectrumStatus.state && next.reason === this.spectrumStatus.reason)
+      return;
+    this.spectrumStatus = next;
+    this.spectrumStatusListeners.forEach((l) => l(next));
+  }
+
   private emitSpectrum(bands: number[]): void {
+    this.setSpectrumStatus({ state: 'live' });
     this.spectrumListeners.forEach((l) => l(bands));
+  }
+
+  private enableNativeTap(p: AudioPlayer): void {
+    try {
+      if (!this.sampleSub) {
+        this.sampleSub = p.addListener('audioSampleUpdate', (smp) =>
+          this.onPcmSample(smp.channels)
+        );
+      }
+      p.setAudioSamplingEnabled(true);
+      this.tapEnabledAt = Date.now();
+    } catch {
+      /* not supported on this build */
+    }
   }
 
   private updateSampling(): void {
@@ -181,10 +293,14 @@ class HolySicAudioEngine {
     if (Platform.OS !== 'web') {
       const p = this.nativePlayer;
       if (!p) return;
+      if (want && this.currentIsHls) {
+        this.setSpectrumStatus({ state: 'unsupported', reason: 'hls' });
+        return;
+      }
       try {
         if (want && !this.sampleSub && p.isAudioSamplingSupported) {
-          p.setAudioSamplingEnabled(true);
-          this.sampleSub = p.addListener('audioSampleUpdate', (s) => this.onPcmSample(s.channels));
+          if (this.spectrumStatus.state !== 'live') this.setSpectrumStatus({ state: 'waiting' });
+          this.enableNativeTap(p);
         } else if (!want && this.sampleSub) {
           this.sampleSub.remove();
           this.sampleSub = null;
@@ -193,56 +309,112 @@ class HolySicAudioEngine {
       } catch {
         this.sampleSub = null;
       }
+      // Watchdog: expo-audio installs the tap once at readyToPlay; if the item's audio track
+      // wasn't ready yet the tap silently fails. Re-arm it a few times while music is playing.
+      if (want && !this.tapWatchdog) {
+        this.tapWatchdog = setInterval(() => this.checkTap(), 1000);
+      } else if (!want && this.tapWatchdog) {
+        clearInterval(this.tapWatchdog);
+        this.tapWatchdog = null;
+      }
       return;
     }
     if (want && !this.spectrumTimer) {
-      const bins = new Uint8Array(1024);
-      this.spectrumTimer = setInterval(() => {
-        const a = this.analyser;
-        const ctx = this.audioCtx;
-        if (!a || !ctx) return;
-        a.getByteFrequencyData(bins);
-        const hzPerBin = ctx.sampleRate / 2 / a.frequencyBinCount;
-        const bands = HolySicAudioEngine.SPECTRUM_FREQS.map((f) => {
-          const i = Math.min(a.frequencyBinCount - 1, Math.round(f / hzPerBin));
-          const lo = Math.max(0, i - 1);
-          const v = Math.max(bins[lo], bins[i], bins[Math.min(a.frequencyBinCount - 1, i + 1)]);
-          return v / 255;
-        });
-        this.emitSpectrum(bands);
-      }, 60);
+      this.spectrumTimer = setInterval(() => this.pollWebAnalyser(), 40);
     } else if (!want && this.spectrumTimer) {
       clearInterval(this.spectrumTimer);
       this.spectrumTimer = null;
     }
   }
 
-  /** Goertzel filters at 12 log-spaced frequencies over the latest PCM frames */
+  private checkTap(): void {
+    const p = this.nativePlayer;
+    if (!p || this.currentIsHls || !this.nativePlaying) return;
+    const now = Date.now();
+    if (now - this.lastSampleAt < 1500) return;
+    // samples stopped / never started
+    if (this.spectrumStatus.state === 'live') this.setSpectrumStatus({ state: 'waiting' });
+    if (now - this.tapEnabledAt < 1600 + this.tapAttempts * 900) return;
+    if (this.tapAttempts >= 5) {
+      this.setSpectrumStatus({ state: 'unsupported', reason: 'tap' });
+      return;
+    }
+    this.tapAttempts += 1;
+    try {
+      p.setAudioSamplingEnabled(false);
+    } catch {
+      /* ignore */
+    }
+    this.enableNativeTap(p);
+  }
+
+  private pollWebAnalyser(): void {
+    const a = this.analyser;
+    const ctx = this.audioCtx;
+    if (!this.webAudio) return;
+    if (!a || !ctx || this.analyserEl !== this.webAudio) {
+      // cross-origin stream without CORS: the browser won't let us read its samples
+      this.setSpectrumStatus({ state: 'unsupported', reason: 'cors' });
+      return;
+    }
+    if (this.webAudio.paused) return;
+    const bins = new Float32Array(a.frequencyBinCount);
+    a.getFloatFrequencyData(bins);
+    const n = a.fftSize;
+    const edges = HolySicAudioEngine.bandEdges(ctx.sampleRate, n);
+    const bands = edges.map(([k0, k1], i) => {
+      let m = -140;
+      for (let k = k0; k <= k1; k++) if (bins[k] > m) m = bins[k];
+      // AnalyserNode dB is relative to a full-scale sine of amplitude 1 (≈ +6 dB vs our FFT)
+      const db = m - 6 + HolySicAudioEngine.tilt(i);
+      return Math.max(0, Math.min(1, (db + 64) / 56));
+    });
+    this.emitSpectrum(bands);
+  }
+
+  /** Real FFT over the newest PCM frames → 32 log bands */
   private onPcmSample(channels: { frames: number[] }[]): void {
     const now = Date.now();
-    if (now - this.lastSpectrumAt < 45 || !channels?.length) return;
-    this.lastSpectrumAt = now;
+    if (!channels?.length || !channels[0]?.frames?.length) return;
     const a = channels[0].frames;
     const b = channels[1]?.frames;
-    const n = Math.min(a.length, 1024);
-    if (n < 64) return;
-    const sr = 44100;
-    const bands = HolySicAudioEngine.SPECTRUM_FREQS.map((f) => {
-      const k = Math.round((n * f) / sr);
-      const w = (2 * Math.PI * k) / n;
-      const coeff = 2 * Math.cos(w);
-      let s1 = 0;
-      let s2 = 0;
-      for (let i = 0; i < n; i++) {
-        const x = b ? (a[i] + b[i]) * 0.5 : a[i];
-        const hann = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1));
-        const s0 = x * hann + coeff * s1 - s2;
-        s2 = s1;
-        s1 = s0;
+    this.lastSampleAt = now;
+    this.tapAttempts = 0;
+    // estimate the real sample rate from how many frames arrive per second
+    if (!this.srSince) this.srSince = now;
+    this.srFrames += a.length;
+    if (now - this.srSince > 2000) {
+      const est = (this.srFrames * 1000) / (now - this.srSince);
+      const rates = [22050, 32000, 44100, 48000, 88200, 96000];
+      this.sampleRate = rates.reduce((best, r) =>
+        Math.abs(r - est) < Math.abs(best - est) ? r : best
+      );
+      this.srFrames = 0;
+      this.srSince = now;
+    }
+    if (now - this.lastSpectrumAt < 33) return;
+    this.lastSpectrumAt = now;
+    let n = 1;
+    while (n * 2 <= Math.min(a.length, 4096)) n *= 2;
+    if (n < 256) return;
+    const off = a.length - n;
+    const re = new Float64Array(n);
+    const im = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = b ? (a[off + i] + b[off + i]) * 0.5 : a[off + i];
+      re[i] = x * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1)));
+    }
+    fftInPlace(re, im);
+    const norm = n / 4; // Hann coherent gain: a full-scale sine peaks at n/4
+    const edges = HolySicAudioEngine.bandEdges(this.sampleRate, n);
+    const bands = edges.map(([k0, k1], i) => {
+      let pow = 0;
+      for (let k = k0; k <= k1; k++) {
+        const m = Math.hypot(re[k], im[k]) / norm;
+        if (m * m > pow) pow = m * m;
       }
-      const mag = Math.sqrt(Math.max(0, s1 * s1 + s2 * s2 - coeff * s1 * s2)) / (n / 4);
-      const db = 20 * Math.log10(mag + 1e-9);
-      return Math.max(0, Math.min(1, (db + 58) / 52));
+      const db = 10 * Math.log10(pow + 1e-12) + HolySicAudioEngine.tilt(i);
+      return Math.max(0, Math.min(1, (db + 64) / 56));
     });
     this.emitSpectrum(bands);
   }
@@ -289,6 +461,16 @@ class HolySicAudioEngine {
 
       const source =
         headers && Object.keys(headers).length > 0 ? { uri: url, headers } : { uri: url };
+      this.currentIsHls = /\.m3u8|\/manifest\/hls|hls_variant|hls_playlist/i.test(url);
+      this.tapAttempts = 0;
+      this.lastSampleAt = 0;
+      this.nativePlaying = false;
+      this.srFrames = 0;
+      this.srSince = 0;
+      if (this.spectrumListeners.size > 0)
+        this.setSpectrumStatus(
+          this.currentIsHls ? { state: 'unsupported', reason: 'hls' } : { state: 'waiting' }
+        );
       const player = createAudioPlayer(source, {
         updateInterval: 250,
         keepAudioSessionActive: true,
@@ -298,6 +480,7 @@ class HolySicAudioEngine {
 
       this.nativeSub = player.addListener('playbackStatusUpdate', (st) => {
         if (seq !== this.loadSeq || this.nativePlayer !== player) return;
+        this.nativePlaying = !!st.playing;
         this.emit({
           isPlaying: st.playing,
           isBuffering: st.isBuffering || (!st.isLoaded && st.playing),
@@ -448,6 +631,7 @@ class HolySicAudioEngine {
       analyser.smoothingTimeConstant = 0.72;
       panner.connect(analyser);
       this.analyser = analyser;
+      this.analyserEl = el;
 
       panner.connect(dry);
       dry.connect(ctx.destination);

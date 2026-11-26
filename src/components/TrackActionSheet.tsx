@@ -1,7 +1,7 @@
 // iOS Action Sheet for Track Context Menu (Play Next, Queue, Add to Playlist, Offline, Artist/Album, Share, Save to Files, Radio, Block)
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -31,7 +31,6 @@ export const TrackActionSheet: React.FC = () => {
     downloadTrack,
     removeDownload,
     openCollection,
-    setIsPlayerOpen,
     prefs,
     palette,
     showToast,
@@ -45,19 +44,48 @@ export const TrackActionSheet: React.FC = () => {
   const [pickingPlaylist, setPickingPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
 
-  if (!actionTrack) return null;
+  // Keep the last track while the sheet fades out, so iOS can finish dismissing (onDismiss)
+  const [lastTrack, setLastTrack] = useState(actionTrack);
+  useEffect(() => {
+    if (actionTrack) setLastTrack(actionTrack);
+  }, [actionTrack]);
+
+  // Actions that present something else (share sheet, Files, another screen) must wait until
+  // this sheet is fully dismissed — iOS ignores a presentation while another one is animating.
+  const pendingRef = useRef<(() => void) | null>(null);
+  const runPending = () => {
+    const fn = pendingRef.current;
+    pendingRef.current = null;
+    fn?.();
+  };
+
+  const shown = actionTrack || lastTrack;
+  if (!shown) return null;
+  const sheetTrack = shown;
   const vi = prefs.language === 'vi';
-  const liked = isLiked(actionTrack.id);
-  const isOffline = Boolean(downloads[actionTrack.id]);
+  const liked = isLiked(sheetTrack.id);
+  const isOffline = Boolean(downloads[sheetTrack.id]);
 
   const close = () => {
     setPickingPlaylist(false);
     setNewPlaylistName('');
     setActionTrack(null);
   };
+  const closeThen = (fn: () => void) => {
+    pendingRef.current = fn;
+    close();
+    // onDismiss is iOS-only; elsewhere (and as a safety net) run shortly after
+    setTimeout(runPending, Platform.OS === 'ios' ? 650 : 0);
+  };
 
   return (
-    <Modal visible={Boolean(actionTrack)} transparent animationType="fade" onRequestClose={close}>
+    <Modal
+      visible={Boolean(actionTrack)}
+      transparent
+      animationType="fade"
+      onRequestClose={close}
+      onDismiss={runPending}
+    >
       <Pressable style={styles.backdrop} onPress={close}>
         <Pressable style={styles.sheetOuter} onPress={(e) => e.stopPropagation?.()}>
           <GlassSurface intensity={75} tintColor="rgba(18, 18, 26, 0.90)" style={styles.sheet}>
@@ -65,17 +93,17 @@ export const TrackActionSheet: React.FC = () => {
 
             {/* Header */}
             <View style={styles.header}>
-              <ArtworkImage source={{ uri: actionTrack.artworkUrl }} style={styles.art} />
+              <ArtworkImage source={{ uri: sheetTrack.artworkUrl }} style={styles.art} />
               <View style={{ flex: 1 }}>
                 <Text numberOfLines={1} style={styles.title}>
-                  {actionTrack.title}
+                  {sheetTrack.title}
                 </Text>
                 <Text numberOfLines={1} style={styles.artist}>
-                  {actionTrack.artist}
-                  {actionTrack.album ? ` · ${actionTrack.album}` : ''}
+                  {sheetTrack.artist}
+                  {sheetTrack.album ? ` · ${sheetTrack.album}` : ''}
                 </Text>
                 <Text style={[styles.badge, { color: palette.accent }]}>
-                  {actionTrack.qualityBadge || actionTrack.source.toUpperCase()}
+                  {sheetTrack.qualityBadge || sheetTrack.source.toUpperCase()}
                 </Text>
               </View>
             </View>
@@ -94,7 +122,7 @@ export const TrackActionSheet: React.FC = () => {
                     onPress={() => {
                       if (!newPlaylistName.trim()) return;
                       const created = createPlaylist(newPlaylistName);
-                      addTrackToPlaylist(created.id, actionTrack);
+                      addTrackToPlaylist(created.id, sheetTrack);
                       close();
                     }}
                     style={[styles.createBtn, { backgroundColor: palette.accent }]}
@@ -110,7 +138,7 @@ export const TrackActionSheet: React.FC = () => {
                     <Pressable
                       key={pl.id}
                       onPress={() => {
-                        addTrackToPlaylist(pl.id, actionTrack);
+                        addTrackToPlaylist(pl.id, sheetTrack);
                         close();
                       }}
                       style={styles.menuItem}
@@ -128,7 +156,7 @@ export const TrackActionSheet: React.FC = () => {
                 <Pressable
                   style={styles.menuItem}
                   onPress={() => {
-                    addToQueue(actionTrack, true);
+                    addToQueue(sheetTrack, true);
                     close();
                   }}
                 >
@@ -141,7 +169,7 @@ export const TrackActionSheet: React.FC = () => {
                 <Pressable
                   style={styles.menuItem}
                   onPress={() => {
-                    addToQueue(actionTrack, false);
+                    addToQueue(sheetTrack, false);
                     close();
                   }}
                 >
@@ -154,7 +182,7 @@ export const TrackActionSheet: React.FC = () => {
                 <Pressable
                   style={styles.menuItem}
                   onPress={() => {
-                    toggleLike(actionTrack);
+                    toggleLike(sheetTrack);
                     close();
                   }}
                 >
@@ -185,9 +213,9 @@ export const TrackActionSheet: React.FC = () => {
                   style={styles.menuItem}
                   onPress={() => {
                     if (isOffline) {
-                      removeDownload(actionTrack.id);
+                      removeDownload(sheetTrack.id);
                     } else {
-                      downloadTrack(actionTrack);
+                      downloadTrack(sheetTrack);
                     }
                     close();
                   }}
@@ -211,36 +239,35 @@ export const TrackActionSheet: React.FC = () => {
                 <Pressable
                   style={styles.menuItem}
                   onPress={() => {
-                    const targetArtist = actionTrack.artist;
-                    const targetId = actionTrack.artistId || actionTrack.artist;
-                    close();
-                    setIsPlayerOpen(false);
-                    openCollection({ kind: 'artist', id: targetId, name: targetArtist });
+                    const targetArtist = sheetTrack.artist;
+                    const targetId = sheetTrack.artistId || sheetTrack.artist;
+                    // opens on top of whatever is showing (player included); closing it returns there
+                    closeThen(() =>
+                      openCollection({ kind: 'artist', id: targetId, name: targetArtist })
+                    );
                   }}
                 >
                   <Ionicons name="person-outline" size={21} color="#FFFFFF" />
                   <Text style={styles.menuLabel}>
                     {vi
-                      ? `Xem nghệ sĩ: ${actionTrack.artist}`
-                      : `Go to Artist: ${actionTrack.artist}`}
+                      ? `Xem nghệ sĩ: ${sheetTrack.artist}`
+                      : `Go to Artist: ${sheetTrack.artist}`}
                   </Text>
                 </Pressable>
 
-                {actionTrack.albumId && (
+                {sheetTrack.albumId && (
                   <Pressable
                     style={styles.menuItem}
                     onPress={() => {
-                      const albumId = actionTrack.albumId!;
-                      close();
-                      setIsPlayerOpen(false);
-                      openCollection({ kind: 'album', id: albumId });
+                      const albumId = sheetTrack.albumId!;
+                      closeThen(() => openCollection({ kind: 'album', id: albumId }));
                     }}
                   >
                     <Ionicons name="disc-outline" size={21} color="#FFFFFF" />
                     <Text style={styles.menuLabel}>
                       {vi
-                        ? `Xem Album: ${actionTrack.album || ''}`
-                        : `Go to Album: ${actionTrack.album || ''}`}
+                        ? `Xem Album: ${sheetTrack.album || ''}`
+                        : `Go to Album: ${sheetTrack.album || ''}`}
                     </Text>
                   </Pressable>
                 )}
@@ -249,9 +276,8 @@ export const TrackActionSheet: React.FC = () => {
                 <Pressable
                   style={styles.menuItem}
                   onPress={() => {
-                    const tr = actionTrack;
-                    close();
-                    shareTrack(tr);
+                    const tr = sheetTrack;
+                    closeThen(() => shareTrack(tr));
                   }}
                 >
                   <Ionicons name="share-outline" size={20} color="#FFFFFF" />
@@ -263,9 +289,8 @@ export const TrackActionSheet: React.FC = () => {
                   <Pressable
                     style={styles.menuItem}
                     onPress={() => {
-                      const id = actionTrack.id;
-                      close();
-                      exportDownload(id);
+                      const id = sheetTrack.id;
+                      closeThen(() => exportDownload(id));
                     }}
                   >
                     <Ionicons name="folder-open-outline" size={20} color="#FFFFFF" />
@@ -279,9 +304,8 @@ export const TrackActionSheet: React.FC = () => {
                 <Pressable
                   style={styles.menuItem}
                   onPress={() => {
-                    const seed = `${actionTrack.artist} ${actionTrack.genre || ''}`.trim();
-                    close();
-                    startInstantMix(seed);
+                    const seed = `${sheetTrack.artist} ${sheetTrack.genre || ''}`.trim();
+                    closeThen(() => startInstantMix(seed));
                   }}
                 >
                   <Ionicons name="radio-outline" size={21} color="#FFFFFF" />
@@ -294,7 +318,7 @@ export const TrackActionSheet: React.FC = () => {
                 <Pressable
                   style={styles.menuItem}
                   onPress={() => {
-                    blockTrack(actionTrack);
+                    blockTrack(sheetTrack);
                     close();
                   }}
                 >
@@ -304,15 +328,15 @@ export const TrackActionSheet: React.FC = () => {
                 <Pressable
                   style={styles.menuItem}
                   onPress={() => {
-                    blockArtist(actionTrack.artist);
+                    blockArtist(sheetTrack.artist);
                     close();
                   }}
                 >
                   <Ionicons name="ban-outline" size={21} color="#F87171" />
                   <Text style={styles.menuLabel}>
                     {vi
-                      ? `Chặn nghệ sĩ ${actionTrack.artist.split(',')[0]}`
-                      : `Block ${actionTrack.artist.split(',')[0]}`}
+                      ? `Chặn nghệ sĩ ${sheetTrack.artist.split(',')[0]}`
+                      : `Block ${sheetTrack.artist.split(',')[0]}`}
                   </Text>
                 </Pressable>
               </ScrollView>

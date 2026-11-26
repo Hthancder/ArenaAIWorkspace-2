@@ -1,12 +1,23 @@
 // HolySic Audio Lab & Equalizer Modal — Ported from AudioLabScreen.kt, FxPresets.kt & EightDAudioCard.kt (Mochy Music)
 
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
+import { audioEngine, SpectrumStatus } from '../../services/audio/audioEngine';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { AUTO_EQ_PRESETS } from '../../data/curatedCatalog';
+import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 
 export const AudioLabModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -20,6 +31,15 @@ export const AudioLabModal: React.FC = () => {
     prefs,
     haptic,
   } = useHolySic();
+  useModalLayer('audiolab', isAudioLabOpen);
+
+  // Be honest about what actually changes the sound. EQ / bass / reverb / 8D run in the Web Audio
+  // graph; on iOS the player (AVPlayer via expo-audio) exposes only speed & pitch, so those
+  // controls would do nothing — they're shown locked with the reason instead of pretending.
+  const [spec, setSpec] = useState<SpectrumStatus>({ state: 'idle' });
+  useEffect(() => audioEngine.subscribeSpectrumStatus(setSpec), []);
+  const isWeb = Platform.OS === 'web';
+  const dspLive = isWeb && spec.reason !== 'cors';
 
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -74,168 +94,185 @@ export const AudioLabModal: React.FC = () => {
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}
         >
-          {/* AutoEQ & HolySic Presets */}
-          <Text style={[styles.sectionLabel, { fontFamily }]}>
-            {vi
-              ? 'Cấu hình AutoEQ & Tai nghe (AirPods / Audiophile)'
-              : 'AutoEQ & Headphone Profiles'}
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8, paddingVertical: 6 }}
-          >
-            {AUTO_EQ_PRESETS.map((preset) => {
-              const selected = audioLab.presetId === preset.id && audioLab.enabled;
-              return (
-                <Pressable
-                  key={preset.id}
-                  onPress={() => applyEqPreset(preset.id)}
-                  style={[
-                    styles.presetChip,
-                    selected && {
-                      backgroundColor: palette.accent,
-                      borderColor: palette.accent,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12.5,
-                      fontWeight: '700',
-                      color: selected ? palette.onAccent : '#F4F4F8',
-                    }}
+          {!dspLive && (
+            <View style={[styles.honestCard, { borderColor: palette.accent + '55' }]}>
+              <Ionicons name="information-circle" size={18} color={palette.accent} />
+              <Text style={styles.honestText}>
+                {isWeb
+                  ? vi
+                    ? 'Nguồn đang phát chặn xử lý âm thanh trên trình duyệt (CORS), nên EQ, Bass, Reverb và 8D tạm không có tác dụng với bài này. Tốc độ & cao độ vẫn hoạt động.'
+                    : 'This source blocks in-browser audio processing (CORS), so EQ, bass, reverb and 8D have no effect on this song. Speed & pitch still work.'
+                  : vi
+                    ? 'Trên iPhone hiện chỉ Tốc độ phát, Giữ cao độ (và Chuẩn hoá âm lượng trong Cài đặt) thật sự thay đổi âm thanh. EQ, Bass, Reverb và 8D cần bộ xử lý âm thanh gốc cho iOS nên được khoá lại thay vì giả vờ hoạt động.'
+                    : 'On iPhone only playback speed, pitch preservation (and loudness normalisation in Settings) actually change the sound. EQ, bass, reverb and 8D need a native iOS DSP, so they are locked instead of pretending to work.'}
+              </Text>
+            </View>
+          )}
+
+          <View pointerEvents={dspLive ? 'auto' : 'none'} style={!dspLive && styles.lockedBlock}>
+            {/* AutoEQ & HolySic Presets */}
+            <Text style={[styles.sectionLabel, { fontFamily }]}>
+              {vi
+                ? 'Cấu hình AutoEQ & Tai nghe (AirPods / Audiophile)'
+                : 'AutoEQ & Headphone Profiles'}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingVertical: 6 }}
+            >
+              {AUTO_EQ_PRESETS.map((preset) => {
+                const selected = audioLab.presetId === preset.id && audioLab.enabled;
+                return (
+                  <Pressable
+                    key={preset.id}
+                    onPress={() => applyEqPreset(preset.id)}
+                    style={[
+                      styles.presetChip,
+                      selected && {
+                        backgroundColor: palette.accent,
+                        borderColor: palette.accent,
+                      },
+                    ]}
                   >
-                    {preset.name}
+                    <Text
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: '700',
+                        color: selected ? palette.onAccent : '#F4F4F8',
+                      }}
+                    >
+                      {preset.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {/* 10-Band Graphic Equalizer */}
+            <View style={styles.card}>
+              <View style={styles.cardTopRow}>
+                <Text style={styles.cardTitle}>10-Band Graphic Equalizer</Text>
+                <Pressable onPress={() => applyEqPreset('flat')}>
+                  <Text style={{ color: palette.accent, fontSize: 12.5, fontWeight: '700' }}>
+                    {vi ? 'Đặt lại (Flat)' : 'Reset Flat'}
                   </Text>
                 </Pressable>
-              );
-            })}
-          </ScrollView>
+              </View>
 
-          {/* 10-Band Graphic Equalizer */}
-          <View style={styles.card}>
-            <View style={styles.cardTopRow}>
-              <Text style={styles.cardTitle}>10-Band Graphic Equalizer</Text>
-              <Pressable onPress={() => applyEqPreset('flat')}>
-                <Text style={{ color: palette.accent, fontSize: 12.5, fontWeight: '700' }}>
-                  {vi ? 'Đặt lại (Flat)' : 'Reset Flat'}
-                </Text>
-              </Pressable>
-            </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.eqRow}>
+                  {audioLab.bands.map((band, idx) => {
+                    const pct = ((band.gainDb + 12) / 24) * 100;
+                    return (
+                      <View key={band.freqHz} style={styles.bandCol}>
+                        <Pressable onPress={() => adjustBand(idx, 1.5)} style={styles.stepMiniBtn}>
+                          <Ionicons name="add" size={14} color="#FFFFFF" />
+                        </Pressable>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.eqRow}>
-                {audioLab.bands.map((band, idx) => {
-                  const pct = ((band.gainDb + 12) / 24) * 100;
-                  return (
-                    <View key={band.freqHz} style={styles.bandCol}>
-                      <Pressable onPress={() => adjustBand(idx, 1.5)} style={styles.stepMiniBtn}>
-                        <Ionicons name="add" size={14} color="#FFFFFF" />
-                      </Pressable>
+                        <View style={styles.bandBarTrack}>
+                          <View
+                            style={[
+                              styles.bandBarFill,
+                              {
+                                height: `${pct}%`,
+                                backgroundColor: audioLab.enabled ? palette.accent : '#52525B',
+                              },
+                            ]}
+                          />
+                        </View>
 
-                      <View style={styles.bandBarTrack}>
-                        <View
-                          style={[
-                            styles.bandBarFill,
-                            {
-                              height: `${pct}%`,
-                              backgroundColor: audioLab.enabled ? palette.accent : '#52525B',
-                            },
-                          ]}
-                        />
+                        <Pressable onPress={() => adjustBand(idx, -1.5)} style={styles.stepMiniBtn}>
+                          <Ionicons name="remove" size={14} color="#FFFFFF" />
+                        </Pressable>
+
+                        <Text style={styles.dbText}>
+                          {band.gainDb > 0 ? `+${band.gainDb}` : band.gainDb}
+                        </Text>
+                        <Text style={styles.freqText}>{band.label}</Text>
                       </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
 
-                      <Pressable onPress={() => adjustBand(idx, -1.5)} style={styles.stepMiniBtn}>
-                        <Ionicons name="remove" size={14} color="#FFFFFF" />
+            {/* Sub-Bass & Space Reverb */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>
+                {vi ? 'Sub-Bass & Không gian phòng (Reverb)' : 'Sub-Bass & Space Reverb'}
+              </Text>
+
+              <View style={styles.knobRow}>
+                <Text style={styles.knobLabel}>Bass Boost</Text>
+                <View style={styles.levelPills}>
+                  {[0, 25, 50, 75, 100].map((val) => {
+                    const active = audioLab.bassBoost === val;
+                    return (
+                      <Pressable
+                        key={val}
+                        onPress={() => updateAudioLab({ enabled: true, bassBoost: val })}
+                        style={[styles.levelPill, active && { backgroundColor: palette.accent }]}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '700',
+                            color: active ? palette.onAccent : '#FFF',
+                          }}
+                        >
+                          {val}%
+                        </Text>
                       </Pressable>
-
-                      <Text style={styles.dbText}>
-                        {band.gainDb > 0 ? `+${band.gainDb}` : band.gainDb}
-                      </Text>
-                      <Text style={styles.freqText}>{band.label}</Text>
-                    </View>
-                  );
-                })}
+                    );
+                  })}
+                </View>
               </View>
-            </ScrollView>
-          </View>
 
-          {/* Sub-Bass & Space Reverb */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>
-              {vi ? 'Sub-Bass & Không gian phòng (Reverb)' : 'Sub-Bass & Space Reverb'}
-            </Text>
-
-            <View style={styles.knobRow}>
-              <Text style={styles.knobLabel}>Bass Boost</Text>
-              <View style={styles.levelPills}>
-                {[0, 25, 50, 75, 100].map((val) => {
-                  const active = audioLab.bassBoost === val;
-                  return (
-                    <Pressable
-                      key={val}
-                      onPress={() => updateAudioLab({ enabled: true, bassBoost: val })}
-                      style={[styles.levelPill, active && { backgroundColor: palette.accent }]}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '700',
-                          color: active ? palette.onAccent : '#FFF',
-                        }}
+              <View style={[styles.knobRow, { marginTop: 14 }]}>
+                <Text style={styles.knobLabel}>Space Reverb</Text>
+                <View style={styles.levelPills}>
+                  {[0, 20, 40, 65, 90].map((val) => {
+                    const active = audioLab.reverbMix === val;
+                    return (
+                      <Pressable
+                        key={val}
+                        onPress={() => updateAudioLab({ enabled: true, reverbMix: val })}
+                        style={[styles.levelPill, active && { backgroundColor: palette.accent }]}
                       >
-                        {val}%
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '700',
+                            color: active ? palette.onAccent : '#FFF',
+                          }}
+                        >
+                          {val}%
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
             </View>
 
-            <View style={[styles.knobRow, { marginTop: 14 }]}>
-              <Text style={styles.knobLabel}>Space Reverb</Text>
-              <View style={styles.levelPills}>
-                {[0, 20, 40, 65, 90].map((val) => {
-                  const active = audioLab.reverbMix === val;
-                  return (
-                    <Pressable
-                      key={val}
-                      onPress={() => updateAudioLab({ enabled: true, reverbMix: val })}
-                      style={[styles.levelPill, active && { backgroundColor: palette.accent }]}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '700',
-                          color: active ? palette.onAccent : '#FFF',
-                        }}
-                      >
-                        {val}%
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+            {/* 8D Spatial Orbit Card */}
+            <View style={styles.card}>
+              <View style={styles.cardTopRow}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.cardTitle}>8D Spatial Audio Orbit</Text>
+                  <Text style={styles.subNote}>
+                    {vi
+                      ? 'Âm thanh xoay nhẹ quanh đầu khi đeo tai nghe'
+                      : 'Smooth stereo stage rotation around your headphones'}
+                  </Text>
+                </View>
+                <Switch
+                  value={audioLab.eightDEnabled}
+                  onValueChange={(v) => updateAudioLab({ enabled: true, eightDEnabled: v })}
+                  trackColor={{ false: '#2A2A36', true: palette.accent }}
+                />
               </View>
-            </View>
-          </View>
-
-          {/* 8D Spatial Orbit Card */}
-          <View style={styles.card}>
-            <View style={styles.cardTopRow}>
-              <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={styles.cardTitle}>8D Spatial Audio Orbit</Text>
-                <Text style={styles.subNote}>
-                  {vi
-                    ? 'Âm thanh xoay nhẹ quanh đầu khi đeo tai nghe'
-                    : 'Smooth stereo stage rotation around your headphones'}
-                </Text>
-              </View>
-              <Switch
-                value={audioLab.eightDEnabled}
-                onValueChange={(v) => updateAudioLab({ enabled: true, eightDEnabled: v })}
-                trackColor={{ false: '#2A2A36', true: palette.accent }}
-              />
             </View>
           </View>
 
@@ -281,6 +318,7 @@ export const AudioLabModal: React.FC = () => {
           </View>
         </ScrollView>
       </View>
+      <SheetSlot layer="audiolab" />
     </Modal>
   );
 };
@@ -335,6 +373,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
+  honestCard: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginBottom: 12,
+  },
+  honestText: { flex: 1, color: '#E4E4EC', fontSize: 12.5, lineHeight: 18 },
+  lockedBlock: { opacity: 0.38 },
   card: {
     marginTop: 14,
     padding: 16,

@@ -21,6 +21,7 @@ import { RADIO_TAGS, searchStations } from '../../services/discovery/radioBrowse
 import { Track } from '../../types/music';
 import { ArtworkImage } from '../ArtworkImage';
 import { HaloGlow } from '../brand/HaloGlow';
+import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 
 const SCOPES = [
   { id: 'saved', vi: 'Đã lưu', en: 'Saved', flag: '♥' },
@@ -47,6 +48,7 @@ export const RadioModal: React.FC = () => {
     isFavoriteStation,
     toggleFavoriteStation,
   } = useHolySic();
+  useModalLayer('radio', radioOpen);
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const saved = prefs.favoriteStations || [];
@@ -264,6 +266,7 @@ export const RadioModal: React.FC = () => {
           />
         )}
       </View>
+      <SheetSlot layer="radio" />
     </Modal>
   );
 };

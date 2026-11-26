@@ -13,19 +13,17 @@ import { GlassSurface } from './src/components/GlassSurface';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { HolySicMarkIcon } from './src/components/HolySicIcons';
 import { FullPlayerModal } from './src/components/player/FullPlayerModal';
-import { AudioLabModal } from './src/components/screens/AudioLabModal';
-import { CollectionModal } from './src/components/screens/CollectionScreen';
 import { HomeScreen } from './src/components/screens/HomeScreen';
 import { LibraryScreen } from './src/components/screens/LibraryScreen';
 import { RecapModal } from './src/components/screens/RecapModal';
 import { SearchScreen } from './src/components/screens/SearchScreen';
 import { SettingsScreen } from './src/components/screens/SettingsScreen';
-import { TrackActionSheet } from './src/components/TrackActionSheet';
 import { ChartsModal } from './src/components/merge/ChartsModal';
 import { RadioModal } from './src/components/merge/RadioModal';
 import { HaloMark } from './src/components/brand/HaloGlow';
 import { ImportModal } from './src/components/merge/ImportModal';
 import { WelcomeModal } from './src/components/merge/WelcomeModal';
+import { SheetSlot } from './src/components/overlay/ModalLayers';
 import { t } from './src/constants/i18n';
 import { MainTab } from './src/constants/preferences';
 import { HOLYSIC_COLORS, resolveFontFamily } from './src/constants/theme';
@@ -157,24 +155,9 @@ const HolySicShell: React.FC = () => {
         </View>
 
         {/* Non-intrusive Toast Pill */}
-        {toastMessage && (
-          <View style={[styles.toastWrap, { top: Math.max(insets.top + 12, 22) }]}>
-            <GlassSurface
-              intensity={75}
-              tintColor="rgba(22, 22, 32, 0.92)"
-              style={[styles.toastPill, { borderColor: palette.accent + '44' }]}
-            >
-              <Text style={styles.toastText}>{toastMessage}</Text>
-            </GlassSurface>
-          </View>
-        )}
-
         {/* Modals & Sheets */}
         <FullPlayerModal />
-        <CollectionModal />
-        <AudioLabModal />
         <RecapModal />
-        <TrackActionSheet />
         <ImportModal
           visible={!!importSheet}
           onClose={closeImport}
@@ -188,6 +171,8 @@ const HolySicShell: React.FC = () => {
           initialGenre={chartsSheet?.genre ?? null}
         />
         <WelcomeModal />
+        {/* Shared sheets + toast for the root layer (see overlay/ModalLayers) */}
+        <SheetSlot layer="root" />
       </View>
     </View>
   );
@@ -255,23 +240,5 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 10.5,
     fontWeight: '600',
-  },
-  toastWrap: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-    alignItems: 'center',
-    pointerEvents: 'none',
-    zIndex: 999,
-  },
-  toastPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 99,
-  },
-  toastText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
   },
 });

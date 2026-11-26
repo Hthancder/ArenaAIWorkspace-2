@@ -21,6 +21,7 @@ import { buildArtworkPalette, HOLYSIC_COLORS, resolveFontFamily } from '../../co
 import { useHolySic } from '../../context/HolySicContext';
 import { AlbumSummary, ArtistSummary, Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
+import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 
 export const CollectionModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -47,6 +48,7 @@ export const CollectionModal: React.FC = () => {
     showToast,
     createPlaylist,
   } = useHolySic();
+  useModalLayer('collection', Boolean(collectionTarget));
 
   const [loading, setLoading] = useState(false);
   // Multi-select (Musike): pick songs, then play / like / queue / add to playlist / remove
@@ -621,6 +623,7 @@ export const CollectionModal: React.FC = () => {
             )}
         </ScrollView>
       </View>
+      <SheetSlot layer="collection" />
     </Modal>
   );
 };

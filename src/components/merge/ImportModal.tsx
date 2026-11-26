@@ -26,6 +26,7 @@ import { useHolySic } from '../../context/HolySicContext';
 import { parseTextList, TextItem } from '../../services/import/linkImport';
 import { Track } from '../../types/music';
 import { ArtworkImage } from '../ArtworkImage';
+import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 
 export type ImportMode = 'link' | 'list';
 
@@ -63,6 +64,7 @@ export const ImportModal: React.FC<Props> = ({
     setIsPlayerOpen,
     importLocalFiles,
   } = useHolySic();
+  useModalLayer('import', visible);
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const [mode, setMode] = useState<ImportMode>(initialMode);
@@ -445,6 +447,7 @@ export const ImportModal: React.FC<Props> = ({
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+      <SheetSlot layer="import" />
     </Modal>
   );
 };

@@ -32,6 +32,7 @@ import { BedsideClockView } from './BedsidePlayer';
 import { IpodClassicView } from './IpodPlayer';
 import { LyricsView } from './LyricsView';
 import { TurntableVinylStage } from './TurntablePlayer';
+import { SheetSlot, useModalLayer, usePresentGate } from '../overlay/ModalLayers';
 
 type SubPane = 'artwork' | 'lyrics' | 'queue' | 'sleep' | 'diagnostics' | 'styles';
 
@@ -72,6 +73,8 @@ export const FullPlayerModal: React.FC = () => {
     loudnessLabel,
     ambient,
   } = useHolySic();
+  const playerVisible = usePresentGate(isPlayerOpen, 'player');
+  useModalLayer('player', playerVisible);
   const ambientColors = useAmbientColors();
   // Hooks must run before the early return below
   const ambientOn = ambient.level > 0 && prefs.playerStyle !== 'BEDSIDE' && !prefs.pureBlack;
@@ -118,7 +121,7 @@ export const FullPlayerModal: React.FC = () => {
 
   return (
     <Modal
-      visible={isPlayerOpen}
+      visible={playerVisible}
       animationType="slide"
       presentationStyle="fullScreen"
       onRequestClose={() => setIsPlayerOpen(false)}
@@ -363,7 +366,7 @@ export const FullPlayerModal: React.FC = () => {
                 colors={ambientColors}
                 level={ambientOn ? ambient.level : 0}
                 energy={energy}
-                size={prefs.playerStyle === 'POSTER' ? 320 : 300}
+                size={prefs.playerStyle === 'POSTER' ? 270 : 300}
               >
                 <View
                   style={[
@@ -376,17 +379,23 @@ export const FullPlayerModal: React.FC = () => {
                     source={{ uri: currentTrack.artworkUrl }}
                     style={styles.coverImage}
                   />
-                  {prefs.playerStyle === 'POSTER' && (
-                    <View style={styles.posterVisualizerRow}>
-                      <SpectrumBars
-                        isPlaying={isPlaying}
-                        positionSec={positionSec}
-                        color={palette.accent}
-                      />
-                    </View>
-                  )}
                 </View>
               </CoverGlow>
+              {/* Poster: a real 32-band spectrum of what's playing (FFT of the actual PCM) */}
+              {prefs.playerStyle === 'POSTER' && (
+                <View style={styles.posterVisualizer}>
+                  <SpectrumBars
+                    isPlaying={isPlaying}
+                    color={palette.accent}
+                    colorHigh={ambientColors.corners[1]}
+                    height={64}
+                    bars={32}
+                    peaks
+                    showStatus
+                    language={prefs.language}
+                  />
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -627,6 +636,7 @@ export const FullPlayerModal: React.FC = () => {
           </Pressable>
         </View>
       </LinearGradient>
+      <SheetSlot layer="player" />
     </Modal>
   );
 };
@@ -694,27 +704,24 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
   },
   posterCoverWrap: {
-    width: 320,
-    height: 336,
-    borderRadius: 32,
+    width: 270,
+    height: 270,
+    borderRadius: 30,
   },
   coverImage: {
     width: '100%',
     height: '100%',
   },
-  posterVisualizerRow: {
-    position: 'absolute',
-    bottom: 12,
-    left: 16,
-    right: 16,
-    height: 44,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.48)',
+  posterVisualizer: {
+    width: 310,
+    marginTop: 18,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   visBar: {
     width: 6,

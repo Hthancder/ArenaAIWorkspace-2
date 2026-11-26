@@ -45,9 +45,13 @@ export function useAmbientEnergy(active: boolean, breathing: boolean, isPlaying:
     let level = 0.35;
     const unsub = audioEngine.subscribeSpectrum((b) => {
       lastReal = Date.now();
-      const bass = (b[0] + b[1] + b[2]) / 3;
+      // 32 real bands: the lowest ~20% (≈40–150 Hz) is the kick & bass line
+      const nb = Math.max(1, Math.round(b.length * 0.2));
+      let bass = 0;
+      for (let i = 0; i < nb; i++) bass += b[i];
+      bass /= nb;
       const all = b.reduce((a, c) => a + c, 0) / (b.length || 1);
-      target = Math.min(1, bass * 0.8 + all * 0.4);
+      target = Math.min(1, bass * 0.85 + all * 0.35);
     });
     const t0 = Date.now();
     let last = 0;
@@ -62,8 +66,8 @@ export function useAmbientEnergy(active: boolean, breathing: boolean, isPlaying:
       else if (now - lastReal < 1200) tgt = target;
       else {
         const t = (now - t0) / 1000;
-        tgt =
-          0.46 + 0.2 * Math.sin((t * 2 * Math.PI) / 3.8) + 0.07 * Math.sin((t * 2 * Math.PI) / 1.3);
+        // no readable audio (e.g. HLS): a slow, calm breath — never a fake beat
+        tgt = 0.45 + 0.16 * Math.sin((t * 2 * Math.PI) / 4.2);
       }
       // fast attack, slow release, like a light reacting to a kick drum
       level += (tgt - level) * (tgt > level ? 0.4 : 0.07);
