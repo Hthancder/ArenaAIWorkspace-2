@@ -14,7 +14,7 @@ export const STRINGS = {
     quickPicks: 'Chọn nhanh cho bạn',
     keepListening: 'Nghe tiếp gần đây',
     vnHotCharts: 'Xu hướng Việt Nam',
-    globalCharts: 'Bảng xếp hạng Quốc tế',
+    globalCharts: 'Top toàn cầu',
     mixItTitle: 'Mix It · DJ Tự Động',
     mixItDesc: 'Tạo danh sách phát liền mạch theo tâm trạng chỉ với một chạm',
     mixItAction: 'Trộn nhạc ngay',
@@ -49,7 +49,6 @@ export const STRINGS = {
     aboutAndCredits: 'Giới thiệu & Tri ân mã nguồn mở',
     freeForeverNote:
       'HolySic hoàn toàn miễn phí, mã nguồn mở (GPL-3.0), không quảng cáo, không thu thập dữ liệu và không khoá tính năng.',
-    iosInstallGuide: 'Hướng dẫn cài đặt trên iPhone / iPad',
     playAll: 'Phát tất cả',
     shuffle: 'Trộn bài',
     downloadedBadge: 'Đã tải',
@@ -104,7 +103,6 @@ export const STRINGS = {
     aboutAndCredits: 'About & Open-Source Credits',
     freeForeverNote:
       'HolySic is 100% free & open source (GPL-3.0) — zero ads, zero tracking, and zero paywalls.',
-    iosInstallGuide: 'How to Install on iPhone / iPad',
     playAll: 'Play All',
     shuffle: 'Shuffle',
     downloadedBadge: 'Offline',

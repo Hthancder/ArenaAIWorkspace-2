@@ -215,28 +215,27 @@ export const TrackRow: React.FC<TrackRowProps> = ({
               style={{ marginRight: 4 }}
             />
           )}
+          {track.qualityBadge && !compact && (
+            <View
+              style={[
+                styles.qualityPill,
+                lossless && {
+                  borderColor: 'rgba(52, 211, 153, 0.4)',
+                  backgroundColor: 'rgba(52, 211, 153, 0.10)',
+                },
+              ]}
+            >
+              <Text style={[styles.qualityText, lossless && { color: HOLYSIC_COLORS.flacEmerald }]}>
+                {badgeLabel}
+              </Text>
+            </View>
+          )}
           <Text numberOfLines={1} style={[styles.subtitle, { fontFamily }]}>
             {track.artist}
             {track.album ? ` · ${track.album}` : ''}
           </Text>
         </View>
       </View>
-
-      {track.qualityBadge && !compact && !narrow && (
-        <View
-          style={[
-            styles.qualityPill,
-            lossless && {
-              borderColor: 'rgba(52, 211, 153, 0.4)',
-              backgroundColor: 'rgba(52, 211, 153, 0.10)',
-            },
-          ]}
-        >
-          <Text style={[styles.qualityText, lossless && { color: HOLYSIC_COLORS.flacEmerald }]}>
-            {badgeLabel}
-          </Text>
-        </View>
-      )}
 
       {!(narrow && compact && !track.isLive) && (
         <Text
@@ -485,18 +484,19 @@ const styles = themedSheet(() => ({
     color: UI.text2,
     flexShrink: 1,
   },
+  // inline next to the artist (Apple Music "Lossless" style) so the title keeps its width
   qualityPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 0.5,
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: UI.fg(0.12),
     backgroundColor: UI.fg(0.05),
-    marginRight: 8,
+    marginRight: 5,
   },
   qualityText: {
     color: UI.text2,
-    fontSize: 9.5,
+    fontSize: 8.5,
     fontWeight: '700',
     letterSpacing: 0.4,
   },

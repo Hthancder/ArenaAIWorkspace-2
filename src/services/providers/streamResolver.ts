@@ -224,7 +224,8 @@ export function createStreamCandidateQueue(
     ? SourceMemory.rankModules(prefs.moduleOrder, track)
     : prefs.moduleOrder;
   for (const modId of order) {
-    if (!prefs.enabledModules[modId]) continue;
+    // Apple previews follow the single "Allow 30-second previews" switch (checked below)
+    if (modId !== 'itunes' && !prefs.enabledModules[modId]) continue;
 
     if (modId === 'monochrome') {
       producers.push(

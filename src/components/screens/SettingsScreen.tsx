@@ -31,7 +31,6 @@ import { useHolySic } from '../../context/HolySicContext';
 import { StreamFileCache } from '../../services/audio/streamFileCache';
 import { SourceMemory } from '../../services/providers/sourceMemory';
 import { MergedSettings } from '../merge/MergedSettings';
-import { WidgetCardAnchor } from '../widget/widgetAnchor';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
@@ -51,45 +50,31 @@ export const SettingsScreen: React.FC = () => {
     ambient,
   } = useHolySic();
   const scrollRef = useTabScrollToTop('settings');
-  const scrollY = useRef(0);
 
   const [newServerUrl, setNewServerUrl] = useState('');
   const [newServerKind, setNewServerKind] = useState<'streamer' | 'relay'>('relay');
   const [verifying, setVerifying] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [memoryCount, setMemoryCount] = useState(() => SourceMemory.stats().tracks);
 
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
+  // Apple previews are governed by the "Allow 30-second previews" switch alone, so the list only
+  // shows the full-length sources (one control per behaviour).
+  const visibleModules = prefs.moduleOrder.filter((m) => m !== 'itunes');
   const moveModuleUp = (idx: number) => {
     if (idx <= 0) return;
     haptic('selection');
-    const order = [...prefs.moduleOrder];
-    const tmp = order[idx - 1];
-    order[idx - 1] = order[idx];
-    order[idx] = tmp;
-    updatePrefs({ moduleOrder: order });
-  };
-
-  const jumpToWidget = () => {
-    const target = WidgetCardAnchor.get();
-    const sv = scrollRef.current;
-    if (!target || !sv) return;
-    haptic('selection');
-    target.measureInWindow((_x, y) => {
-      (sv as unknown as View).measureInWindow((_sx, sy) => {
-        sv.scrollTo({ y: Math.max(0, scrollY.current + (y - sy) - 8), animated: true });
-      });
-    });
+    const vis = [...visibleModules];
+    [vis[idx - 1], vis[idx]] = [vis[idx], vis[idx - 1]];
+    const rest = prefs.moduleOrder.filter((m) => m === 'itunes');
+    updatePrefs({ moduleOrder: [...vis, ...rest] });
   };
 
   return (
     <ScrollView
       ref={scrollRef}
-      onScroll={(e) => {
-        scrollY.current = e.nativeEvent.contentOffset.y;
-      }}
-      scrollEventThrottle={32}
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
@@ -108,8 +93,8 @@ export const SettingsScreen: React.FC = () => {
           <Text style={[styles.brandName, { fontFamily }]}>HolySic · iOS</Text>
           <Text style={styles.brandSub}>
             {vi
-              ? 'Bản port iOS (Expo / React Native) dựa trên Mochy Music bởi realidkroo · GPL-3.0 >_<'
-              : 'iOS port built on top of Mochy Music by realidkroo · GPL-3.0 >_<'}
+              ? 'Nghe nhạc lossless trên iPhone · dựa trên Mochy Music của realidkroo (GPL-3.0)'
+              : 'Lossless listening on iPhone · built on Mochy Music by realidkroo (GPL-3.0)'}
           </Text>
           <View style={styles.bannerLinksRow}>
             <Tap
@@ -146,29 +131,6 @@ export const SettingsScreen: React.FC = () => {
           <Text style={styles.quickToolSub}>Stats & Listener Card</Text>
         </Tap>
       </View>
-
-      {/* Widget — easy to find: jumps to the widget card (preview, status, how to add) */}
-      <Tap
-        onPress={jumpToWidget}
-        style={[styles.widgetRow, { borderColor: palette.accent + '33' }]}
-        accessibilityRole="button"
-        accessibilityLabel={vi ? 'Widget màn hình chính' : 'Home Screen widget'}
-      >
-        <View style={[styles.widgetIcon, { backgroundColor: palette.container }]}>
-          <Ionicons name="apps" size={18} color={palette.accent} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.quickToolTitle2}>
-            {vi ? 'Widget màn hình chính' : 'Home Screen widget'}
-          </Text>
-          <Text numberOfLines={1} style={styles.quickToolSub}>
-            {vi
-              ? 'Đang phát · Lời bài hát · màn hình khoá — xem trước & cách thêm'
-              : 'Now Playing · Lyrics · Lock Screen — preview & how to add'}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={UI.text3} />
-      </Tap>
 
       {/* Language Switch */}
       <Text style={[styles.sectionTitle, { fontFamily }]}>
@@ -500,15 +462,12 @@ export const SettingsScreen: React.FC = () => {
             : 'Module resolution priority when matching tracks:'}
         </Text>
 
-        {prefs.moduleOrder.map((modId, idx) => {
+        {visibleModules.map((modId, idx) => {
           const enabled = prefs.enabledModules[modId];
           const labelMap: Record<typeof modId, string> = {
             monochrome: 'Monochrome · Lossless FLAC (16/24-bit)',
             jiosaavn: `JioSaavn · Full AAC (${prefs.preferredJioSaavnQuality} kbps)`,
-            innertube: 'YouTube Music InnerTube (iOS / visionOS)',
-            itunes: vi
-              ? 'Apple · Preview 30s (chỉ khi cho phép)'
-              : 'Apple · 30s preview (only if allowed)',
+            innertube: vi ? 'YouTube Music · phát ngay' : 'YouTube Music · instant start',
           };
           return (
             <View key={modId} style={styles.moduleRow}>
@@ -602,144 +561,141 @@ export const SettingsScreen: React.FC = () => {
           </Text>
         </Tap>
 
-        {/* JioSaavn Bitrate Choice */}
-        <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>JioSaavn Stream Bitrate</Text>
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
-          {(['320', '160', '96'] as JioSaavnQuality[]).map((q) => {
-            const active = prefs.preferredJioSaavnQuality === q;
-            return (
-              <Tap
-                key={q}
-                onPress={() => updatePrefs({ preferredJioSaavnQuality: q })}
-                style={[styles.smallOptionPill, active && { backgroundColor: palette.accent }]}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: '700',
-                    color: active ? palette.onAccent : UI.fg(1),
+        <Tap
+          feedback="opacity"
+          onPress={() => {
+            haptic('selection');
+            setShowAdvanced((v) => !v);
+          }}
+          style={styles.disclosureRow}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: showAdvanced }}
+        >
+          <Ionicons name="construct-outline" size={16} color={UI.text2} />
+          <Text style={[styles.rowTitle, { flex: 1 }]}>
+            {vi ? 'Nâng cao: bitrate & máy chủ FLAC' : 'Advanced: bitrate & FLAC servers'}
+          </Text>
+          <Ionicons
+            name={showAdvanced ? 'chevron-up' : 'chevron-down'}
+            size={17}
+            color={UI.text3}
+          />
+        </Tap>
+        {showAdvanced && (
+          <>
+            {/* JioSaavn Bitrate Choice */}
+            <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>JioSaavn Stream Bitrate</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+              {(['320', '160', '96'] as JioSaavnQuality[]).map((q) => {
+                const active = prefs.preferredJioSaavnQuality === q;
+                return (
+                  <Tap
+                    key={q}
+                    onPress={() => updatePrefs({ preferredJioSaavnQuality: q })}
+                    style={[styles.smallOptionPill, active && { backgroundColor: palette.accent }]}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '700',
+                        color: active ? palette.onAccent : UI.fg(1),
+                      }}
+                    >
+                      {q} kbps
+                    </Text>
+                  </Tap>
+                );
+              })}
+            </View>
+
+            {/* Monochrome Relay Server List */}
+            <View style={styles.relaySection}>
+              <View style={styles.relayTopRow}>
+                <Text style={styles.inlineSubLabel}>Monochrome FLAC Servers</Text>
+                <Tap
+                  disabled={verifying}
+                  onPress={async () => {
+                    setVerifying(true);
+                    await verifyAllServers();
+                    setVerifying(false);
                   }}
                 >
-                  AAC {q} kbps
-                </Text>
-              </Tap>
-            );
-          })}
-        </View>
-
-        {/* Monochrome Relay Server List */}
-        <View style={styles.relaySection}>
-          <View style={styles.relayTopRow}>
-            <Text style={styles.inlineSubLabel}>Monochrome FLAC Servers</Text>
-            <Tap
-              disabled={verifying}
-              onPress={async () => {
-                setVerifying(true);
-                await verifyAllServers();
-                setVerifying(false);
-              }}
-            >
-              <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>
-                {verifying ? 'Checking…' : t(prefs.language, 'verifyServers')}
-              </Text>
-            </Tap>
-          </View>
-
-          {monochromeServers.map((srv) => (
-            <View key={srv.url} style={styles.srvRow}>
-              <Ionicons
-                name={
-                  srv.lastStatus === 'ok'
-                    ? 'checkmark-circle'
-                    : srv.lastStatus === 'down'
-                      ? 'alert-circle'
-                      : 'radio-outline'
-                }
-                size={16}
-                color={
-                  srv.lastStatus === 'ok'
-                    ? '#34D399'
-                    : srv.lastStatus === 'down'
-                      ? '#FBBF24'
-                      : '#94A3B8'
-                }
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: UI.text, fontSize: 13, fontWeight: '600' }}>
-                  {srv.name} ({srv.kind})
-                </Text>
-                {srv.lastMessage && (
-                  <Text style={{ color: UI.text3, fontSize: 11 }}>{srv.lastMessage}</Text>
-                )}
-              </View>
-              {!srv.builtIn && (
-                <Tap onPress={() => removeMonochromeServer(srv.url)}>
-                  <Ionicons name="trash-outline" size={17} color="#F87171" />
+                  <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>
+                    {verifying ? 'Checking…' : t(prefs.language, 'verifyServers')}
+                  </Text>
                 </Tap>
-              )}
-            </View>
-          ))}
+              </View>
 
-          <View style={styles.addSrvRow}>
-            <TextInput
-              value={newServerUrl}
-              onChangeText={setNewServerUrl}
-              placeholder="https://your-relay.example.dev"
-              placeholderTextColor={UI.text3}
-              autoCapitalize="none"
-              style={styles.srvInput}
-            />
-            <Tap
-              onPress={() => setNewServerKind((k) => (k === 'relay' ? 'streamer' : 'relay'))}
-              style={styles.kindToggle}
-            >
-              <Text style={{ color: UI.text, fontSize: 11, fontWeight: '700' }}>
-                {newServerKind.toUpperCase()}
-              </Text>
-            </Tap>
-            <Tap
-              onPress={async () => {
-                if (!newServerUrl.trim()) return;
-                await addMonochromeServer(newServerUrl, newServerKind);
-                setNewServerUrl('');
-              }}
-              style={[styles.addSrvBtn, { backgroundColor: palette.accent }]}
-            >
-              <Ionicons name="add" size={18} color={palette.onAccent} />
-            </Tap>
-          </View>
-        </View>
+              {monochromeServers.map((srv) => (
+                <View key={srv.url} style={styles.srvRow}>
+                  <Ionicons
+                    name={
+                      srv.lastStatus === 'ok'
+                        ? 'checkmark-circle'
+                        : srv.lastStatus === 'down'
+                          ? 'alert-circle'
+                          : 'radio-outline'
+                    }
+                    size={16}
+                    color={
+                      srv.lastStatus === 'ok'
+                        ? '#34D399'
+                        : srv.lastStatus === 'down'
+                          ? '#FBBF24'
+                          : '#94A3B8'
+                    }
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: UI.text, fontSize: 13, fontWeight: '600' }}>
+                      {srv.name} ({srv.kind})
+                    </Text>
+                    {srv.lastMessage && (
+                      <Text style={{ color: UI.text3, fontSize: 11 }}>{srv.lastMessage}</Text>
+                    )}
+                  </View>
+                  {!srv.builtIn && (
+                    <Tap onPress={() => removeMonochromeServer(srv.url)}>
+                      <Ionicons name="trash-outline" size={17} color="#F87171" />
+                    </Tap>
+                  )}
+                </View>
+              ))}
+
+              <View style={styles.addSrvRow}>
+                <TextInput
+                  value={newServerUrl}
+                  onChangeText={setNewServerUrl}
+                  placeholder="https://your-relay.example.dev"
+                  placeholderTextColor={UI.text3}
+                  autoCapitalize="none"
+                  style={styles.srvInput}
+                />
+                <Tap
+                  onPress={() => setNewServerKind((k) => (k === 'relay' ? 'streamer' : 'relay'))}
+                  style={styles.kindToggle}
+                >
+                  <Text style={{ color: UI.text, fontSize: 11, fontWeight: '700' }}>
+                    {newServerKind.toUpperCase()}
+                  </Text>
+                </Tap>
+                <Tap
+                  onPress={async () => {
+                    if (!newServerUrl.trim()) return;
+                    await addMonochromeServer(newServerUrl, newServerKind);
+                    setNewServerUrl('');
+                  }}
+                  style={[styles.addSrvBtn, { backgroundColor: palette.accent }]}
+                >
+                  <Ionicons name="add" size={18} color={palette.onAccent} />
+                </Tap>
+              </View>
+            </View>
+          </>
+        )}
       </View>
 
       {/* Merged features: Spotube · OpenSpot Music · Musike · Cog */}
       <MergedSettings />
-
-      {/* iOS Installation Guide Card */}
-      <Text style={[styles.sectionTitle, { fontFamily }]}>
-        {t(prefs.language, 'iosInstallGuide')}
-      </Text>
-      <View style={styles.cardGroup}>
-        <Text style={styles.guideStep}>
-          <Text style={{ fontWeight: '800', color: UI.text }}>1. Expo Go (Nhanh nhất): </Text>
-          {vi
-            ? 'Cài Expo Go từ App Store, chạy npx expo start và quét mã QR bằng Camera iPhone.'
-            : 'Install Expo Go from the App Store, run npx expo start, and scan the QR code.'}
-        </Text>
-        <Text style={styles.guideStep}>
-          <Text style={{ fontWeight: '800', color: UI.text }}>
-            2. Sideload file .ipa (AltStore / SideStore / TrollStore):{' '}
-          </Text>
-          {vi
-            ? 'Mở tab GitHub Actions → chạy workflow "Build iOS IPA" để tải file HolySic-iOS-Unsigned.ipa cài trực tiếp lên iPhone mà không cần máy Mac!'
-            : 'Run the included GitHub Actions "Build iOS IPA" workflow to download HolySic-iOS-Unsigned.ipa — no Mac required!'}
-        </Text>
-        <Text style={styles.guideStep}>
-          <Text style={{ fontWeight: '800', color: UI.text }}>3. Safari PWA: </Text>
-          {vi
-            ? 'Mở bản Web trên Safari iOS → Chia sẻ → "Thêm vào Màn hình chính" để dùng full-screen kèm điều khiển Lock Screen.'
-            : 'Open in iOS Safari → Share → "Add to Home Screen" for full-screen standalone mode.'}
-        </Text>
-      </View>
 
       {/* Open-Source Credits & GPL-3.0 Attribution */}
       <Text style={[styles.sectionTitle, { fontFamily }]}>
@@ -778,6 +734,15 @@ export const SettingsScreen: React.FC = () => {
 };
 
 const styles = themedSheet(() => ({
+  disclosureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: UI.fg(0.1),
+  },
   themeBlock: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 },
   themeRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   themeChip: {
@@ -866,28 +831,6 @@ const styles = themedSheet(() => ({
     paddingVertical: 6,
     borderRadius: 99,
     backgroundColor: UI.fg(0.1),
-  },
-  widgetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 10,
-    padding: 12,
-    borderRadius: 18,
-    borderWidth: 1,
-    backgroundColor: UI.fg(0.05),
-  },
-  widgetIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickToolTitle2: {
-    color: UI.text,
-    fontSize: 14.5,
-    fontWeight: '800',
   },
   quickRow: {
     flexDirection: 'row',
@@ -1043,12 +986,6 @@ const styles = themedSheet(() => ({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  guideStep: {
-    color: UI.text2,
-    fontSize: 13,
-    lineHeight: 19.5,
-    marginBottom: 10,
   },
   creditItem: {
     flexDirection: 'row',

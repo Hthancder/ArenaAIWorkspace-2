@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,7 +20,6 @@ import { MOOD_CATEGORIES } from '../../data/curatedCatalog';
 import { Track } from '../../types/music';
 import { CHART_COUNTRIES, CHART_GENRES } from '../../services/discovery/chartsService';
 import { HomeSectionId } from '../../constants/preferences';
-import { HolySicMarkIcon } from '../HolySicIcons';
 import { TrackRow } from '../TrackRow';
 import { HaloGlow, SectionTitle } from '../brand/HaloGlow';
 import { AmbientSpill, useAmbientColors } from '../ambient/AmbientLight';
@@ -200,14 +200,11 @@ export const HomeScreen: React.FC = () => {
       {/* Top Header */}
       <View style={styles.headerRow}>
         <View style={styles.brandLeft}>
-          <LinearGradient
-            colors={[palette.accent + '55', UI.shade(18, 10, 36, 0.9)]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.logoBadge, styles.logoBadgeHalo]}
-          >
-            <HolySicMarkIcon size={24} color={UI.text} filled />
-          </LinearGradient>
+          <Image
+            source={require('../../../assets/icon.png')}
+            style={styles.logoBadge}
+            accessibilityIgnoresInvertColors
+          />
           <View style={{ flexShrink: 1 }}>
             <Text numberOfLines={1} style={[styles.greetingSub, { fontFamily }]}>
               {greeting}
@@ -593,7 +590,12 @@ export const HomeScreen: React.FC = () => {
                   ]}
                 >
                   <Ionicons name={g.icon as any} size={18} color={g.tint} />
-                  <Text numberOfLines={1} style={[styles.genreText, { fontFamily }]}>
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                    style={[styles.genreText, { fontFamily }]}
+                  >
                     {vi ? g.vi : g.en}
                   </Text>
                 </Tap>
@@ -795,7 +797,6 @@ const SmartShelf: React.FC<{
 
 const styles = themedSheet(() => ({
   homeWash: { position: 'absolute', top: -40, left: -40, right: -40, height: 420 },
-  logoBadgeHalo: { borderWidth: 1, borderColor: 'rgba(252,211,77,0.35)' },
   radioCard: { width: 118 },
   radioArt: {
     width: 118,
@@ -853,14 +854,14 @@ const styles = themedSheet(() => ({
   qaSub: { color: UI.text3, fontSize: 11, marginTop: 1 },
   seeAll: { alignItems: 'center', paddingVertical: 12 },
   genreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
+  // icon over label (Apple Music category tile) — the label gets the full tile width
   genreTile: {
     width: '31.5%',
     flexGrow: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    alignItems: 'flex-start',
+    gap: 10,
     paddingHorizontal: 12,
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 14,
     borderWidth: 1,
   },
@@ -886,14 +887,14 @@ const styles = themedSheet(() => ({
     flexShrink: 1,
     marginRight: 8,
   },
+  // the real app icon in its squircle
   logoBadge: {
     width: 42,
     height: 42,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: UI.fg(0.12),
+    borderRadius: 10,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: UI.fg(0.14),
   },
   greetingSub: {
     color: UI.text2,

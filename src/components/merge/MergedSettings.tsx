@@ -11,9 +11,7 @@ import { hexToHue, HOLYSIC_COLORS, resolveFontFamily } from '../../constants/the
 import { useHolySic } from '../../context/HolySicContext';
 import { BackupPreview, LibraryBackup } from '../../services/library/libraryTools';
 import { Scrobbler } from '../../services/scrobble/scrobbler';
-import { LocalLibrary } from '../../services/local/localLibrary';
 import { T as UI, themedSheet } from '../../theme/ui';
-import { WidgetSettingsCard } from '../widget/WidgetSettingsCard';
 import { BitPerfectCard } from '../audio/BitPerfectCard';
 import { CrossfadeCurvePreview } from '../audio/CrossfadeCurvePreview';
 import { CROSSFADE_CURVE_META } from '../../services/audio/crossfadeCurves';
@@ -59,6 +57,7 @@ export const MergedSettings: React.FC = () => {
     prefs.accentColor !== 'dynamic' ? prefs.accentColor : '#'
   );
   const [lbToken, setLbToken] = useState('');
+  const [lfOpen, setLfOpen] = useState(false);
   const [lf, setLf] = useState({ key: '', secret: '', user: '', pass: '' });
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -212,9 +211,6 @@ export const MergedSettings: React.FC = () => {
       </View>
 
       {/* ───────── Playback ───────── */}
-      {/* ───────── Widget ───────── */}
-      <WidgetSettingsCard fontFamily={fontFamily} />
-
       <BitPerfectCard fontFamily={fontFamily} />
 
       <Text style={[styles.sectionTitle, { fontFamily }]}>
@@ -358,114 +354,131 @@ export const MergedSettings: React.FC = () => {
           sw(scrobble.enabled, setScrobbleEnabled)
         )}
 
-        <Text style={[styles.rowTitle, { marginTop: 10 }]}>ListenBrainz</Text>
-        {scrobble.listenBrainzToken ? (
-          <View style={styles.inline}>
-            <Ionicons name="checkmark-circle" size={18} color={HOLYSIC_COLORS.flacEmerald} />
-            <Text style={[styles.rowDesc, { flex: 1 }]}>
-              {vi ? 'Đã kết nối' : 'Connected'}: {scrobble.listenBrainzUser || 'ListenBrainz'}
-            </Text>
-            <Tap onPress={() => disconnectScrobbler('listenbrainz')}>
-              <Text style={styles.danger}>{vi ? 'Ngắt' : 'Disconnect'}</Text>
-            </Tap>
-          </View>
-        ) : (
-          <View style={styles.inline}>
-            <TextInput
-              value={lbToken}
-              onChangeText={setLbToken}
-              placeholder={
-                vi
-                  ? 'User token (listenbrainz.org/settings)'
-                  : 'User token (listenbrainz.org/settings)'
-              }
-              placeholderTextColor={UI.text3}
-              autoCapitalize="none"
-              style={[styles.input, { flex: 1 }]}
-            />
-            <Tap
-              onPress={() => run('lb', () => connectListenBrainz(lbToken))}
-              style={[styles.btn, { backgroundColor: palette.accent }]}
-            >
-              {busy === 'lb' ? (
-                <ActivityIndicator color={palette.onAccent} />
-              ) : (
-                <Text style={{ color: palette.onAccent, fontWeight: '800' }}>OK</Text>
-              )}
-            </Tap>
-          </View>
-        )}
-
-        <Text style={[styles.rowTitle, { marginTop: 14 }]}>Last.fm</Text>
-        {scrobble.lastfmSessionKey ? (
-          <View style={styles.inline}>
-            <Ionicons name="checkmark-circle" size={18} color={HOLYSIC_COLORS.flacEmerald} />
-            <Text style={[styles.rowDesc, { flex: 1 }]}>
-              {vi ? 'Đã kết nối' : 'Connected'}: {scrobble.lastfmUser}
-            </Text>
-            <Tap onPress={() => disconnectScrobbler('lastfm')}>
-              <Text style={styles.danger}>{vi ? 'Ngắt' : 'Disconnect'}</Text>
-            </Tap>
-          </View>
-        ) : (
+        {/* accounts only matter once scrobbling is on (or something is already connected) */}
+        {(scrobble.enabled || !!scrobble.listenBrainzToken || !!scrobble.lastfmSessionKey) && (
           <>
-            <Text style={styles.rowDesc}>
-              {vi
-                ? 'Tạo API key miễn phí tại last.fm/api/account/create rồi nhập ở đây. Mật khẩu chỉ dùng 1 lần để lấy phiên, không được lưu.'
-                : 'Create a free API key at last.fm/api/account/create. The password is used once to get a session and is not stored.'}
-            </Text>
-            <TextInput
-              value={lf.key}
-              onChangeText={(v) => setLf({ ...lf, key: v })}
-              placeholder="API key"
-              placeholderTextColor={UI.text3}
-              autoCapitalize="none"
-              style={[styles.input, styles.stack]}
-            />
-            <TextInput
-              value={lf.secret}
-              onChangeText={(v) => setLf({ ...lf, secret: v })}
-              placeholder="Shared secret"
-              placeholderTextColor={UI.text3}
-              autoCapitalize="none"
-              style={[styles.input, styles.stack]}
-            />
-            <TextInput
-              value={lf.user}
-              onChangeText={(v) => setLf({ ...lf, user: v })}
-              placeholder={vi ? 'Tên đăng nhập' : 'Username'}
-              placeholderTextColor={UI.text3}
-              autoCapitalize="none"
-              style={[styles.input, styles.stack]}
-            />
-            <TextInput
-              value={lf.pass}
-              onChangeText={(v) => setLf({ ...lf, pass: v })}
-              placeholder={vi ? 'Mật khẩu' : 'Password'}
-              placeholderTextColor={UI.text3}
-              secureTextEntry
-              style={[styles.input, styles.stack]}
-            />
-            <Tap
-              onPress={() =>
-                run('lf', async () => {
-                  await connectLastfm(lf.key, lf.secret, lf.user, lf.pass);
-                  setLf({ key: '', secret: '', user: '', pass: '' });
-                })
-              }
-              style={[
-                styles.btn,
-                { backgroundColor: palette.accent, alignSelf: 'flex-start', marginTop: 8 },
-              ]}
-            >
-              {busy === 'lf' ? (
-                <ActivityIndicator color={palette.onAccent} />
-              ) : (
-                <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
-                  {vi ? 'Kết nối Last.fm' : 'Connect Last.fm'}
+            <Text style={[styles.rowTitle, { marginTop: 10 }]}>ListenBrainz</Text>
+            {scrobble.listenBrainzToken ? (
+              <View style={styles.inline}>
+                <Ionicons name="checkmark-circle" size={18} color={HOLYSIC_COLORS.flacEmerald} />
+                <Text style={[styles.rowDesc, { flex: 1 }]}>
+                  {vi ? 'Đã kết nối' : 'Connected'}: {scrobble.listenBrainzUser || 'ListenBrainz'}
                 </Text>
-              )}
-            </Tap>
+                <Tap onPress={() => disconnectScrobbler('listenbrainz')}>
+                  <Text style={styles.danger}>{vi ? 'Ngắt' : 'Disconnect'}</Text>
+                </Tap>
+              </View>
+            ) : (
+              <View style={styles.inline}>
+                <TextInput
+                  value={lbToken}
+                  onChangeText={setLbToken}
+                  placeholder={
+                    vi
+                      ? 'User token (listenbrainz.org/settings)'
+                      : 'User token (listenbrainz.org/settings)'
+                  }
+                  placeholderTextColor={UI.text3}
+                  autoCapitalize="none"
+                  style={[styles.input, { flex: 1 }]}
+                />
+                <Tap
+                  onPress={() => run('lb', () => connectListenBrainz(lbToken))}
+                  style={[styles.btn, { backgroundColor: palette.accent }]}
+                >
+                  {busy === 'lb' ? (
+                    <ActivityIndicator color={palette.onAccent} />
+                  ) : (
+                    <Text style={{ color: palette.onAccent, fontWeight: '800' }}>OK</Text>
+                  )}
+                </Tap>
+              </View>
+            )}
+
+            <Text style={[styles.rowTitle, { marginTop: 14 }]}>Last.fm</Text>
+            {scrobble.lastfmSessionKey ? (
+              <View style={styles.inline}>
+                <Ionicons name="checkmark-circle" size={18} color={HOLYSIC_COLORS.flacEmerald} />
+                <Text style={[styles.rowDesc, { flex: 1 }]}>
+                  {vi ? 'Đã kết nối' : 'Connected'}: {scrobble.lastfmUser}
+                </Text>
+                <Tap onPress={() => disconnectScrobbler('lastfm')}>
+                  <Text style={styles.danger}>{vi ? 'Ngắt' : 'Disconnect'}</Text>
+                </Tap>
+              </View>
+            ) : !lfOpen ? (
+              <Tap
+                onPress={() => setLfOpen(true)}
+                style={[
+                  styles.btn,
+                  { backgroundColor: UI.fg(0.08), alignSelf: 'flex-start', marginTop: 6 },
+                ]}
+              >
+                <Text style={{ color: UI.text, fontWeight: '700' }}>
+                  {vi ? 'Kết nối Last.fm…' : 'Connect Last.fm…'}
+                </Text>
+              </Tap>
+            ) : (
+              <>
+                <Text style={styles.rowDesc}>
+                  {vi
+                    ? 'Tạo API key miễn phí tại last.fm/api/account/create rồi nhập ở đây. Mật khẩu chỉ dùng 1 lần để lấy phiên, không được lưu.'
+                    : 'Create a free API key at last.fm/api/account/create. The password is used once to get a session and is not stored.'}
+                </Text>
+                <TextInput
+                  value={lf.key}
+                  onChangeText={(v) => setLf({ ...lf, key: v })}
+                  placeholder="API key"
+                  placeholderTextColor={UI.text3}
+                  autoCapitalize="none"
+                  style={[styles.input, styles.stack]}
+                />
+                <TextInput
+                  value={lf.secret}
+                  onChangeText={(v) => setLf({ ...lf, secret: v })}
+                  placeholder="Shared secret"
+                  placeholderTextColor={UI.text3}
+                  autoCapitalize="none"
+                  style={[styles.input, styles.stack]}
+                />
+                <TextInput
+                  value={lf.user}
+                  onChangeText={(v) => setLf({ ...lf, user: v })}
+                  placeholder={vi ? 'Tên đăng nhập' : 'Username'}
+                  placeholderTextColor={UI.text3}
+                  autoCapitalize="none"
+                  style={[styles.input, styles.stack]}
+                />
+                <TextInput
+                  value={lf.pass}
+                  onChangeText={(v) => setLf({ ...lf, pass: v })}
+                  placeholder={vi ? 'Mật khẩu' : 'Password'}
+                  placeholderTextColor={UI.text3}
+                  secureTextEntry
+                  style={[styles.input, styles.stack]}
+                />
+                <Tap
+                  onPress={() =>
+                    run('lf', async () => {
+                      await connectLastfm(lf.key, lf.secret, lf.user, lf.pass);
+                      setLf({ key: '', secret: '', user: '', pass: '' });
+                    })
+                  }
+                  style={[
+                    styles.btn,
+                    { backgroundColor: palette.accent, alignSelf: 'flex-start', marginTop: 8 },
+                  ]}
+                >
+                  {busy === 'lf' ? (
+                    <ActivityIndicator color={palette.onAccent} />
+                  ) : (
+                    <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
+                      {vi ? 'Kết nối Last.fm' : 'Connect Last.fm'}
+                    </Text>
+                  )}
+                </Tap>
+              </>
+            )}
           </>
         )}
         {err && <Text style={[styles.danger, { marginTop: 8 }]}>{err}</Text>}
@@ -473,7 +486,7 @@ export const MergedSettings: React.FC = () => {
 
       {/* ───────── Library tools ───────── */}
       <Text style={[styles.sectionTitle, { fontFamily }]}>
-        {vi ? 'Sao lưu & Tệp' : 'Backup & Files'}
+        {vi ? 'Sao lưu thư viện' : 'Library backup'}
       </Text>
       <View style={styles.card}>
         <View style={styles.inline}>
@@ -494,12 +507,6 @@ export const MergedSettings: React.FC = () => {
             <Text style={styles.toolText}>{vi ? 'Nhập sao lưu' : 'Import backup'}</Text>
           </Tap>
         </View>
-        <Tap onPress={() => LocalLibrary.open('')} style={[styles.toolBtn, { marginTop: 8 }]}>
-          <Ionicons name="phone-portrait-outline" size={18} color={palette.accent} />
-          <Text style={styles.toolText}>
-            {vi ? 'Nhạc trên máy (thư mục, nhập từ Tệp)' : 'Local Files (folders, import)'}
-          </Text>
-        </Tap>
 
         {pending && (
           <View style={styles.preview}>
