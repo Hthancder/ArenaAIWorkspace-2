@@ -26,6 +26,7 @@ import {
   recentlyAdded,
   ShelfItem,
 } from '../../services/library/smartShelves';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 export const HomeScreen: React.FC = () => {
   const {
@@ -53,6 +54,7 @@ export const HomeScreen: React.FC = () => {
     openImport,
     likedTracks,
     downloads,
+    darkPalette,
   } = useHolySic();
 
   const ambientColors = useAmbientColors();
@@ -177,12 +179,12 @@ export const HomeScreen: React.FC = () => {
       <View style={styles.headerRow}>
         <View style={styles.brandLeft}>
           <LinearGradient
-            colors={[palette.accent + '55', 'rgba(18,10,36,0.9)']}
+            colors={[palette.accent + '55', UI.shade(18, 10, 36, 0.9)]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={[styles.logoBadge, styles.logoBadgeHalo]}
           >
-            <HolySicMarkIcon size={24} color="#FFFFFF" filled />
+            <HolySicMarkIcon size={24} color={UI.text} filled />
           </LinearGradient>
           <View>
             <Text style={[styles.greetingSub, { fontFamily }]}>{greeting}</Text>
@@ -194,13 +196,13 @@ export const HomeScreen: React.FC = () => {
 
         <View style={styles.headerActions}>
           <Pressable onPress={() => setIsAudioLabOpen(true)} style={styles.headerIconBtn}>
-            <Ionicons name="options-outline" size={20} color="#FFFFFF" />
+            <Ionicons name="options-outline" size={20} color={UI.text} />
           </Pressable>
           <Pressable onPress={() => setIsRecapOpen(true)} style={styles.headerIconBtn}>
             <Ionicons name="stats-chart" size={19} color={palette.accent} />
           </Pressable>
           <Pressable onPress={refreshHomeFeeds} style={styles.headerIconBtn}>
-            <Ionicons name="refresh" size={19} color="#FFFFFF" />
+            <Ionicons name="refresh" size={19} color={UI.text} />
           </Pressable>
         </View>
       </View>
@@ -228,7 +230,7 @@ export const HomeScreen: React.FC = () => {
               <Text
                 style={[
                   styles.moodChipText,
-                  { color: active ? palette.onAccent : '#F4F4F8', fontFamily },
+                  { color: active ? palette.onAccent : UI.fg(1), fontFamily },
                 ]}
               >
                 {vi ? m.labelVi : m.labelEn}
@@ -343,14 +345,14 @@ export const HomeScreen: React.FC = () => {
       <View style={styles.dualCardsRow}>
         <Pressable onPress={() => startInstantMix()} style={{ flex: 1 }}>
           <LinearGradient
-            colors={[palette.gradient[0], '#1A1630']}
+            colors={[darkPalette.gradient[0], '#1A1630']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.promoCard}
           >
             <View style={styles.promoTopRow}>
-              <Ionicons name="sparkles" size={20} color={palette.accent} />
-              <Text style={[styles.promoTag, { color: palette.accent }]}>MIX IT</Text>
+              <Ionicons name="sparkles" size={20} color={darkPalette.accent} />
+              <Text style={[styles.promoTag, { color: darkPalette.accent }]}>MIX IT</Text>
             </View>
             <Text style={[styles.promoTitle, { fontFamily }]}>
               {t(prefs.language, 'mixItTitle')}
@@ -514,7 +516,7 @@ export const HomeScreen: React.FC = () => {
                   ? `Thịnh hành ${country.flag} ${country.vi}`
                   : `Trending ${country.flag} ${country.en}`}
               </SectionTitle>
-              <Ionicons name="chevron-down" size={15} color={HOLYSIC_COLORS.textMuted} />
+              <Ionicons name="chevron-down" size={15} color={UI.text3} />
             </Pressable>
             <Pressable onPress={() => chartLocal[0] && playTrack(chartLocal[0], chartLocal)}>
               <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
@@ -750,7 +752,7 @@ const SmartShelf: React.FC<{
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   homeWash: { position: 'absolute', top: -40, left: -40, right: -40, height: 420 },
   logoBadgeHalo: { borderWidth: 1, borderColor: 'rgba(252,211,77,0.35)' },
   radioCard: { width: 118 },
@@ -758,10 +760,10 @@ const styles = StyleSheet.create({
     width: 118,
     height: 118,
     borderRadius: 59,
-    backgroundColor: '#1B1B24',
+    backgroundColor: UI.surface('#1B1B24'),
     marginBottom: 8,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: UI.fg(0.08),
   },
   liveTag: {
     position: 'absolute',
@@ -773,19 +775,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 99,
-    backgroundColor: 'rgba(10,10,14,0.85)',
+    backgroundColor: UI.shade(10, 10, 14, 0.85),
   },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' },
-  liveTagText: { color: '#FFF', fontSize: 9.5, fontWeight: '900', letterSpacing: 0.8 },
+  liveTagText: { color: UI.text, fontSize: 9.5, fontWeight: '900', letterSpacing: 0.8 },
   audiusChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 99,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: UI.fg(0.1),
+    backgroundColor: UI.fg(0.05),
   },
-  audiusChipText: { color: '#E4E4EC', fontWeight: '700', fontSize: 12.5 },
+  audiusChipText: { color: UI.fg(0.88), fontWeight: '700', fontSize: 12.5 },
   quickActions: { gap: 10, paddingHorizontal: 16, paddingBottom: 6, paddingTop: 2 },
   qaCard: {
     flexDirection: 'row',
@@ -795,9 +797,9 @@ const styles = StyleSheet.create({
     paddingLeft: 9,
     paddingRight: 14,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.055)',
+    backgroundColor: UI.fg(0.055),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: UI.fg(0.07),
   },
   qaIcon: {
     width: 34,
@@ -806,8 +808,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  qaLabel: { color: '#FFF', fontWeight: '800', fontSize: 13 },
-  qaSub: { color: HOLYSIC_COLORS.textMuted, fontSize: 11, marginTop: 1 },
+  qaLabel: { color: UI.text, fontWeight: '800', fontSize: 13 },
+  qaSub: { color: UI.text3, fontSize: 11, marginTop: 1 },
   seeAll: { alignItems: 'center', paddingVertical: 12 },
   genreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
   genreTile: {
@@ -821,7 +823,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
   },
-  genreText: { color: '#FFF', fontWeight: '700', fontSize: 13, flexShrink: 1 },
+  genreText: { color: UI.text, fontWeight: '700', fontSize: 13, flexShrink: 1 },
   container: {
     flex: 1,
   },
@@ -848,15 +850,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: UI.fg(0.12),
   },
   greetingSub: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12,
     fontWeight: '600',
   },
   brandTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 21,
     fontWeight: '800',
     letterSpacing: -0.3,
@@ -870,9 +872,9 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: HOLYSIC_COLORS.surfaceCard,
+    backgroundColor: UI.fg(0.065),
     borderWidth: 1,
-    borderColor: HOLYSIC_COLORS.glassBorder,
+    borderColor: UI.fg(0.1),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -885,9 +887,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 99,
-    backgroundColor: HOLYSIC_COLORS.surfaceCard,
+    backgroundColor: UI.fg(0.065),
     borderWidth: 1,
-    borderColor: HOLYSIC_COLORS.glassBorder,
+    borderColor: UI.fg(0.1),
   },
   moodChipText: {
     fontSize: 13,
@@ -902,7 +904,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 19,
     fontWeight: '800',
   },
@@ -923,7 +925,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 15,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: UI.fg(0.12),
     minHeight: 126,
     justifyContent: 'space-between',
   },
@@ -938,7 +940,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   promoTitle: {
-    color: '#FFFFFF',
+    color: '#FFFFFF', // promo cards stay dark in both schemes
     fontSize: 15.5,
     fontWeight: '800',
     marginTop: 6,
@@ -956,7 +958,7 @@ const styles = StyleSheet.create({
   squareCard: {
     width: 142,
   },
-  shelfHint: { color: HOLYSIC_COLORS.textMuted, fontSize: 12, fontWeight: '600' },
+  shelfHint: { color: UI.text3, fontSize: 12, fontWeight: '600' },
   shelfNote: { fontSize: 11, fontWeight: '700', marginTop: 3, opacity: 0.9 },
   rankBadge: {
     position: 'absolute',
@@ -969,30 +971,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
-  rankText: { color: '#0A0A0E', fontSize: 12, fontWeight: '900' },
+  rankText: { color: UI.inv, fontSize: 12, fontWeight: '900' },
   squareArt: {
     width: 142,
     height: 142,
     borderRadius: 18,
-    backgroundColor: '#1B1B24',
+    backgroundColor: UI.surface('#1B1B24'),
     marginBottom: 8,
   },
   squareTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 14,
     fontWeight: '700',
   },
   squareSub: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12,
     marginTop: 2,
   },
   listCard: {
     marginHorizontal: 10,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: UI.fg(0.03),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: UI.fg(0.06),
     paddingVertical: 4,
   },
-});
+}));

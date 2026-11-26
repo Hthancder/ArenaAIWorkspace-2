@@ -21,7 +21,7 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     clearUpcoming,
     savePlaylistFromTracks,
     showToast,
-    palette,
+    darkPalette: palette,
     prefs,
   } = useHolySic();
   const vi = prefs.language === 'vi';

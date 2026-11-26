@@ -15,7 +15,7 @@ export const LyricsView: React.FC = () => {
     activeLyricIndex,
     positionSec,
     seekTo,
-    palette,
+    darkPalette: palette,
     prefs,
     updatePrefs,
     haptic,

@@ -5,7 +5,7 @@
     "version": "1.0.0-beta.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "scheme": "holysic",
     "newArchEnabled": true,
     "backgroundColor": "#000000",
@@ -18,13 +18,12 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.holysic.music",
       "buildNumber": "1",
-      "userInterfaceStyle": "dark",
+      "userInterfaceStyle": "automatic",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio",
           "fetch"
         ],
-        "UIStatusBarStyle": "UIStatusBarStyleLightContent",
         "UIViewControllerBasedStatusBarAppearance": true,
         "ITSAppUsesNonExemptEncryption": false,
         "UIFileSharingEnabled": true,

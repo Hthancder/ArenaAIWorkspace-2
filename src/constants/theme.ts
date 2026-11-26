@@ -224,3 +224,37 @@ export function hexToHue(hex: string): number | null {
   h *= 60;
   return h < 0 ? h + 360 : h;
 }
+
+function hexToHsl(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6})/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  return [hexToHue(hex) ?? 0, s, l];
+}
+
+/**
+ * The artwork palette is tuned for the dark UI (light, airy accents). On the light UI the same
+ * hue needs a deeper tone to stay readable as text/icons, and soft tints for containers.
+ */
+export function paletteForLightUi(p: ArtworkPalette): ArtworkPalette {
+  const a = hexToHsl(p.accent);
+  if (!a) return p;
+  const [h, s] = a;
+  const sat = Math.min(0.62, Math.max(0.38, s));
+  return {
+    ...p,
+    accent: hslToHex(h, sat, 0.45),
+    onAccent: '#FFFFFF',
+    container: hslToHex(h, Math.min(0.55, sat), 0.9),
+    onContainer: hslToHex(h, sat, 0.28),
+    surface: hslToHex(h, Math.min(0.35, sat), 0.96),
+  };
+}

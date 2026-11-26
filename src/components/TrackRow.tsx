@@ -8,6 +8,7 @@ import { HOLYSIC_COLORS, resolveFontFamily } from '../constants/theme';
 import { useHolySic } from '../context/HolySicContext';
 import { Track } from '../types/music';
 import { formatTimeSec } from './HolySicIcons';
+import { T as UI, themedSheet } from '../theme/ui';
 
 interface TrackRowProps {
   track: Track;
@@ -77,12 +78,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
       ]}
     >
       {indexBadge !== undefined && (
-        <Text
-          style={[
-            styles.indexNum,
-            { color: active ? palette.accent : HOLYSIC_COLORS.textMuted, fontFamily },
-          ]}
-        >
+        <Text style={[styles.indexNum, { color: active ? palette.accent : UI.text3, fontFamily }]}>
           {indexBadge}
         </Text>
       )}
@@ -103,7 +99,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
             style={[
               styles.title,
               {
-                color: active ? palette.accent : HOLYSIC_COLORS.textPrimary,
+                color: active ? palette.accent : UI.text,
                 fontFamily,
               },
             ]}
@@ -178,7 +174,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         <Ionicons
           name={liked ? 'heart' : 'heart-outline'}
           size={19}
-          color={liked ? HOLYSIC_COLORS.roseLike : HOLYSIC_COLORS.textMuted}
+          color={liked ? HOLYSIC_COLORS.roseLike : UI.text3}
         />
       </Pressable>
 
@@ -191,7 +187,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           }}
           style={styles.iconBtn}
         >
-          <Ionicons name="close-circle-outline" size={19} color={HOLYSIC_COLORS.textMuted} />
+          <Ionicons name="close-circle-outline" size={19} color={UI.text3} />
         </Pressable>
       ) : (
         <Pressable
@@ -202,14 +198,14 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           }}
           style={styles.iconBtn}
         >
-          <Ionicons name="ellipsis-horizontal" size={18} color={HOLYSIC_COLORS.textSecondary} />
+          <Ionicons name="ellipsis-horizontal" size={18} color={UI.text2} />
         </Pressable>
       )}
     </Pressable>
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -247,7 +243,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.56)',
+    backgroundColor: UI.shade(0, 0, 0, 0.56),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -269,7 +265,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: UI.fg(0.16),
   },
   explicitText: {
     color: '#D8D8E2',
@@ -283,7 +279,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 12.5,
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     flexShrink: 1,
   },
   qualityPill: {
@@ -291,19 +287,19 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: UI.fg(0.12),
+    backgroundColor: UI.fg(0.05),
     marginRight: 8,
   },
   qualityText: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 9.5,
     fontWeight: '700',
     letterSpacing: 0.4,
   },
   duration: {
     fontSize: 12,
-    color: HOLYSIC_COLORS.textMuted,
+    color: UI.text3,
     marginRight: 6,
     minWidth: 34,
     textAlign: 'right',
@@ -312,4 +308,4 @@ const styles = StyleSheet.create({
     padding: 5,
     marginLeft: 2,
   },
-});
+}));

@@ -9,6 +9,7 @@ import { useHolySic } from '../context/HolySicContext';
 import { GlassSurface } from './GlassSurface';
 import { useHoldSeek } from '../hooks/useHoldSeek';
 import { AmbientSpill, useAmbientColors } from './ambient/AmbientLight';
+import { T as UI, themedSheet } from '../theme/ui';
 
 export const MiniPlayer: React.FC = () => {
   const {
@@ -108,7 +109,7 @@ export const MiniPlayer: React.FC = () => {
             <Ionicons
               name={liked ? 'heart' : 'heart-outline'}
               size={21}
-              color={liked ? HOLYSIC_COLORS.roseLike : '#FFFFFF'}
+              color={liked ? HOLYSIC_COLORS.roseLike : UI.fg(1)}
             />
           </Pressable>
 
@@ -143,7 +144,7 @@ export const MiniPlayer: React.FC = () => {
             delayLongPress={ff.delayLongPress}
             style={styles.ctrlBtn}
           >
-            <Ionicons name="play-skip-forward" size={20} color="#FFFFFF" />
+            <Ionicons name="play-skip-forward" size={20} color={UI.text} />
           </Pressable>
         </View>
 
@@ -161,7 +162,7 @@ export const MiniPlayer: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   spill: { position: 'absolute', left: -6, right: -6, top: -18, bottom: -4 },
   spillCapsule: { position: 'absolute', left: 8, right: 8, top: -16, bottom: -2 },
   outer: {
@@ -206,12 +207,12 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   title: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 14.5,
     fontWeight: '700',
   },
   artist: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12.5,
     marginTop: 2,
   },
@@ -233,10 +234,10 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     height: 2.5,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: UI.fg(0.12),
     width: '100%',
   },
   progressFill: {
     height: '100%',
   },
-});
+}));

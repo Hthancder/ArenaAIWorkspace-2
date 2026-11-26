@@ -66,7 +66,7 @@ export const FullPlayerModal: React.FC = () => {
     sleepRemainingSec,
     sleepEndOfTrack,
     setSleepTimer,
-    palette,
+    darkPalette: palette,
     prefs,
     updatePrefs,
     seekBy,

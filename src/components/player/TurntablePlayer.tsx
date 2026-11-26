@@ -6,7 +6,7 @@ import { ArtworkImage } from '../ArtworkImage';
 import { useHolySic } from '../../context/HolySicContext';
 
 export const TurntableVinylStage: React.FC = () => {
-  const { currentTrack, isPlaying, positionSec, durationSec, palette } = useHolySic();
+  const { currentTrack, isPlaying, positionSec, durationSec, darkPalette: palette } = useHolySic();
   const spinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {

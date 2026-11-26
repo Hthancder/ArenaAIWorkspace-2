@@ -19,7 +19,7 @@ export const BedsideClockView: React.FC = () => {
     playPrevious,
     lyrics,
     activeLyricIndex,
-    palette,
+    darkPalette: palette,
     prefs,
     updatePrefs,
     haptic,

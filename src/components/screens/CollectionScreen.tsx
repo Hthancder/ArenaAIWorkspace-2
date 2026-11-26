@@ -23,6 +23,7 @@ import { AlbumSummary, ArtistSummary, Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 import { exportPlaylistM3U } from '../../services/import/playlistFiles';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 export const CollectionModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -206,18 +207,23 @@ export const CollectionModal: React.FC = () => {
       presentationStyle="fullScreen"
       onRequestClose={() => openCollection(null)}
     >
-      <View style={[styles.root, { backgroundColor: prefs.pureBlack ? '#000' : '#0A0A0F' }]}>
+      <View
+        style={[
+          styles.root,
+          { backgroundColor: prefs.pureBlack ? UI.surface('#000') : UI.surface('#0A0A0F') },
+        ]}
+      >
         <ScrollView
           contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
           showsVerticalScrollIndicator={false}
         >
           <LinearGradient
-            colors={[headerPalette.gradient[0], '#0A0A0F']}
+            colors={[headerPalette.gradient[0], UI.surface('#0A0A0F')]}
             style={[styles.hero, { paddingTop: Math.max(insets.top, 16) }]}
           >
             <View style={styles.navBar}>
               <Pressable onPress={() => openCollection(null)} style={styles.backBtn}>
-                <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+                <Ionicons name="chevron-back" size={22} color={UI.text} />
               </Pressable>
 
               <View style={{ flex: 1 }} />
@@ -233,7 +239,7 @@ export const CollectionModal: React.FC = () => {
                   <Ionicons
                     name={selecting ? 'close' : 'checkmark-done-outline'}
                     size={19}
-                    color="#FFFFFF"
+                    color={UI.text}
                   />
                 </Pressable>
               )}
@@ -291,8 +297,8 @@ export const CollectionModal: React.FC = () => {
                     }}
                     style={styles.secondaryBtn}
                   >
-                    <Ionicons name="shuffle" size={18} color="#FFFFFF" />
-                    <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>
+                    <Ionicons name="shuffle" size={18} color={UI.text} />
+                    <Text style={{ color: UI.text, fontWeight: '700' }}>
                       {t(prefs.language, 'shuffle')}
                     </Text>
                   </Pressable>
@@ -312,7 +318,7 @@ export const CollectionModal: React.FC = () => {
                       }}
                       style={styles.chipBtn}
                     >
-                      <Ionicons name="bookmark-outline" size={15} color="#FFF" />
+                      <Ionicons name="bookmark-outline" size={15} color={UI.text} />
                       <Text style={styles.chipText}>
                         {vi ? 'Lưu playlist' : 'Save as playlist'}
                       </Text>
@@ -330,7 +336,7 @@ export const CollectionModal: React.FC = () => {
                       }}
                       style={styles.chipBtn}
                     >
-                      <Ionicons name="arrow-down-circle-outline" size={15} color="#FFF" />
+                      <Ionicons name="arrow-down-circle-outline" size={15} color={UI.text} />
                       <Text style={styles.chipText}>
                         {Object.keys(downloadingIds).length > 0
                           ? `${Object.keys(downloadingIds).length}…`
@@ -353,7 +359,7 @@ export const CollectionModal: React.FC = () => {
                     style={styles.chipBtn}
                     accessibilityLabel={vi ? 'Xuất M3U' : 'Export M3U'}
                   >
-                    <Ionicons name="share-outline" size={15} color="#FFF" />
+                    <Ionicons name="share-outline" size={15} color={UI.text} />
                     <Text style={styles.chipText}>{vi ? 'Xuất M3U' : 'Export M3U'}</Text>
                   </Pressable>
                 </View>
@@ -371,19 +377,19 @@ export const CollectionModal: React.FC = () => {
           {canFilter && (
             <View style={styles.filterRow}>
               <View style={styles.filterBox}>
-                <Ionicons name="search" size={15} color={HOLYSIC_COLORS.textMuted} />
+                <Ionicons name="search" size={15} color={UI.text3} />
                 <TextInput
                   value={filterQ}
                   onChangeText={setFilterQ}
                   placeholder={
                     vi ? `Lọc ${allTracks.length} bài…` : `Filter ${allTracks.length} songs…`
                   }
-                  placeholderTextColor={HOLYSIC_COLORS.textMuted}
+                  placeholderTextColor={UI.text3}
                   style={styles.filterInput}
                 />
                 {filterQ.length > 0 && (
                   <Pressable hitSlop={8} onPress={() => setFilterQ('')}>
-                    <Ionicons name="close-circle" size={16} color={HOLYSIC_COLORS.textMuted} />
+                    <Ionicons name="close-circle" size={16} color={UI.text3} />
                   </Pressable>
                 )}
               </View>
@@ -399,7 +405,7 @@ export const CollectionModal: React.FC = () => {
                 <Ionicons
                   name="swap-vertical"
                   size={14}
-                  color={sortBy !== 'default' ? headerPalette.accent : '#FFF'}
+                  color={sortBy !== 'default' ? headerPalette.accent : UI.fg(1)}
                 />
                 <Text style={styles.sortText}>{SORT_LABEL[sortBy]}</Text>
               </Pressable>
@@ -428,7 +434,7 @@ export const CollectionModal: React.FC = () => {
                       : 'All'}
                 </Text>
               </Pressable>
-              <Text style={{ color: '#FFF', fontWeight: '700' }}>
+              <Text style={{ color: UI.text, fontWeight: '700' }}>
                 {chosen.length} {vi ? 'đã chọn' : 'selected'}
               </Text>
             </View>
@@ -452,21 +458,21 @@ export const CollectionModal: React.FC = () => {
                 </Text>
               </Pressable>
               <Pressable onPress={() => queueTracks(chosen, true)} style={styles.chipBtn}>
-                <Ionicons name="play-forward-outline" size={15} color="#FFF" />
+                <Ionicons name="play-forward-outline" size={15} color={UI.text} />
                 <Text style={styles.chipText}>{vi ? 'Phát kế' : 'Play next'}</Text>
               </Pressable>
               <Pressable onPress={() => queueTracks(chosen)} style={styles.chipBtn}>
-                <Ionicons name="list" size={15} color="#FFF" />
+                <Ionicons name="list" size={15} color={UI.text} />
                 <Text style={styles.chipText}>{vi ? 'Hàng chờ' : 'Queue'}</Text>
               </Pressable>
               {collectionTarget.kind !== 'liked' && (
                 <Pressable onPress={() => likeTracks(chosen)} style={styles.chipBtn}>
-                  <Ionicons name="heart-outline" size={15} color="#FFF" />
+                  <Ionicons name="heart-outline" size={15} color={UI.text} />
                   <Text style={styles.chipText}>{vi ? 'Thích' : 'Like'}</Text>
                 </Pressable>
               )}
               <Pressable onPress={() => setPickPlaylist((v) => !v)} style={styles.chipBtn}>
-                <Ionicons name="add-circle-outline" size={15} color="#FFF" />
+                <Ionicons name="add-circle-outline" size={15} color={UI.text} />
                 <Text style={styles.chipText}>{vi ? 'Vào playlist' : 'To playlist'}</Text>
               </Pressable>
               <Pressable
@@ -475,7 +481,7 @@ export const CollectionModal: React.FC = () => {
                 }}
                 style={styles.chipBtn}
               >
-                <Ionicons name="arrow-down-circle-outline" size={15} color="#FFF" />
+                <Ionicons name="arrow-down-circle-outline" size={15} color={UI.text} />
                 <Text style={styles.chipText}>{vi ? 'Tải' : 'Download'}</Text>
               </Pressable>
               {removablePlaylistId && (
@@ -512,7 +518,7 @@ export const CollectionModal: React.FC = () => {
                 style={styles.plRow}
               >
                 <Ionicons name="add" size={18} color={headerPalette.accent} />
-                <Text style={{ color: '#FFF', fontWeight: '700' }}>
+                <Text style={{ color: UI.text, fontWeight: '700' }}>
                   {vi ? 'Playlist mới' : 'New playlist'}
                 </Text>
               </Pressable>
@@ -528,7 +534,7 @@ export const CollectionModal: React.FC = () => {
                     style={styles.plRow}
                   >
                     <Ionicons name="musical-notes" size={16} color={headerPalette.accent} />
-                    <Text style={{ color: '#FFF' }} numberOfLines={1}>
+                    <Text style={{ color: UI.text }} numberOfLines={1}>
                       {p.name} ({p.tracks.length})
                     </Text>
                   </Pressable>
@@ -547,17 +553,14 @@ export const CollectionModal: React.FC = () => {
                   <Ionicons
                     name={selected[song.id] ? 'checkmark-circle' : 'ellipse-outline'}
                     size={22}
-                    color={selected[song.id] ? headerPalette.accent : HOLYSIC_COLORS.textMuted}
+                    color={selected[song.id] ? headerPalette.accent : UI.text3}
                   />
                   <ArtworkImage source={{ uri: song.artworkUrl }} style={styles.selArt} />
                   <View style={{ flex: 1 }}>
-                    <Text numberOfLines={1} style={{ color: '#FFF', fontWeight: '700' }}>
+                    <Text numberOfLines={1} style={{ color: UI.text, fontWeight: '700' }}>
                       {song.title}
                     </Text>
-                    <Text
-                      numberOfLines={1}
-                      style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 12 }}
-                    >
+                    <Text numberOfLines={1} style={{ color: UI.text3, fontSize: 12 }}>
                       {song.artist}
                     </Text>
                   </View>
@@ -624,14 +627,12 @@ export const CollectionModal: React.FC = () => {
                       />
                       <Text
                         numberOfLines={1}
-                        style={{ color: '#FFF', fontWeight: '700', fontSize: 13.5 }}
+                        style={{ color: UI.text, fontWeight: '700', fontSize: 13.5 }}
                       >
                         {alb.title}
                       </Text>
                       {alb.year && (
-                        <Text style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 12 }}>
-                          {alb.year}
-                        </Text>
+                        <Text style={{ color: UI.text3, fontSize: 12 }}>{alb.year}</Text>
                       )}
                     </Pressable>
                   ))}
@@ -645,7 +646,7 @@ export const CollectionModal: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -662,9 +663,9 @@ const styles = StyleSheet.create({
     height: 40,
     paddingHorizontal: 12,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: UI.fg(0.06),
   },
-  filterInput: { flex: 1, color: '#FFF', fontSize: 14 },
+  filterInput: { flex: 1, color: UI.text, fontSize: 14 },
   sortChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -673,11 +674,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderColor: UI.fg(0.1),
+    backgroundColor: UI.fg(0.06),
   },
-  sortText: { color: '#FFF', fontSize: 12.5, fontWeight: '700' },
-  filterEmpty: { color: HOLYSIC_COLORS.textMuted, textAlign: 'center', marginVertical: 18 },
+  sortText: { color: UI.text, fontSize: 12.5, fontWeight: '700' },
+  filterEmpty: { color: UI.text3, textAlign: 'center', marginVertical: 18 },
   root: {
     flex: 1,
   },
@@ -694,7 +695,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: UI.shade(0, 0, 0, 0.35),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -712,13 +713,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heroTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 23,
     fontWeight: '800',
     textAlign: 'center',
   },
   heroSub: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 13.5,
     marginTop: 4,
     textAlign: 'center',
@@ -744,7 +745,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: UI.fg(0.12),
   },
   chipBtn: {
     flexDirection: 'row',
@@ -753,9 +754,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: UI.fg(0.12),
   },
-  chipText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  chipText: { color: UI.text, fontWeight: '700', fontSize: 13 },
   selectBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -768,7 +769,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginBottom: 10,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: UI.fg(0.06),
     overflow: 'hidden',
   },
   plRow: {
@@ -778,7 +779,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: UI.fg(0.08),
   },
   selRow: {
     flexDirection: 'row',
@@ -790,10 +791,10 @@ const styles = StyleSheet.create({
   selArt: { width: 44, height: 44, borderRadius: 8 },
   loadMore: { alignItems: 'center', paddingVertical: 16 },
   discographyHeading: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 18,
     fontWeight: '800',
     marginHorizontal: 18,
     marginBottom: 12,
   },
-});
+}));

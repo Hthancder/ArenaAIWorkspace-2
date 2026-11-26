@@ -4,6 +4,7 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 export const HALO_GOLD = '#FCD34D';
 let seq = 0;
@@ -48,19 +49,19 @@ export const HaloMark: React.FC<{ size?: number; color?: string }> = ({
   </Svg>
 );
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   glow: { position: 'absolute', top: 0, left: 0, right: 0 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 1 },
   titleHalo: { marginTop: -10, marginRight: -2 },
   titleText: { fontSize: 19, fontWeight: '800', letterSpacing: -0.2, flexShrink: 1 },
-});
+}));
 
 /** Section heading with the halo mark — the HolySic way of titling a shelf. */
 export const SectionTitle: React.FC<{
   children: React.ReactNode;
   fontFamily?: string;
   color?: string;
-}> = ({ children, fontFamily, color = '#FFFFFF' }) => (
+}> = ({ children, fontFamily, color = UI.text }) => (
   <View style={styles.titleRow}>
     <View style={styles.titleHalo}>
       <HaloMark size={15} />

@@ -22,6 +22,7 @@ import { AlbumSummary, MusicSourceId, Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
 import { useLocalLibrary } from '../local/LocalLibraryScreen';
 import { LocalLibrary } from '../../services/local/localLibrary';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 const SOURCE_FILTERS: { id: 'all' | MusicSourceId; label: string }[] = [
   { id: 'all', label: 'All Sources' },
@@ -146,19 +147,19 @@ export const SearchScreen: React.FC = () => {
         <Text style={[styles.pageTitle, { fontFamily }]}>{t(prefs.language, 'search')}</Text>
 
         <View style={[styles.searchBox, { borderColor: palette.accent + '35' }]}>
-          <Ionicons name="search" size={19} color={HOLYSIC_COLORS.textSecondary} />
+          <Ionicons name="search" size={19} color={UI.text2} />
           <TextInput
             value={query}
             onChangeText={setQuery}
             onSubmitEditing={() => addSearchHistory(query)}
             placeholder={t(prefs.language, 'searchPlaceholder')}
-            placeholderTextColor={HOLYSIC_COLORS.textMuted}
+            placeholderTextColor={UI.text3}
             returnKeyType="search"
             style={[styles.searchInput, { fontFamily }]}
           />
           {query.length > 0 && (
             <Pressable hitSlop={8} onPress={() => setQuery('')}>
-              <Ionicons name="close-circle" size={19} color={HOLYSIC_COLORS.textMuted} />
+              <Ionicons name="close-circle" size={19} color={UI.text3} />
             </Pressable>
           )}
         </View>
@@ -168,11 +169,11 @@ export const SearchScreen: React.FC = () => {
           <View style={styles.linkCard}>
             <Ionicons name="link" size={20} color={palette.accent} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: '#FFF', fontWeight: '800' }}>
+              <Text style={{ color: UI.text, fontWeight: '800' }}>
                 {vi ? 'Liên kết nhạc' : 'Music link'}
               </Text>
               <Text
-                style={{ color: linkMsg ? '#FCA5A5' : HOLYSIC_COLORS.textMuted, fontSize: 12 }}
+                style={{ color: linkMsg ? '#FCA5A5' : UI.text3, fontSize: 12 }}
                 numberOfLines={2}
               >
                 {linkMsg ||
@@ -201,12 +202,12 @@ export const SearchScreen: React.FC = () => {
         {listCount > 1 && (
           <Pressable onPress={() => openImport('list', query)} style={styles.linkCard}>
             <Ionicons name="list" size={20} color="#FBBF24" />
-            <Text style={{ color: '#FFF', fontWeight: '700', flex: 1 }}>
+            <Text style={{ color: UI.text, fontWeight: '700', flex: 1 }}>
               {vi
                 ? `Tìm từng bài trong danh sách (${listCount})`
                 : `Search each song in the list (${listCount})`}
             </Text>
-            <Ionicons name="chevron-forward" size={16} color={HOLYSIC_COLORS.textMuted} />
+            <Ionicons name="chevron-forward" size={16} color={UI.text3} />
           </Pressable>
         )}
 
@@ -215,15 +216,15 @@ export const SearchScreen: React.FC = () => {
           <View style={styles.suggestBox}>
             {suggestions.map((s) => (
               <Pressable key={s} onPress={() => submitQuery(s)} style={styles.suggestRow}>
-                <Ionicons name="search-outline" size={14} color={HOLYSIC_COLORS.textMuted} />
-                <Text numberOfLines={1} style={{ color: '#E4E4EC', flex: 1, fontSize: 14 }}>
+                <Ionicons name="search-outline" size={14} color={UI.text3} />
+                <Text numberOfLines={1} style={{ color: UI.fg(0.88), flex: 1, fontSize: 14 }}>
                   {s}
                 </Text>
                 <Pressable hitSlop={8} onPress={() => setQuery(s + ' ')}>
                   <Ionicons
                     name="arrow-up-outline"
                     size={14}
-                    color={HOLYSIC_COLORS.textMuted}
+                    color={UI.text3}
                     style={{ transform: [{ rotate: '-45deg' }] }}
                   />
                 </Pressable>
@@ -253,7 +254,10 @@ export const SearchScreen: React.FC = () => {
                 ]}
               >
                 <Text
-                  style={[styles.filterPillText, { color: active ? palette.onAccent : '#E4E4EC' }]}
+                  style={[
+                    styles.filterPillText,
+                    { color: active ? palette.onAccent : UI.fg(0.88) },
+                  ]}
                 >
                   {f.label}
                 </Text>
@@ -342,7 +346,7 @@ export const SearchScreen: React.FC = () => {
 
             {!loading && results.length === 0 && localTracks.length === 0 && (
               <View style={styles.emptyWrap}>
-                <Ionicons name="musical-notes" size={36} color={HOLYSIC_COLORS.textMuted} />
+                <Ionicons name="musical-notes" size={36} color={UI.text3} />
                 <Text style={styles.emptyText}>
                   {vi
                     ? 'Không tìm thấy kết quả trên nguồn đã chọn. Hãy thử "All Sources"!'
@@ -361,9 +365,7 @@ export const SearchScreen: React.FC = () => {
                     {vi ? 'Tìm kiếm gần đây' : 'Recent Searches'}
                   </Text>
                   <Pressable onPress={clearSearchHistory}>
-                    <Text style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 12.5 }}>
-                      {vi ? 'Xoá' : 'Clear'}
-                    </Text>
+                    <Text style={{ color: UI.text3, fontSize: 12.5 }}>{vi ? 'Xoá' : 'Clear'}</Text>
                   </Pressable>
                 </View>
                 <View style={styles.historyChips}>
@@ -373,11 +375,7 @@ export const SearchScreen: React.FC = () => {
                       onPress={() => submitQuery(item)}
                       style={styles.historyChip}
                     >
-                      <Ionicons
-                        name="time-outline"
-                        size={14}
-                        color={HOLYSIC_COLORS.textSecondary}
-                      />
+                      <Ionicons name="time-outline" size={14} color={UI.text2} />
                       <Text style={styles.historyChipText}>{item}</Text>
                     </Pressable>
                   ))}
@@ -434,7 +432,7 @@ export const SearchScreen: React.FC = () => {
                     end={{ x: 1, y: 1 }}
                     style={styles.genreGradient}
                   >
-                    <Ionicons name={cat.icon as any} size={22} color="rgba(255,255,255,0.85)" />
+                    <Ionicons name={cat.icon as any} size={22} color={UI.fg(0.85)} />
                     <Text style={[styles.genreTitle, { fontFamily }]}>
                       {vi ? cat.labelVi : cat.labelEn}
                     </Text>
@@ -478,7 +476,7 @@ export const SearchScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   linkCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -487,9 +485,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     padding: 12,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: UI.fg(0.06),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: UI.fg(0.08),
   },
   linkBtn: {
     paddingHorizontal: 16,
@@ -502,7 +500,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginHorizontal: 16,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: UI.fg(0.05),
     overflow: 'hidden',
   },
   suggestRow: {
@@ -512,7 +510,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: UI.fg(0.06),
   },
   container: {
     flex: 1,
@@ -522,7 +520,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   pageTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 24,
     fontWeight: '800',
     paddingHorizontal: 18,
@@ -535,13 +533,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 46,
     borderRadius: 16,
-    backgroundColor: HOLYSIC_COLORS.surfaceCard,
+    backgroundColor: UI.fg(0.065),
     borderWidth: 1,
     gap: 10,
   },
   searchInput: {
     flex: 1,
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 15,
     height: '100%',
   },
@@ -554,9 +552,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: UI.fg(0.06),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: UI.fg(0.1),
   },
   filterPillText: {
     fontSize: 12,
@@ -574,11 +572,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   loadingText: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 13,
   },
   subHeading: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 17,
     fontWeight: '800',
     marginHorizontal: 18,
@@ -616,10 +614,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: UI.fg(0.07),
   },
   historyChipText: {
-    color: '#F4F4F8',
+    color: UI.text,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -627,9 +625,9 @@ const styles = StyleSheet.create({
     width: 112,
     padding: 12,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: UI.fg(0.05),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: UI.fg(0.08),
     alignItems: 'center',
   },
   artistInitialCircle: {
@@ -645,12 +643,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   artistName: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 13.5,
     fontWeight: '700',
   },
   artistTag: {
-    color: HOLYSIC_COLORS.textMuted,
+    color: UI.text3,
     fontSize: 11,
     marginTop: 2,
   },
@@ -670,7 +668,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   genreTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 15,
     fontWeight: '800',
   },
@@ -681,16 +679,16 @@ const styles = StyleSheet.create({
     width: 132,
     height: 132,
     borderRadius: 16,
-    backgroundColor: '#1B1B24',
+    backgroundColor: UI.surface('#1B1B24'),
     marginBottom: 6,
   },
   albumTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 13.5,
     fontWeight: '700',
   },
   albumArtist: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12,
     marginTop: 2,
   },
@@ -701,9 +699,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyText: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
   },
-});
+}));

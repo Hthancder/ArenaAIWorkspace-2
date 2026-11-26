@@ -18,6 +18,7 @@ import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { AUTO_EQ_PRESETS } from '../../data/curatedCatalog';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 export const AudioLabModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -65,7 +66,7 @@ export const AudioLabModal: React.FC = () => {
         style={[
           styles.root,
           {
-            backgroundColor: prefs.pureBlack ? '#000000' : '#0B0B10',
+            backgroundColor: prefs.pureBlack ? UI.surface('#000000') : UI.surface('#0B0B10'),
             paddingTop: Math.max(insets.top, 16),
           },
         ]}
@@ -82,10 +83,10 @@ export const AudioLabModal: React.FC = () => {
                 haptic('selection');
                 updateAudioLab({ enabled: v });
               }}
-              trackColor={{ false: '#2A2A36', true: palette.accent }}
+              trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
             />
             <Pressable onPress={() => setIsAudioLabOpen(false)} style={styles.closeBtn}>
-              <Ionicons name="close" size={21} color="#FFFFFF" />
+              <Ionicons name="close" size={21} color={UI.text} />
             </Pressable>
           </View>
         </View>
@@ -139,7 +140,7 @@ export const AudioLabModal: React.FC = () => {
                       style={{
                         fontSize: 12.5,
                         fontWeight: '700',
-                        color: selected ? palette.onAccent : '#F4F4F8',
+                        color: selected ? palette.onAccent : UI.fg(1),
                       }}
                     >
                       {preset.name}
@@ -167,7 +168,7 @@ export const AudioLabModal: React.FC = () => {
                     return (
                       <View key={band.freqHz} style={styles.bandCol}>
                         <Pressable onPress={() => adjustBand(idx, 1.5)} style={styles.stepMiniBtn}>
-                          <Ionicons name="add" size={14} color="#FFFFFF" />
+                          <Ionicons name="add" size={14} color={UI.text} />
                         </Pressable>
 
                         <View style={styles.bandBarTrack}>
@@ -183,7 +184,7 @@ export const AudioLabModal: React.FC = () => {
                         </View>
 
                         <Pressable onPress={() => adjustBand(idx, -1.5)} style={styles.stepMiniBtn}>
-                          <Ionicons name="remove" size={14} color="#FFFFFF" />
+                          <Ionicons name="remove" size={14} color={UI.text} />
                         </Pressable>
 
                         <Text style={styles.dbText}>
@@ -218,7 +219,7 @@ export const AudioLabModal: React.FC = () => {
                           style={{
                             fontSize: 12,
                             fontWeight: '700',
-                            color: active ? palette.onAccent : '#FFF',
+                            color: active ? palette.onAccent : UI.fg(1),
                           }}
                         >
                           {val}%
@@ -244,7 +245,7 @@ export const AudioLabModal: React.FC = () => {
                           style={{
                             fontSize: 12,
                             fontWeight: '700',
-                            color: active ? palette.onAccent : '#FFF',
+                            color: active ? palette.onAccent : UI.fg(1),
                           }}
                         >
                           {val}%
@@ -270,7 +271,7 @@ export const AudioLabModal: React.FC = () => {
                 <Switch
                   value={audioLab.eightDEnabled}
                   onValueChange={(v) => updateAudioLab({ enabled: true, eightDEnabled: v })}
-                  trackColor={{ false: '#2A2A36', true: palette.accent }}
+                  trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
                 />
               </View>
             </View>
@@ -306,7 +307,7 @@ export const AudioLabModal: React.FC = () => {
                       style={{
                         fontSize: 12,
                         fontWeight: '700',
-                        color: active ? palette.onAccent : '#FFF',
+                        color: active ? palette.onAccent : UI.fg(1),
                       }}
                     >
                       {opt.label}
@@ -323,7 +324,7 @@ export const AudioLabModal: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   root: {
     flex: 1,
   },
@@ -334,15 +335,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomColor: UI.fg(0.1),
   },
   title: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 21,
     fontWeight: '800',
   },
   sub: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12,
     marginTop: 2,
   },
@@ -355,12 +356,12 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: UI.fg(0.1),
     alignItems: 'center',
     justifyContent: 'center',
   },
   sectionLabel: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 15,
     fontWeight: '800',
     marginBottom: 6,
@@ -369,9 +370,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: UI.fg(0.07),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: UI.fg(0.12),
   },
   honestCard: {
     flexDirection: 'row',
@@ -380,18 +381,18 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 16,
     borderWidth: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: UI.fg(0.05),
     marginBottom: 12,
   },
-  honestText: { flex: 1, color: '#E4E4EC', fontSize: 12.5, lineHeight: 18 },
+  honestText: { flex: 1, color: UI.fg(0.88), fontSize: 12.5, lineHeight: 18 },
   lockedBlock: { opacity: 0.38 },
   card: {
     marginTop: 14,
     padding: 16,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: UI.fg(0.05),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: UI.fg(0.08),
   },
   cardTopRow: {
     flexDirection: 'row',
@@ -400,12 +401,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   cardTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 15.5,
     fontWeight: '800',
   },
   subNote: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12.5,
     marginTop: 3,
   },
@@ -422,7 +423,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: 'rgba(255,255,255,0.09)',
+    backgroundColor: UI.fg(0.09),
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 4,
@@ -431,7 +432,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 112,
     borderRadius: 5,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: UI.fg(0.12),
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
@@ -440,13 +441,13 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   dbText: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 10.5,
     fontWeight: '700',
     marginTop: 4,
   },
   freqText: {
-    color: HOLYSIC_COLORS.textMuted,
+    color: UI.text3,
     fontSize: 10,
     marginTop: 2,
   },
@@ -454,7 +455,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   knobLabel: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 8,
@@ -467,7 +468,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     borderRadius: 11,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
     alignItems: 'center',
   },
   speedRow: {
@@ -480,6 +481,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 9,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
   },
-});
+}));

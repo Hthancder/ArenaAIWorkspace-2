@@ -18,6 +18,7 @@ import { useHolySic } from '../context/HolySicContext';
 import { GlassSurface } from './GlassSurface';
 import { isLocalTrack, LocalLibrary, localDirOf } from '../services/local/localLibrary';
 import { openSongEditor } from './local/SongInfoEditor';
+import { T as UI, themedSheet } from '../theme/ui';
 
 export const TrackActionSheet: React.FC = () => {
   const {
@@ -91,7 +92,7 @@ export const TrackActionSheet: React.FC = () => {
     >
       <Pressable style={styles.backdrop} onPress={close}>
         <Pressable style={styles.sheetOuter} onPress={(e) => e.stopPropagation?.()}>
-          <GlassSurface intensity={75} tintColor="rgba(18, 18, 26, 0.90)" style={styles.sheet}>
+          <GlassSurface intensity={75} tintColor={UI.shade(18, 18, 26, 0.9)} style={styles.sheet}>
             <View style={styles.handle} />
 
             {/* Header */}
@@ -118,7 +119,7 @@ export const TrackActionSheet: React.FC = () => {
                     value={newPlaylistName}
                     onChangeText={setNewPlaylistName}
                     placeholder={vi ? 'Tên playlist mới…' : 'New playlist name…'}
-                    placeholderTextColor={HOLYSIC_COLORS.textMuted}
+                    placeholderTextColor={UI.text3}
                     style={styles.input}
                   />
                   <Pressable
@@ -163,7 +164,7 @@ export const TrackActionSheet: React.FC = () => {
                     close();
                   }}
                 >
-                  <Ionicons name="play-forward-outline" size={21} color="#FFFFFF" />
+                  <Ionicons name="play-forward-outline" size={21} color={UI.text} />
                   <Text style={styles.menuLabel}>
                     {vi ? 'Phát kế tiếp (Play Next)' : 'Play Next'}
                   </Text>
@@ -176,7 +177,7 @@ export const TrackActionSheet: React.FC = () => {
                     close();
                   }}
                 >
-                  <Ionicons name="list-outline" size={21} color="#FFFFFF" />
+                  <Ionicons name="list-outline" size={21} color={UI.text} />
                   <Text style={styles.menuLabel}>
                     {vi ? 'Thêm vào cuối hàng chờ' : 'Add to Queue'}
                   </Text>
@@ -192,7 +193,7 @@ export const TrackActionSheet: React.FC = () => {
                   <Ionicons
                     name={liked ? 'heart-dislike-outline' : 'heart-outline'}
                     size={21}
-                    color={liked ? HOLYSIC_COLORS.roseLike : '#FFFFFF'}
+                    color={liked ? HOLYSIC_COLORS.roseLike : UI.fg(1)}
                   />
                   <Text style={styles.menuLabel}>
                     {liked
@@ -206,7 +207,7 @@ export const TrackActionSheet: React.FC = () => {
                 </Pressable>
 
                 <Pressable style={styles.menuItem} onPress={() => setPickingPlaylist(true)}>
-                  <Ionicons name="add-circle-outline" size={21} color="#FFFFFF" />
+                  <Ionicons name="add-circle-outline" size={21} color={UI.text} />
                   <Text style={styles.menuLabel}>
                     {vi ? 'Thêm vào Playlist…' : 'Add to Playlist…'}
                   </Text>
@@ -282,7 +283,7 @@ export const TrackActionSheet: React.FC = () => {
                     );
                   }}
                 >
-                  <Ionicons name="person-outline" size={21} color="#FFFFFF" />
+                  <Ionicons name="person-outline" size={21} color={UI.text} />
                   <Text style={styles.menuLabel}>
                     {vi
                       ? `Xem nghệ sĩ: ${sheetTrack.artist}`
@@ -298,7 +299,7 @@ export const TrackActionSheet: React.FC = () => {
                       closeThen(() => openCollection({ kind: 'album', id: albumId }));
                     }}
                   >
-                    <Ionicons name="disc-outline" size={21} color="#FFFFFF" />
+                    <Ionicons name="disc-outline" size={21} color={UI.text} />
                     <Text style={styles.menuLabel}>
                       {vi
                         ? `Xem Album: ${sheetTrack.album || ''}`
@@ -315,7 +316,7 @@ export const TrackActionSheet: React.FC = () => {
                     closeThen(() => shareTrack(tr));
                   }}
                 >
-                  <Ionicons name="share-outline" size={20} color="#FFFFFF" />
+                  <Ionicons name="share-outline" size={20} color={UI.text} />
                   <Text style={styles.menuLabel}>{vi ? 'Chia sẻ bài hát' : 'Share song'}</Text>
                 </Pressable>
 
@@ -328,7 +329,7 @@ export const TrackActionSheet: React.FC = () => {
                       closeThen(() => exportDownload(id));
                     }}
                   >
-                    <Ionicons name="folder-open-outline" size={20} color="#FFFFFF" />
+                    <Ionicons name="folder-open-outline" size={20} color={UI.text} />
                     <Text style={styles.menuLabel}>
                       {vi ? 'Lưu tệp vào ứng dụng Tệp' : 'Save file to Files'}
                     </Text>
@@ -343,7 +344,7 @@ export const TrackActionSheet: React.FC = () => {
                     closeThen(() => startInstantMix(seed));
                   }}
                 >
-                  <Ionicons name="radio-outline" size={21} color="#FFFFFF" />
+                  <Ionicons name="radio-outline" size={21} color={UI.text} />
                   <Text style={styles.menuLabel}>
                     {vi ? 'Radio từ bài này' : 'Start song radio'}
                   </Text>
@@ -387,10 +388,10 @@ export const TrackActionSheet: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.62)',
+    backgroundColor: UI.shade(0, 0, 0, 0.62),
     justifyContent: 'flex-end',
   },
   sheetOuter: {
@@ -407,7 +408,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: UI.fg(0.25),
     alignSelf: 'center',
     marginBottom: 14,
   },
@@ -416,7 +417,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.12)',
+    borderBottomColor: UI.fg(0.12),
     marginBottom: 8,
   },
   art: {
@@ -426,12 +427,12 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   title: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 16,
     fontWeight: '700',
   },
   artist: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 13,
     marginTop: 2,
   },
@@ -448,7 +449,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   menuLabel: {
-    color: '#F4F4F8',
+    color: UI.text,
     fontSize: 15,
     fontWeight: '500',
     flex: 1,
@@ -463,11 +464,11 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 14,
   },
   createBtn: {
@@ -480,12 +481,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
     alignItems: 'center',
   },
   cancelText: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontWeight: '600',
     fontSize: 15,
   },
-});
+}));

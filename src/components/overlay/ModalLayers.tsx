@@ -18,6 +18,7 @@ import { AudioLabModal } from '../screens/AudioLabModal';
 import { SongInfoEditor, useSongEditorTarget } from '../local/SongInfoEditor';
 import { CollectionModal } from '../screens/CollectionScreen';
 import { TrackActionSheet } from '../TrackActionSheet';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 export type LayerId =
   | 'root'
@@ -144,7 +145,7 @@ const ToastPill: React.FC = () => {
     <View pointerEvents="none" style={[styles.toastWrap, { top: Math.max(insets.top + 12, 22) }]}>
       <GlassSurface
         intensity={75}
-        tintColor="rgba(22, 22, 32, 0.92)"
+        tintColor={UI.shade(22, 22, 32, 0.92)}
         style={[styles.toastPill, { borderColor: palette.accent + '44' }]}
       >
         <Text style={styles.toastText}>{toastMessage}</Text>
@@ -153,8 +154,8 @@ const ToastPill: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   toastWrap: { position: 'absolute', left: 20, right: 20, alignItems: 'center', zIndex: 999 },
   toastPill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 99, borderWidth: 1 },
-  toastText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
-});
+  toastText: { color: UI.text, fontSize: 13, fontWeight: '700' },
+}));

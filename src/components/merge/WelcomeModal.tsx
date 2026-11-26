@@ -74,7 +74,7 @@ const FEATURES: { icon: string; vi: string; en: string; dvi: string; den: string
 
 export const WelcomeModal: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { prefs, updatePrefs, palette } = useHolySic();
+  const { prefs, updatePrefs, darkPalette: palette } = useHolySic();
   useModalLayer('welcome', !prefs.onboarded);
   const [step, setStep] = useState(0);
   const vi = prefs.language === 'vi';

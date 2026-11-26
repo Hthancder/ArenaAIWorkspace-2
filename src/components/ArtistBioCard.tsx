@@ -7,6 +7,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { HOLYSIC_COLORS } from '../constants/theme';
 import { ArtistBio, fetchArtistBio } from '../services/discovery/wikipedia';
 import { SectionTitle } from './brand/HaloGlow';
+import { T as UI, themedSheet } from '../theme/ui';
 
 export const ArtistBioCard: React.FC<{
   name: string;
@@ -48,7 +49,7 @@ export const ArtistBioCard: React.FC<{
             onPress={() => Linking.openURL(bio.pageUrl).catch(() => undefined)}
             style={styles.source}
           >
-            <Ionicons name="book-outline" size={13} color={HOLYSIC_COLORS.textMuted} />
+            <Ionicons name="book-outline" size={13} color={UI.text3} />
             <Text style={styles.sourceText}>
               Wikipedia ({bio.lang.toUpperCase()}) · CC BY-SA 4.0
             </Text>
@@ -59,16 +60,16 @@ export const ArtistBioCard: React.FC<{
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   wrap: { marginTop: 22, paddingHorizontal: 16, gap: 10 },
   card: {
     borderRadius: 18,
     padding: 14,
-    backgroundColor: 'rgba(255,255,255,0.055)',
+    backgroundColor: UI.fg(0.055),
     borderWidth: 1,
     borderColor: 'rgba(252,211,77,0.16)',
   },
-  text: { color: HOLYSIC_COLORS.textSecondary, fontSize: 14, lineHeight: 21 },
+  text: { color: UI.text2, fontSize: 14, lineHeight: 21 },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -77,5 +78,5 @@ const styles = StyleSheet.create({
   },
   more: { fontWeight: '800', fontSize: 13 },
   source: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  sourceText: { color: HOLYSIC_COLORS.textMuted, fontSize: 11 },
-});
+  sourceText: { color: UI.text3, fontSize: 11 },
+}));

@@ -36,6 +36,7 @@ import { ArtworkImage } from '../ArtworkImage';
 import { openSongEditor } from './SongInfoEditor';
 import { queueM3UImport } from '../merge/ImportModal';
 import { exportPlaylistM3U } from '../../services/import/playlistFiles';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 export const useLocalLibrary = (): LocalState =>
   useSyncExternalStore(LocalLibrary.subscribe, LocalLibrary.getState, LocalLibrary.getState);
@@ -661,7 +662,7 @@ export const LocalLibraryScreen: React.FC = () => {
           )}
           {f.coverUri && (
             <View style={styles.folderBadge}>
-              <Ionicons name="folder" size={11} color="#FFFFFF" />
+              <Ionicons name="folder" size={11} color={UI.text} />
             </View>
           )}
         </View>
@@ -682,7 +683,7 @@ export const LocalLibraryScreen: React.FC = () => {
             style={styles.moreBtn}
             accessibilityLabel={(vi ? 'Tuỳ chọn ' : 'Options for ') + f.name}
           >
-            <Ionicons name="ellipsis-horizontal" size={18} color="rgba(255,255,255,0.6)" />
+            <Ionicons name="ellipsis-horizontal" size={18} color={UI.fg(0.6)} />
           </Pressable>
         )}
       </Pressable>
@@ -740,7 +741,7 @@ export const LocalLibraryScreen: React.FC = () => {
             style={styles.moreBtn}
             accessibilityLabel={(vi ? 'Tuỳ chọn ' : 'Options for ') + f.track.title}
           >
-            <Ionicons name="ellipsis-horizontal" size={18} color="rgba(255,255,255,0.6)" />
+            <Ionicons name="ellipsis-horizontal" size={18} color={UI.fg(0.6)} />
           </Pressable>
         )}
       </Pressable>
@@ -778,7 +779,7 @@ export const LocalLibraryScreen: React.FC = () => {
             : g.subtitle}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.35)" />
+      <Ionicons name="chevron-forward" size={18} color={UI.fg(0.35)} />
     </Pressable>
   );
 
@@ -843,7 +844,7 @@ export const LocalLibraryScreen: React.FC = () => {
         style={styles.moreBtn}
         accessibilityLabel={(vi ? 'Tuỳ chọn ' : 'Options for ') + baseName(rel)}
       >
-        <Ionicons name="ellipsis-horizontal" size={18} color="rgba(255,255,255,0.6)" />
+        <Ionicons name="ellipsis-horizontal" size={18} color={UI.fg(0.6)} />
       </Pressable>
     </Pressable>
   );
@@ -892,7 +893,7 @@ export const LocalLibraryScreen: React.FC = () => {
               </LinearGradient>
             )}
             <View style={styles.heroEdit}>
-              <Ionicons name="camera" size={13} color="#FFFFFF" />
+              <Ionicons name="camera" size={13} color={UI.text} />
             </View>
           </Pressable>
         ) : cover ? (
@@ -947,7 +948,7 @@ export const LocalLibraryScreen: React.FC = () => {
                 hitSlop={8}
                 accessibilityLabel={vi ? 'Dừng tìm' : 'Stop'}
               >
-                <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.6)" />
+                <Ionicons name="close-circle" size={16} color={UI.fg(0.6)} />
               </Pressable>
             </View>
           )}
@@ -971,7 +972,7 @@ export const LocalLibraryScreen: React.FC = () => {
             onPress={() => playList(scopeTracks, undefined, true)}
             style={[styles.playBtn, styles.ghostBtn]}
           >
-            <Ionicons name="shuffle" size={18} color="#FFFFFF" />
+            <Ionicons name="shuffle" size={18} color={UI.text} />
             <Text style={styles.playText}>{vi ? 'Ngẫu nhiên' : 'Shuffle'}</Text>
           </Pressable>
           {nav.kind === 'folder' && (
@@ -980,7 +981,7 @@ export const LocalLibraryScreen: React.FC = () => {
               style={styles.roundBtn}
               accessibilityLabel={vi ? 'Thư mục mới' : 'New folder'}
             >
-              <Ionicons name="folder-open-outline" size={18} color="#FFFFFF" />
+              <Ionicons name="folder-open-outline" size={18} color={UI.text} />
             </Pressable>
           )}
           {nav.kind === 'folder' && (
@@ -989,7 +990,7 @@ export const LocalLibraryScreen: React.FC = () => {
               style={styles.roundBtn}
               accessibilityLabel={vi ? 'Thêm bài từ Tệp' : 'Add from Files'}
             >
-              <Ionicons name="add" size={20} color="#FFFFFF" />
+              <Ionicons name="add" size={20} color={UI.text} />
             </Pressable>
           )}
         </View>
@@ -1019,7 +1020,7 @@ export const LocalLibraryScreen: React.FC = () => {
                   on && { backgroundColor: palette.accent, borderColor: palette.accent },
                 ]}
               >
-                <Ionicons name={icon} size={14} color={on ? palette.onAccent : '#E4E4EC'} />
+                <Ionicons name={icon} size={14} color={on ? palette.onAccent : UI.fg(0.88)} />
                 <Text style={[styles.segText, on && { color: palette.onAccent }]}>{label}</Text>
               </Pressable>
             );
@@ -1034,14 +1035,14 @@ export const LocalLibraryScreen: React.FC = () => {
           contentContainerStyle={styles.crumbs}
         >
           <Pressable onPress={() => setStack([{ kind: 'folder', path: '' }])}>
-            <Ionicons name="phone-portrait-outline" size={14} color="rgba(255,255,255,0.6)" />
+            <Ionicons name="phone-portrait-outline" size={14} color={UI.fg(0.6)} />
           </Pressable>
           {crumbs.map((c, i) => {
             const path = crumbs.slice(0, i + 1).join('/');
             const last = i === crumbs.length - 1;
             return (
               <View key={path} style={styles.crumbItem}>
-                <Ionicons name="chevron-forward" size={12} color="rgba(255,255,255,0.35)" />
+                <Ionicons name="chevron-forward" size={12} color={UI.fg(0.35)} />
                 <Pressable
                   disabled={last}
                   onPress={() =>
@@ -1054,7 +1055,7 @@ export const LocalLibraryScreen: React.FC = () => {
                     ])
                   }
                 >
-                  <Text style={[styles.crumbText, last && { color: '#FFFFFF' }]}>{c}</Text>
+                  <Text style={[styles.crumbText, last && { color: UI.text }]}>{c}</Text>
                 </Pressable>
               </View>
             );
@@ -1064,7 +1065,7 @@ export const LocalLibraryScreen: React.FC = () => {
 
       {!isEmptyLibrary && (
         <View style={styles.searchBox}>
-          <Ionicons name="search" size={16} color="rgba(255,255,255,0.5)" />
+          <Ionicons name="search" size={16} color={UI.fg(0.5)} />
           <TextInput
             value={query}
             onChangeText={setQuery}
@@ -1077,13 +1078,13 @@ export const LocalLibraryScreen: React.FC = () => {
                   ? 'Tìm bài hát'
                   : 'Search songs'
             }
-            placeholderTextColor="rgba(255,255,255,0.4)"
+            placeholderTextColor={UI.fg(0.4)}
             style={styles.searchInput}
             autoCorrect={false}
           />
           {!!query && (
             <Pressable onPress={() => setQuery('')} hitSlop={8}>
-              <Ionicons name="close-circle" size={17} color="rgba(255,255,255,0.5)" />
+              <Ionicons name="close-circle" size={17} color={UI.fg(0.5)} />
             </Pressable>
           )}
         </View>
@@ -1102,11 +1103,7 @@ export const LocalLibraryScreen: React.FC = () => {
       )}
       {!isEmptyLibrary && st.ready && items.length === 0 && (
         <View style={styles.emptyFolder}>
-          <Ionicons
-            name={q ? 'search' : 'folder-open-outline'}
-            size={30}
-            color="rgba(255,255,255,0.35)"
-          />
+          <Ionicons name={q ? 'search' : 'folder-open-outline'} size={30} color={UI.fg(0.35)} />
           <Text style={styles.emptyText}>
             {q
               ? vi
@@ -1133,9 +1130,9 @@ export const LocalLibraryScreen: React.FC = () => {
   );
 
   return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#07070A' }]}>
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: UI.surface('#07070A') }]}>
       <LinearGradient
-        colors={[palette.container, '#07070A']}
+        colors={[palette.container, UI.surface('#07070A')]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
         locations={[0, 0.45]}
@@ -1148,7 +1145,7 @@ export const LocalLibraryScreen: React.FC = () => {
           style={styles.topBtn}
           accessibilityLabel={vi ? 'Quay lại' : 'Back'}
         >
-          <Ionicons name={selecting ? 'close' : 'chevron-back'} size={22} color="#FFFFFF" />
+          <Ionicons name={selecting ? 'close' : 'chevron-back'} size={22} color={UI.text} />
         </Pressable>
         <Text numberOfLines={1} style={[styles.topTitle, { fontFamily }]}>
           {selecting
@@ -1188,7 +1185,7 @@ export const LocalLibraryScreen: React.FC = () => {
             style={styles.topBtn}
             accessibilityLabel={vi ? 'Tuỳ chọn thư mục' : 'Folder options'}
           >
-            <Ionicons name="ellipsis-horizontal" size={20} color="#FFFFFF" />
+            <Ionicons name="ellipsis-horizontal" size={20} color={UI.text} />
           </Pressable>
         )}
       </View>
@@ -1269,7 +1266,7 @@ const Check: React.FC<{ on: boolean; color: string }> = ({ on, color }) => (
   <Ionicons
     name={on ? 'checkmark-circle' : 'ellipse-outline'}
     size={22}
-    color={on ? color : 'rgba(255,255,255,0.4)'}
+    color={on ? color : UI.fg(0.4)}
     style={{ marginRight: 2 }}
   />
 );
@@ -1286,7 +1283,7 @@ const SelAction: React.FC<{
     disabled={disabled}
     style={[styles.selAction, disabled && { opacity: 0.35 }]}
   >
-    <Ionicons name={icon} size={20} color={danger ? '#F87171' : '#FFFFFF'} />
+    <Ionicons name={icon} size={20} color={danger ? '#F87171' : UI.fg(1)} />
     <Text style={[styles.selLabel, danger && { color: '#F87171' }]}>{label}</Text>
   </Pressable>
 );
@@ -1373,13 +1370,13 @@ const HelpCard: React.FC<{
             Platform.OS === 'ios' ? styles.ghostBtn : { backgroundColor: accent },
           ]}
         >
-          <Ionicons name="add" size={18} color={Platform.OS === 'ios' ? '#FFFFFF' : onAccent} />
+          <Ionicons name="add" size={18} color={Platform.OS === 'ios' ? UI.fg(1) : onAccent} />
           <Text style={[styles.playText, Platform.OS !== 'ios' && { color: onAccent }]}>
             {vi ? 'Chọn tệp…' : 'Pick files…'}
           </Text>
         </Pressable>
         <Pressable onPress={onNewFolder} style={[styles.playBtn, styles.ghostBtn]}>
-          <Ionicons name="folder-outline" size={17} color="#FFFFFF" />
+          <Ionicons name="folder-outline" size={17} color={UI.text} />
           <Text style={styles.playText}>{vi ? 'Thư mục mới' : 'New folder'}</Text>
         </Pressable>
       </View>
@@ -1430,7 +1427,7 @@ export const LocalOverlayHost: React.FC = () => {
                     }}
                     style={({ pressed }) => [styles.sheetItem, pressed && styles.rowPressed]}
                   >
-                    <Ionicons name={it.icon} size={20} color={it.danger ? '#F87171' : '#FFFFFF'} />
+                    <Ionicons name={it.icon} size={20} color={it.danger ? '#F87171' : UI.fg(1)} />
                     <Text style={[styles.sheetLabel, it.danger && { color: '#F87171' }]}>
                       {it.label}
                     </Text>
@@ -1464,7 +1461,7 @@ export const LocalOverlayHost: React.FC = () => {
                   }}
                   style={[styles.dialogBtn, { backgroundColor: '#DC2626' }]}
                 >
-                  <Text style={[styles.playText, { color: '#FFFFFF' }]}>{o.confirm}</Text>
+                  <Text style={[styles.playText, { color: UI.text }]}>{o.confirm}</Text>
                 </Pressable>
               </View>
             </>
@@ -1609,7 +1606,7 @@ const CoverPicker: React.FC<{
           </Text>
         </Pressable>
         <Pressable disabled={busy} onPress={fromFiles} style={styles.coverBtn}>
-          <Ionicons name="document-outline" size={18} color="#FFFFFF" />
+          <Ionicons name="document-outline" size={18} color={UI.text} />
           <Text style={styles.coverBtnText}>{vi ? 'Từ Tệp' : 'From Files'}</Text>
         </Pressable>
       </View>
@@ -1694,7 +1691,7 @@ const PromptBody: React.FC<{
         value={v}
         onChangeText={setV}
         placeholder={o.placeholder}
-        placeholderTextColor="rgba(255,255,255,0.35)"
+        placeholderTextColor={UI.fg(0.35)}
         autoFocus
         selectTextOnFocus
         onSubmitEditing={submit}
@@ -1753,10 +1750,10 @@ const MovePicker: React.FC<{
             hitSlop={10}
             onPress={() => setPath(path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '')}
           >
-            <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+            <Ionicons name="chevron-back" size={22} color={UI.text} />
           </Pressable>
         ) : (
-          <Ionicons name="phone-portrait-outline" size={18} color="rgba(255,255,255,0.7)" />
+          <Ionicons name="phone-portrait-outline" size={18} color={UI.fg(0.7)} />
         )}
         <View style={{ flex: 1 }}>
           <Text style={styles.sheetTitle}>{vi ? 'Chuyển tới…' : 'Move to…'}</Text>
@@ -1783,7 +1780,7 @@ const MovePicker: React.FC<{
                 {f.name}
               </Text>
               <Text style={styles.sheetSub}>{f.total}</Text>
-              <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.35)" />
+              <Ionicons name="chevron-forward" size={16} color={UI.fg(0.35)} />
             </Pressable>
           ))}
         {node.folders.filter((f) => !moving.has(f.path)).length === 0 && (
@@ -1799,7 +1796,7 @@ const MovePicker: React.FC<{
             onChangeText={setName}
             autoFocus
             placeholder={vi ? 'Tên thư mục mới' : 'New folder name'}
-            placeholderTextColor="rgba(255,255,255,0.35)"
+            placeholderTextColor={UI.fg(0.35)}
             style={[styles.promptInput, { flex: 1, marginTop: 0 }]}
             onSubmitEditing={async () => {
               if (!name.trim()) return;
@@ -1812,7 +1809,7 @@ const MovePicker: React.FC<{
         </View>
       ) : (
         <Pressable onPress={() => setNaming(true)} style={[styles.sheetItem]}>
-          <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+          <Ionicons name="add-circle-outline" size={20} color={UI.text} />
           <Text style={styles.sheetLabel}>{vi ? 'Thư mục mới ở đây' : 'New folder here'}</Text>
         </Pressable>
       )}
@@ -1834,7 +1831,7 @@ const MovePicker: React.FC<{
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1849,9 +1846,9 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
   },
-  topTitle: { flex: 1, color: '#FFFFFF', fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  topTitle: { flex: 1, color: UI.text, fontSize: 16, fontWeight: '800', textAlign: 'center' },
   topTextBtn: { minWidth: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   topTextBtnLabel: { fontSize: 14, fontWeight: '800' },
   hero: {
@@ -1876,9 +1873,9 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(20,20,28,0.92)',
+    backgroundColor: UI.shade(20, 20, 28, 0.92),
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: UI.fg(0.18),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1900,11 +1897,11 @@ const styles = StyleSheet.create({
     gap: 8,
     height: 46,
     borderRadius: 23,
-    backgroundColor: 'rgba(255,255,255,0.09)',
+    backgroundColor: UI.fg(0.09),
   },
-  coverBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  coverBtnText: { color: UI.text, fontSize: 14, fontWeight: '800' },
   coverSection: {
-    color: 'rgba(255,255,255,0.6)',
+    color: UI.fg(0.6),
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1913,10 +1910,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   coverThumb: { width: 68, height: 68, borderRadius: 12, overflow: 'hidden' },
-  heroTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '900' },
-  heroSub: { color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 4, fontWeight: '600' },
+  heroTitle: { color: UI.text, fontSize: 24, fontWeight: '900' },
+  heroSub: { color: UI.fg(0.65), fontSize: 13, marginTop: 4, fontWeight: '600' },
   scanRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  scanText: { color: 'rgba(255,255,255,0.6)', fontSize: 12 },
+  scanText: { color: UI.fg(0.6), fontSize: 12 },
   playRow: {
     flexDirection: 'row',
     gap: 10,
@@ -1932,15 +1929,15 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 21,
   },
-  ghostBtn: { backgroundColor: 'rgba(255,255,255,0.1)' },
-  playText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
+  ghostBtn: { backgroundColor: UI.fg(0.1) },
+  playText: { color: UI.text, fontWeight: '800', fontSize: 14 },
   roundBtn: {
     width: 42,
     height: 42,
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: UI.fg(0.1),
   },
   segRow: { gap: 8, paddingHorizontal: 18, paddingTop: 16 },
   seg: {
@@ -1951,13 +1948,13 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: 17,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: UI.fg(0.14),
+    backgroundColor: UI.fg(0.05),
   },
-  segText: { color: '#E4E4EC', fontWeight: '700', fontSize: 13 },
+  segText: { color: UI.fg(0.88), fontWeight: '700', fontSize: 13 },
   crumbs: { alignItems: 'center', gap: 4, paddingHorizontal: 18, paddingTop: 14 },
   crumbItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  crumbText: { color: 'rgba(255,255,255,0.6)', fontSize: 12.5, fontWeight: '700' },
+  crumbText: { color: UI.fg(0.6), fontSize: 12.5, fontWeight: '700' },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1968,9 +1965,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: UI.fg(0.07),
   },
-  searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14 },
+  searchInput: { flex: 1, color: UI.text, fontSize: 14 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1978,10 +1975,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 8,
   },
-  rowPressed: { backgroundColor: 'rgba(255,255,255,0.06)' },
+  rowPressed: { backgroundColor: UI.fg(0.06) },
   rowText: { flex: 1, minWidth: 0 },
-  rowTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  rowSub: { color: 'rgba(255,255,255,0.55)', fontSize: 12.5, marginTop: 2 },
+  rowTitle: { color: UI.text, fontSize: 15, fontWeight: '700' },
+  rowSub: { color: UI.fg(0.55), fontSize: 12.5, marginTop: 2 },
   moreBtn: { padding: 6 },
   art: { width: 52, height: 52, borderRadius: 10 },
   folderIcon: {
@@ -2000,7 +1997,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: UI.shade(0, 0, 0, 0.6),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2011,13 +2008,13 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#0B0B10',
+    backgroundColor: UI.surface('#0B0B10'),
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyFolder: { alignItems: 'center', gap: 10, paddingVertical: 36, paddingHorizontal: 30 },
   emptyText: {
-    color: 'rgba(255,255,255,0.6)',
+    color: UI.fg(0.6),
     fontSize: 13.5,
     textAlign: 'center',
     lineHeight: 19,
@@ -2038,14 +2035,14 @@ const styles = StyleSheet.create({
     marginTop: 14,
     padding: 16,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: UI.fg(0.05),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: UI.fg(0.08),
     gap: 12,
   },
-  helpTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
+  helpTitle: { color: UI.text, fontSize: 17, fontWeight: '900' },
   helpRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  helpText: { flex: 1, color: 'rgba(255,255,255,0.78)', fontSize: 13.5, lineHeight: 19 },
+  helpText: { flex: 1, color: UI.fg(0.78), fontSize: 13.5, lineHeight: 19 },
   helpBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
   selBar: {
     position: 'absolute',
@@ -2055,13 +2052,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: 'rgba(28,28,38,0.97)',
+    backgroundColor: UI.shade(28, 28, 38, 0.97),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: UI.fg(0.1),
   },
   selAction: { alignItems: 'center', gap: 4, minWidth: 64 },
-  selLabel: { color: '#FFFFFF', fontSize: 11.5, fontWeight: '700' },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  selLabel: { color: UI.text, fontSize: 11.5, fontWeight: '700' },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: UI.shade(0, 0, 0, 0.55) },
   sheetWrap: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#15151D',
@@ -2070,13 +2067,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: UI.fg(0.08),
   },
-  sheetTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
-  sheetSub: { color: 'rgba(255,255,255,0.5)', fontSize: 12.5, marginTop: 3 },
+  sheetTitle: { color: UI.text, fontSize: 17, fontWeight: '900' },
+  sheetSub: { color: UI.fg(0.5), fontSize: 12.5, marginTop: 3 },
   sheetItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13 },
-  sheetLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  confirmMsg: { color: 'rgba(255,255,255,0.75)', fontSize: 14, lineHeight: 20, marginTop: 10 },
+  sheetLabel: { color: UI.text, fontSize: 15, fontWeight: '600' },
+  confirmMsg: { color: UI.fg(0.75), fontSize: 14, lineHeight: 20, marginTop: 10 },
   dialogBtns: { flexDirection: 'row', gap: 10, marginTop: 16 },
   dialogBtn: {
     flex: 1,
@@ -2090,10 +2087,10 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 12,
     paddingHorizontal: 14,
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 15,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
   },
   moveHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6 },
   inlineNew: { flexDirection: 'row', gap: 8, paddingVertical: 8 },
-});
+}));

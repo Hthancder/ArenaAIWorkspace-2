@@ -20,6 +20,7 @@ import { CHART_COUNTRIES, CHART_GENRES } from '../../services/discovery/chartsSe
 import { Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 interface Props {
   visible: boolean;
@@ -69,7 +70,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
       <View style={[styles.root, { paddingTop: insets.top > 30 ? 12 : 16 }]}>
         <View style={styles.header}>
           <Pressable onPress={onClose} style={styles.iconBtn} accessibilityLabel="Close">
-            <Ionicons name="chevron-down" size={22} color="#FFF" />
+            <Ionicons name="chevron-down" size={22} color={UI.text} />
           </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={[styles.title, { fontFamily }]}>{vi ? 'Bảng xếp hạng' : 'Charts'}</Text>
@@ -82,7 +83,11 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
             style={[styles.countryBtn, { borderColor: palette.accent + '66' }]}
           >
             <Text style={{ fontSize: 16 }}>{country.flag}</Text>
-            <Ionicons name={pickCountry ? 'chevron-up' : 'chevron-down'} size={14} color="#FFF" />
+            <Ionicons
+              name={pickCountry ? 'chevron-up' : 'chevron-down'}
+              size={14}
+              color={UI.text}
+            />
           </Pressable>
         </View>
 
@@ -104,7 +109,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
                 >
                   <Text
                     style={{
-                      color: active ? palette.onAccent : '#FFF',
+                      color: active ? palette.onAccent : UI.fg(1),
                       fontWeight: '700',
                       fontSize: 13,
                     }}
@@ -134,9 +139,13 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
                   active && { backgroundColor: g.tint, borderColor: g.tint },
                 ]}
               >
-                <Ionicons name={g.icon as any} size={14} color={active ? '#0A0A0E' : g.tint} />
+                <Ionicons name={g.icon as any} size={14} color={active ? UI.inv : g.tint} />
                 <Text
-                  style={{ color: active ? '#0A0A0E' : '#F4F4F8', fontWeight: '700', fontSize: 13 }}
+                  style={{
+                    color: active ? UI.surface('#0A0A0E') : UI.fg(1),
+                    fontWeight: '700',
+                    fontSize: 13,
+                  }}
                 >
                   {vi ? g.vi : g.en}
                 </Text>
@@ -167,7 +176,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
               }}
               style={styles.secondary}
             >
-              <Ionicons name="shuffle" size={16} color="#FFF" />
+              <Ionicons name="shuffle" size={16} color={UI.text} />
             </Pressable>
             <Pressable
               onPress={() => {
@@ -177,7 +186,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
               }}
               style={styles.secondary}
             >
-              <Ionicons name="bookmark-outline" size={16} color="#FFF" />
+              <Ionicons name="bookmark-outline" size={16} color={UI.text} />
             </Pressable>
           </View>
         )}
@@ -204,8 +213,8 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0A0A0F' },
+const styles = themedSheet(() => ({
+  root: { flex: 1, backgroundColor: UI.surface('#0A0A0F') },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -217,12 +226,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { color: '#FFF', fontSize: 22, fontWeight: '800' },
-  sub: { color: HOLYSIC_COLORS.textSecondary, fontSize: 13, marginTop: 2 },
+  title: { color: UI.text, fontSize: 22, fontWeight: '800' },
+  sub: { color: UI.text2, fontSize: 13, marginTop: 2 },
   countryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -239,8 +248,8 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 99,
     borderWidth: 1,
-    borderColor: HOLYSIC_COLORS.glassBorder,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: UI.fg(0.1),
+    backgroundColor: UI.fg(0.05),
   },
   genreRow: { gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
   genreChip: {
@@ -251,8 +260,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 99,
     borderWidth: 1,
-    borderColor: HOLYSIC_COLORS.glassBorder,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: UI.fg(0.1),
+    backgroundColor: UI.fg(0.05),
   },
   actions: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingBottom: 8 },
   primary: {
@@ -269,12 +278,12 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: UI.fg(0.1),
   },
   empty: {
-    color: HOLYSIC_COLORS.textMuted,
+    color: UI.text3,
     textAlign: 'center',
     marginTop: 40,
     paddingHorizontal: 30,
   },
-});
+}));

@@ -13,7 +13,7 @@ import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 
 export const RecapModal: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { isRecapOpen, setIsRecapOpen, history, likedTracks, downloads, palette, prefs, haptic } =
+  const { isRecapOpen, setIsRecapOpen, history, likedTracks, downloads, darkPalette: palette, prefs, haptic } =
     useHolySic();
   useModalLayer('recap', isRecapOpen);
 

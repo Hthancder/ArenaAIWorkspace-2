@@ -10,6 +10,7 @@ import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from 'react-native-svg
 import { normalizeArtworkUrl } from '../ArtworkImage';
 import { audioEngine } from '../../services/audio/audioEngine';
 import { useHolySic } from '../../context/HolySicContext';
+import { getUi } from '../../theme/ui';
 
 export interface AmbientColors {
   primary: string;
@@ -279,15 +280,18 @@ const Band: React.FC<{ colors: AmbientColors; level: number }> = ({ colors, leve
 
 const Wash: React.FC<{ colors: AmbientColors; level: number }> = ({ colors, level }) => {
   const ids = useIds(1);
+  // the wash fades into the page background (light or dark UI)
+  const ui = getUi();
+  const fade = ui.bg;
   return (
     <>
-      <Lobes colors={colors} strength={0.6 * level} spread={1.5} />
+      <Lobes colors={colors} strength={(ui.scheme === 'light' ? 0.42 : 0.6) * level} spread={1.5} />
       <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
         <Defs>
           <RadialGradient id={ids[0]} cx="50%" cy="0%" rx="85%" ry="100%">
-            <Stop offset="0" stopColor="#0A0A0E" stopOpacity={0} />
-            <Stop offset="0.7" stopColor="#0A0A0E" stopOpacity={0.6} />
-            <Stop offset="1" stopColor="#0A0A0E" stopOpacity={1} />
+            <Stop offset="0" stopColor={fade} stopOpacity={0} />
+            <Stop offset="0.7" stopColor={fade} stopOpacity={0.6} />
+            <Stop offset="1" stopColor={fade} stopOpacity={1} />
           </RadialGradient>
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${ids[0]})`} />
@@ -324,7 +328,7 @@ export const AmbientSpill: React.FC<{
 
 /** Ambient colours for the current song: the real cover colours, or the palette as fallback. */
 export function useAmbientColors(): AmbientColors {
-  const { artColors, palette } = useHolySic();
+  const { artColors, darkPalette: palette } = useHolySic();
   return useMemo(() => {
     if (artColors) return artColors;
     const m = palette.appleMesh;

@@ -10,7 +10,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { AccessibilityInfo, Platform } from 'react-native';
+import { AccessibilityInfo, Platform, useColorScheme } from 'react-native';
+import { resolveScheme } from '../theme/ui';
 import * as Battery from 'expo-battery';
 import {
   DEFAULT_PREFERENCES,
@@ -23,6 +24,7 @@ import {
   buildArtworkPalette,
   buildPaletteFromArtColors,
   hexToHue,
+  paletteForLightUi,
 } from '../constants/theme';
 import {
   ArtColors,
@@ -204,6 +206,8 @@ interface HolySicContextValue extends HolySicExtras {
   prefs: HolySicPreferences;
   updatePrefs: (patch: Partial<HolySicPreferences>) => void;
   palette: ArtworkPalette;
+  /** the palette tuned for dark surfaces (full player, lyrics, Recap) whatever the UI scheme */
+  darkPalette: ArtworkPalette;
   /** Real colours sampled from the current cover (null until read / unreadable) */
   artColors: ArtColors | null;
   /** Ambient light state: strength 0..1 (0 = off), breathing on/off, spill behind mini player */
@@ -532,7 +536,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [prefs.ambientLight, prefs.ambientBreathing, prefs.ambientSpill, lowPower, reduceMotion]);
 
-  const palette = useMemo(() => {
+  const darkPalette = useMemo(() => {
     const seed = currentTrack ? `${currentTrack.title}-${currentTrack.artist}` : 'holysic-default';
     // Fixed accent (Musike-style presets / custom colour): the hue is kept, lightness is
     // re-derived by the tonal palette so text on it always stays readable on the dark UI
@@ -544,6 +548,14 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (artColors && currentTrack) return buildPaletteFromArtColors(artColors, hue ?? undefined);
     return buildArtworkPalette(seed, hue ?? undefined);
   }, [currentTrack, prefs.accentColor, artColors]);
+  // Light / dark UI: deeper accent & soft containers on the light UI (screens that always stay
+  // dark — the full player, lyrics, Recap — use darkPalette)
+  const systemScheme = useColorScheme();
+  const uiScheme = resolveScheme(prefs.themeMode || 'dark', systemScheme);
+  const palette = useMemo(
+    () => (uiScheme === 'light' ? paletteForLightUi(darkPalette) : darkPalette),
+    [darkPalette, uiScheme]
+  );
 
   // Hydrate persistent storage
   useEffect(() => {
@@ -2397,6 +2409,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prefs,
       updatePrefs,
       palette,
+      darkPalette,
       artColors,
       ambient,
       quickPicks,
@@ -2482,6 +2495,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prefs,
       updatePrefs,
       palette,
+      darkPalette,
       artColors,
       ambient,
       quickPicks,

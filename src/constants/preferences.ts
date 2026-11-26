@@ -89,6 +89,8 @@ export interface HolySicPreferences {
   /** Mini player look: HolySic card or OpenSpot-style floating capsule */
   miniPlayerStyle: 'card' | 'capsule';
   language: AppLanguage;
+  /** App appearance: dark, light, or follow the system (Auto) */
+  themeMode: 'dark' | 'light' | 'auto';
   pureBlack: boolean;
   enableBlur: boolean;
   animationSpeed: number; // 0.6x .. 1.8x
@@ -138,6 +140,7 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   onboarded: false,
   miniPlayerStyle: 'card',
   language: 'vi',
+  themeMode: 'dark',
   pureBlack: false,
   enableBlur: true,
   animationSpeed: 1.0,

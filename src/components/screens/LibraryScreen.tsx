@@ -19,6 +19,7 @@ import { useHolySic } from '../../context/HolySicContext';
 import { TrackRow } from '../TrackRow';
 import { LocalLibrary } from '../../services/local/localLibrary';
 import { useLocalLibrary } from '../local/LocalLibraryScreen';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 type LibFilter = 'playlists' | 'liked' | 'offline' | 'history';
 
@@ -57,10 +58,10 @@ export const LibraryScreen: React.FC = () => {
             style={styles.actionPill}
             accessibilityLabel={vi ? 'Nhạc trên máy' : 'Local Files'}
           >
-            <Ionicons name="folder-open-outline" size={16} color="#FFFFFF" />
+            <Ionicons name="folder-open-outline" size={16} color={UI.text} />
           </Pressable>
           <Pressable onPress={() => openImport('link')} style={styles.actionPill}>
-            <Ionicons name="cloud-upload-outline" size={16} color="#FFFFFF" />
+            <Ionicons name="cloud-upload-outline" size={16} color={UI.text} />
             <Text style={styles.actionPillText}>{vi ? 'Nhập' : 'Import'}</Text>
           </Pressable>
           <Pressable
@@ -146,7 +147,9 @@ export const LibraryScreen: React.FC = () => {
                 },
               ]}
             >
-              <Text style={[styles.tabChipText, { color: active ? palette.onAccent : '#E4E4EC' }]}>
+              <Text
+                style={[styles.tabChipText, { color: active ? palette.onAccent : UI.fg(0.88) }]}
+              >
                 {item.label}
               </Text>
             </Pressable>
@@ -180,7 +183,7 @@ export const LibraryScreen: React.FC = () => {
                       { backgroundColor: pl.coverTint || palette.container },
                     ]}
                   >
-                    <Ionicons name="musical-notes" size={26} color="#FFFFFF" />
+                    <Ionicons name="musical-notes" size={26} color={UI.text} />
                   </View>
                 )}
                 <View style={{ flex: 1 }}>
@@ -192,7 +195,7 @@ export const LibraryScreen: React.FC = () => {
                     {pl.description ? ` · ${pl.description}` : ''}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={HOLYSIC_COLORS.textMuted} />
+                <Ionicons name="chevron-forward" size={18} color={UI.text3} />
               </Pressable>
             ))}
           </View>
@@ -257,19 +260,19 @@ export const LibraryScreen: React.FC = () => {
               value={plName}
               onChangeText={setPlName}
               placeholder={vi ? 'Tên danh sách phát…' : 'Playlist title…'}
-              placeholderTextColor={HOLYSIC_COLORS.textMuted}
+              placeholderTextColor={UI.text3}
               style={styles.modalInput}
             />
             <TextInput
               value={plDesc}
               onChangeText={setPlDesc}
               placeholder={vi ? 'Mô tả ngắn (tuỳ chọn)…' : 'Optional description…'}
-              placeholderTextColor={HOLYSIC_COLORS.textMuted}
+              placeholderTextColor={UI.text3}
               style={styles.modalInput}
             />
             <View style={styles.modalActions}>
               <Pressable onPress={() => setShowCreateModal(false)} style={styles.cancelModalBtn}>
-                <Text style={{ color: '#FFF', fontWeight: '600' }}>{vi ? 'Huỷ' : 'Cancel'}</Text>
+                <Text style={{ color: UI.text, fontWeight: '600' }}>{vi ? 'Huỷ' : 'Cancel'}</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -293,7 +296,7 @@ export const LibraryScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   container: {
     flex: 1,
   },
@@ -306,7 +309,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   pageTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 24,
     fontWeight: '800',
   },
@@ -321,10 +324,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 8,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.09)',
+    backgroundColor: UI.fg(0.09),
   },
   actionPillText: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 12.5,
     fontWeight: '700',
   },
@@ -339,16 +342,16 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 13,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: UI.fg(0.08),
   },
   shelfCount: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 21,
     fontWeight: '800',
     marginTop: 6,
   },
   shelfLabel: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12,
     fontWeight: '600',
     marginTop: 2,
@@ -363,9 +366,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: UI.fg(0.06),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
+    borderColor: UI.fg(0.09),
   },
   tabChipText: {
     fontSize: 12.5,
@@ -383,9 +386,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 11,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: UI.fg(0.05),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: UI.fg(0.07),
     gap: 13,
   },
   plCover: {
@@ -398,17 +401,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   plName: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 16,
     fontWeight: '700',
   },
   plSub: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12.5,
     marginTop: 3,
   },
   emptyNote: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 14,
     textAlign: 'center',
     paddingHorizontal: 36,
@@ -417,7 +420,7 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.68)',
+    backgroundColor: UI.shade(0, 0, 0, 0.68),
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
@@ -429,26 +432,26 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
+    borderColor: UI.fg(0.14),
   },
   modalTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 18,
     fontWeight: '800',
     marginBottom: 8,
   },
   modalSub: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12.5,
     lineHeight: 18,
     marginBottom: 12,
   },
   modalInput: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: UI.fg(0.07),
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 11,
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 14,
     marginBottom: 10,
   },
@@ -462,11 +465,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
   },
   confirmModalBtn: {
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 12,
   },
-});
+}));

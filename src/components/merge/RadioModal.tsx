@@ -22,6 +22,7 @@ import { Track } from '../../types/music';
 import { ArtworkImage } from '../ArtworkImage';
 import { HaloGlow } from '../brand/HaloGlow';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 const SCOPES = [
   { id: 'saved', vi: 'Đã lưu', en: 'Saved', flag: '♥' },
@@ -110,7 +111,7 @@ export const RadioModal: React.FC = () => {
         <HaloGlow color={palette.accent} height={260} />
         <View style={styles.header}>
           <Pressable onPress={closeRadio} style={styles.iconBtn} accessibilityLabel="Close">
-            <Ionicons name="chevron-down" size={22} color="#FFF" />
+            <Ionicons name="chevron-down" size={22} color={UI.text} />
           </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={[styles.title, { fontFamily }]}>
@@ -127,18 +128,18 @@ export const RadioModal: React.FC = () => {
         </View>
 
         <View style={styles.searchBox}>
-          <Ionicons name="search" size={17} color={HOLYSIC_COLORS.textMuted} />
+          <Ionicons name="search" size={17} color={UI.text3} />
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder={vi ? 'Tìm đài: VOV, Lofi, BBC…' : 'Find a station: BBC, lofi, jazz…'}
-            placeholderTextColor={HOLYSIC_COLORS.textMuted}
+            placeholderTextColor={UI.text3}
             style={[styles.searchInput, { fontFamily }]}
             returnKeyType="search"
           />
           {query.length > 0 && (
             <Pressable hitSlop={8} onPress={() => setQuery('')}>
-              <Ionicons name="close-circle" size={17} color={HOLYSIC_COLORS.textMuted} />
+              <Ionicons name="close-circle" size={17} color={UI.text3} />
             </Pressable>
           )}
         </View>
@@ -257,7 +258,7 @@ export const RadioModal: React.FC = () => {
                     <Ionicons
                       name={fav ? 'heart' : 'heart-outline'}
                       size={20}
-                      color={fav ? HOLYSIC_COLORS.roseLike : HOLYSIC_COLORS.textSecondary}
+                      color={fav ? HOLYSIC_COLORS.roseLike : UI.text2}
                     />
                   </Pressable>
                 </Pressable>
@@ -271,8 +272,8 @@ export const RadioModal: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: HOLYSIC_COLORS.obsidian },
+const styles = themedSheet(() => ({
+  root: { flex: 1, backgroundColor: UI.surface('#0A0A0E') },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16 },
   iconBtn: {
     width: 40,
@@ -280,10 +281,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
   },
-  title: { color: '#FFF', fontSize: 22, fontWeight: '800' },
-  sub: { color: HOLYSIC_COLORS.textMuted, fontSize: 12.5, marginTop: 2 },
+  title: { color: UI.text, fontSize: 22, fontWeight: '800' },
+  sub: { color: UI.text3, fontSize: 12.5, marginTop: 2 },
   livePill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -306,27 +307,27 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: 13,
     borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: UI.fg(0.07),
   },
-  searchInput: { flex: 1, color: '#FFF', fontSize: 15 },
+  searchInput: { flex: 1, color: UI.text, fontSize: 15 },
   chips: { gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
   chip: {
     paddingHorizontal: 13,
     paddingVertical: 7,
     borderRadius: 99,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: UI.fg(0.1),
+    backgroundColor: UI.fg(0.05),
   },
-  chipText: { color: '#E4E4EC', fontWeight: '700', fontSize: 13 },
+  chipText: { color: UI.fg(0.88), fontWeight: '700', fontSize: 13 },
   tagChip: {
     paddingHorizontal: 11,
     paddingVertical: 5,
     borderRadius: 99,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: UI.fg(0.08),
   },
-  tagText: { color: HOLYSIC_COLORS.textSecondary, fontWeight: '700', fontSize: 12.5 },
+  tagText: { color: UI.text2, fontWeight: '700', fontSize: 12.5 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -336,23 +337,23 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 16,
   },
-  logo: { width: 56, height: 56, borderRadius: 14, backgroundColor: '#1B1B24' },
+  logo: { width: 56, height: 56, borderRadius: 14, backgroundColor: UI.surface('#1B1B24') },
   nowOverlay: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: UI.shade(0, 0, 0, 0.55),
     alignItems: 'center',
     justifyContent: 'center',
   },
-  name: { color: '#FFF', fontSize: 15, fontWeight: '800' },
-  meta: { color: HOLYSIC_COLORS.textSecondary, fontSize: 12.5, marginTop: 2 },
-  badge: { color: HOLYSIC_COLORS.textMuted, fontSize: 11, marginTop: 2, fontWeight: '700' },
+  name: { color: UI.text, fontSize: 15, fontWeight: '800' },
+  meta: { color: UI.text2, fontSize: 12.5, marginTop: 2 },
+  badge: { color: UI.text3, fontSize: 11, marginTop: 2, fontWeight: '700' },
   favBtn: { padding: 6 },
   empty: {
-    color: HOLYSIC_COLORS.textMuted,
+    color: UI.text3,
     textAlign: 'center',
     marginTop: 40,
     marginHorizontal: 30,
     lineHeight: 20,
   },
-});
+}));

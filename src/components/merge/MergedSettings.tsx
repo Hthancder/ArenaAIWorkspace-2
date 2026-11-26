@@ -20,6 +20,7 @@ import { useHolySic } from '../../context/HolySicContext';
 import { BackupPreview, LibraryBackup } from '../../services/library/libraryTools';
 import { Scrobbler } from '../../services/scrobble/scrobbler';
 import { LocalLibrary } from '../../services/local/localLibrary';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 const HOME_SECTIONS: { id: HomeSectionId; vi: string; en: string }[] = [
   { id: 'quickActions', vi: 'Lối tắt nhanh', en: 'Quick actions' },
@@ -74,7 +75,7 @@ export const MergedSettings: React.FC = () => {
     <Switch
       value={value}
       onValueChange={onChange}
-      trackColor={{ false: '#2A2A36', true: palette.accent }}
+      trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
     />
   );
   const row = (title: string, desc: string, control: React.ReactNode) => (
@@ -123,12 +124,12 @@ export const MergedSettings: React.FC = () => {
                 <View
                   style={[
                     styles.swatch,
-                    { backgroundColor: a.color === 'dynamic' ? '#2A2A36' : a.color },
-                    active && { borderColor: '#FFF', borderWidth: 3 },
+                    { backgroundColor: a.color === 'dynamic' ? UI.surface('#2A2A36') : a.color },
+                    active && { borderColor: UI.fg(1), borderWidth: 3 },
                   ]}
                 >
                   {a.color === 'dynamic' && (
-                    <Ionicons name="color-palette" size={16} color="#FFF" />
+                    <Ionicons name="color-palette" size={16} color={UI.text} />
                   )}
                 </View>
                 <Text style={styles.swatchLabel} numberOfLines={1}>
@@ -143,7 +144,7 @@ export const MergedSettings: React.FC = () => {
             value={customHex}
             onChangeText={setCustomHex}
             placeholder="#FF7AB6"
-            placeholderTextColor={HOLYSIC_COLORS.textMuted}
+            placeholderTextColor={UI.text3}
             autoCapitalize="none"
             style={[styles.input, { flex: 1 }]}
           />
@@ -180,7 +181,7 @@ export const MergedSettings: React.FC = () => {
                 },
               ]}
             >
-              <Text style={{ color: '#FFF', fontWeight: '700' }}>
+              <Text style={{ color: UI.text, fontWeight: '700' }}>
                 {s === 'card'
                   ? vi
                     ? 'Thẻ HolySic'
@@ -321,7 +322,7 @@ export const MergedSettings: React.FC = () => {
                   ? 'User token (listenbrainz.org/settings)'
                   : 'User token (listenbrainz.org/settings)'
               }
-              placeholderTextColor={HOLYSIC_COLORS.textMuted}
+              placeholderTextColor={UI.text3}
               autoCapitalize="none"
               style={[styles.input, { flex: 1 }]}
             />
@@ -360,7 +361,7 @@ export const MergedSettings: React.FC = () => {
               value={lf.key}
               onChangeText={(v) => setLf({ ...lf, key: v })}
               placeholder="API key"
-              placeholderTextColor={HOLYSIC_COLORS.textMuted}
+              placeholderTextColor={UI.text3}
               autoCapitalize="none"
               style={[styles.input, styles.stack]}
             />
@@ -368,7 +369,7 @@ export const MergedSettings: React.FC = () => {
               value={lf.secret}
               onChangeText={(v) => setLf({ ...lf, secret: v })}
               placeholder="Shared secret"
-              placeholderTextColor={HOLYSIC_COLORS.textMuted}
+              placeholderTextColor={UI.text3}
               autoCapitalize="none"
               style={[styles.input, styles.stack]}
             />
@@ -376,7 +377,7 @@ export const MergedSettings: React.FC = () => {
               value={lf.user}
               onChangeText={(v) => setLf({ ...lf, user: v })}
               placeholder={vi ? 'Tên đăng nhập' : 'Username'}
-              placeholderTextColor={HOLYSIC_COLORS.textMuted}
+              placeholderTextColor={UI.text3}
               autoCapitalize="none"
               style={[styles.input, styles.stack]}
             />
@@ -384,7 +385,7 @@ export const MergedSettings: React.FC = () => {
               value={lf.pass}
               onChangeText={(v) => setLf({ ...lf, pass: v })}
               placeholder={vi ? 'Mật khẩu' : 'Password'}
-              placeholderTextColor={HOLYSIC_COLORS.textMuted}
+              placeholderTextColor={UI.text3}
               secureTextEntry
               style={[styles.input, styles.stack]}
             />
@@ -497,9 +498,9 @@ export const MergedSettings: React.FC = () => {
               </Pressable>
               <Pressable
                 onPress={() => setPending(null)}
-                style={[styles.btn, { backgroundColor: 'rgba(255,255,255,0.08)' }]}
+                style={[styles.btn, { backgroundColor: UI.fg(0.08) }]}
               >
-                <Ionicons name="close" size={16} color="#FFF" />
+                <Ionicons name="close" size={16} color={UI.text} />
               </Pressable>
             </View>
           </View>
@@ -521,7 +522,7 @@ export const MergedSettings: React.FC = () => {
             value={newBlock}
             onChangeText={setNewBlock}
             placeholder={vi ? 'Tên nghệ sĩ cần chặn' : 'Artist to block'}
-            placeholderTextColor={HOLYSIC_COLORS.textMuted}
+            placeholderTextColor={UI.text3}
             style={[styles.input, { flex: 1 }]}
           />
           <Pressable
@@ -536,21 +537,21 @@ export const MergedSettings: React.FC = () => {
         </View>
         {prefs.blacklist.artists.map((a) => (
           <View key={`a-${a}`} style={styles.blRow}>
-            <Ionicons name="person-outline" size={15} color={HOLYSIC_COLORS.textMuted} />
+            <Ionicons name="person-outline" size={15} color={UI.text3} />
             <Text style={styles.blText}>{a}</Text>
             <Pressable hitSlop={8} onPress={() => unblockArtist(a)}>
-              <Ionicons name="close-circle" size={18} color={HOLYSIC_COLORS.textMuted} />
+              <Ionicons name="close-circle" size={18} color={UI.text3} />
             </Pressable>
           </View>
         ))}
         {prefs.blacklist.tracks.map((tr) => (
           <View key={`t-${tr.id}`} style={styles.blRow}>
-            <Ionicons name="musical-note-outline" size={15} color={HOLYSIC_COLORS.textMuted} />
+            <Ionicons name="musical-note-outline" size={15} color={UI.text3} />
             <Text style={styles.blText} numberOfLines={1}>
               {tr.title} — {tr.artist}
             </Text>
             <Pressable hitSlop={8} onPress={() => unblockTrack(tr.id)}>
-              <Ionicons name="close-circle" size={18} color={HOLYSIC_COLORS.textMuted} />
+              <Ionicons name="close-circle" size={18} color={UI.text3} />
             </Pressable>
           </View>
         ))}
@@ -569,9 +570,9 @@ export const MergedSettings: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
   sectionTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 17.5,
     fontWeight: '800',
     marginTop: 22,
@@ -580,9 +581,9 @@ const styles = StyleSheet.create({
   card: {
     padding: 15,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.045)',
+    backgroundColor: UI.fg(0.045),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: UI.fg(0.08),
   },
   switchRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
   cfRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 8 },
@@ -594,11 +595,11 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
   },
-  cfChipText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
-  rowTitle: { color: '#FFFFFF', fontSize: 14.5, fontWeight: '700' },
-  rowDesc: { color: HOLYSIC_COLORS.textSecondary, fontSize: 12.5, marginTop: 2, lineHeight: 18 },
+  cfChipText: { color: UI.text, fontSize: 13, fontWeight: '800' },
+  rowTitle: { color: UI.text, fontSize: 14.5, fontWeight: '700' },
+  rowDesc: { color: UI.text2, fontSize: 12.5, marginTop: 2, lineHeight: 18 },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
   swatch: {
     width: 38,
@@ -607,14 +608,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  swatchLabel: { color: HOLYSIC_COLORS.textMuted, fontSize: 10.5, marginTop: 3 },
+  swatchLabel: { color: UI.text3, fontSize: 10.5, marginTop: 3 },
   inline: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   input: {
-    color: '#FFF',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    color: UI.text,
+    backgroundColor: UI.fg(0.06),
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: HOLYSIC_COLORS.glassBorder,
+    borderColor: UI.fg(0.1),
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
@@ -632,7 +633,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: HOLYSIC_COLORS.glassBorder,
+    borderColor: UI.fg(0.1),
     alignItems: 'center',
   },
   danger: { color: '#F87171', fontWeight: '700', fontSize: 13 },
@@ -642,23 +643,23 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 13,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: UI.fg(0.06),
   },
-  toolText: { color: '#FFF', fontWeight: '700', fontSize: 13.5 },
+  toolText: { color: UI.text, fontWeight: '700', fontSize: 13.5 },
   preview: {
     marginTop: 14,
     padding: 14,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: UI.fg(0.06),
   },
-  previewLine: { color: '#E4E4EC', fontSize: 13.5, marginTop: 6 },
+  previewLine: { color: UI.fg(0.88), fontSize: 13.5, marginTop: 6 },
   blRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingVertical: 9,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: HOLYSIC_COLORS.glassBorder,
+    borderBottomColor: UI.fg(0.1),
   },
-  blText: { color: '#FFF', flex: 1, fontSize: 13.5 },
-});
+  blText: { color: UI.text, flex: 1, fontSize: 13.5 },
+}));

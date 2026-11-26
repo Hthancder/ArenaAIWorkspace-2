@@ -32,6 +32,7 @@ import { parseM3U } from '../../services/import/m3u';
 import { resolveM3U, ResolvedHow } from '../../services/import/playlistFiles';
 import * as DocumentPicker from 'expo-document-picker';
 import { File as FsFile } from 'expo-file-system';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 /** A playlist file to open in the import screen (from Local Files or "Open with HolySic"). */
 type PendingM3U = { text: string; name: string; baseDir?: string };
@@ -267,7 +268,7 @@ export const ImportModal: React.FC<Props> = ({
       >
         <View style={styles.header}>
           <Pressable onPress={onClose} style={styles.iconBtn} accessibilityLabel="Close">
-            <Ionicons name="close" size={20} color="#FFF" />
+            <Ionicons name="close" size={20} color={UI.text} />
           </Pressable>
           <Text style={[styles.title, { fontFamily }]}>{vi ? 'Nhập nhạc' : 'Import music'}</Text>
           <View style={{ width: 36 }} />
@@ -290,11 +291,11 @@ export const ImportModal: React.FC<Props> = ({
               <Ionicons
                 name={m === 'link' ? 'link' : 'list'}
                 size={15}
-                color={mode === m ? palette.onAccent : '#FFF'}
+                color={mode === m ? palette.onAccent : UI.fg(1)}
               />
               <Text
                 style={{
-                  color: mode === m ? palette.onAccent : '#FFF',
+                  color: mode === m ? palette.onAccent : UI.fg(1),
                   fontWeight: '800',
                   fontSize: 13,
                 }}
@@ -355,7 +356,7 @@ export const ImportModal: React.FC<Props> = ({
                         ? 'Sơn Tùng M-TP - Chúng Ta Của Hiện Tại\nMONO - Waiting For You, Shape of You'
                         : 'Artist - Title, Another song…'
                   }
-                  placeholderTextColor={HOLYSIC_COLORS.textMuted}
+                  placeholderTextColor={UI.text3}
                   style={[
                     styles.input,
                     mode === 'list' && { minHeight: 120, textAlignVertical: 'top' },
@@ -365,8 +366,8 @@ export const ImportModal: React.FC<Props> = ({
                   autoCorrect={false}
                 />
                 <Pressable onPress={paste} style={styles.pasteBtn}>
-                  <Ionicons name="clipboard-outline" size={16} color="#FFF" />
-                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 12 }}>
+                  <Ionicons name="clipboard-outline" size={16} color={UI.text} />
+                  <Text style={{ color: UI.text, fontWeight: '700', fontSize: 12 }}>
                     {vi ? 'Dán' : 'Paste'}
                   </Text>
                 </Pressable>
@@ -428,7 +429,7 @@ export const ImportModal: React.FC<Props> = ({
                     : 'MP3, M4A, FLAC, WAV, AIFF… into Local Files, organised in folders'}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={HOLYSIC_COLORS.textMuted} />
+              <Ionicons name="chevron-forward" size={16} color={UI.text3} />
             </Pressable>
           )}
           {!fromFile && (mode !== 'list' || rows.length === 0) ? (
@@ -444,7 +445,7 @@ export const ImportModal: React.FC<Props> = ({
                     : 'From HolySic, VLC, foobar2000, Winamp, iTunes… — device songs matched by path, the rest searched'}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={HOLYSIC_COLORS.textMuted} />
+              <Ionicons name="chevron-forward" size={16} color={UI.text3} />
             </Pressable>
           ) : null}
 
@@ -464,7 +465,7 @@ export const ImportModal: React.FC<Props> = ({
                         <ArtworkImage source={{ uri: t.artworkUrl }} style={styles.art} />
                       ) : (
                         <View style={[styles.art, styles.artEmpty]}>
-                          <Ionicons name="help" size={18} color={HOLYSIC_COLORS.textMuted} />
+                          <Ionicons name="help" size={18} color={UI.text3} />
                         </View>
                       )}
                       <View style={{ flex: 1 }}>
@@ -486,7 +487,7 @@ export const ImportModal: React.FC<Props> = ({
                           onPress={() => setSwapIdx(swapIdx === i ? null : i)}
                           style={styles.smallBtn}
                         >
-                          <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>
+                          <Text style={{ color: UI.text, fontSize: 12, fontWeight: '700' }}>
                             {vi ? 'Đổi' : 'Swap'}
                           </Text>
                         </Pressable>
@@ -506,7 +507,7 @@ export const ImportModal: React.FC<Props> = ({
                         <Ionicons
                           name={r.chosen >= 0 ? 'checkmark-circle' : 'ellipse-outline'}
                           size={18}
-                          color={r.chosen >= 0 ? palette.accent : HOLYSIC_COLORS.textMuted}
+                          color={r.chosen >= 0 ? palette.accent : UI.text3}
                         />
                       </Pressable>
                     </View>
@@ -522,12 +523,10 @@ export const ImportModal: React.FC<Props> = ({
                           }}
                           style={[styles.option, k === r.chosen && { borderColor: palette.accent }]}
                         >
-                          <Text numberOfLines={1} style={{ color: '#FFF', fontSize: 13, flex: 1 }}>
+                          <Text numberOfLines={1} style={{ color: UI.text, fontSize: 13, flex: 1 }}>
                             {o.title} — {o.artist}
                           </Text>
-                          <Text style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 11 }}>
-                            {o.source}
-                          </Text>
+                          <Text style={{ color: UI.text3, fontSize: 11 }}>{o.source}</Text>
                         </Pressable>
                       ))}
                   </View>
@@ -551,11 +550,11 @@ export const ImportModal: React.FC<Props> = ({
                       </Text>
                     </Pressable>
                     <Pressable onPress={() => likeTracks(chosenTracks)} style={styles.bulkBtn}>
-                      <Ionicons name="heart-outline" size={15} color="#FFF" />
+                      <Ionicons name="heart-outline" size={15} color={UI.text} />
                       <Text style={styles.bulkText}>{vi ? 'Thích' : 'Like'}</Text>
                     </Pressable>
                     <Pressable onPress={() => queueTracks(chosenTracks)} style={styles.bulkBtn}>
-                      <Ionicons name="list" size={15} color="#FFF" />
+                      <Ionicons name="list" size={15} color={UI.text} />
                       <Text style={styles.bulkText}>{vi ? 'Hàng chờ' : 'Queue'}</Text>
                     </Pressable>
                   </View>
@@ -564,7 +563,7 @@ export const ImportModal: React.FC<Props> = ({
                       value={playlistName}
                       onChangeText={setPlaylistName}
                       style={[styles.input, { flex: 1, minWidth: 0, paddingVertical: 10 }]}
-                      placeholderTextColor={HOLYSIC_COLORS.textMuted}
+                      placeholderTextColor={UI.text3}
                     />
                     <Pressable
                       onPress={() => {
@@ -575,7 +574,7 @@ export const ImportModal: React.FC<Props> = ({
                       }}
                       style={styles.bulkBtn}
                     >
-                      <Ionicons name="add-circle-outline" size={15} color="#FFF" />
+                      <Ionicons name="add-circle-outline" size={15} color={UI.text} />
                       <Text style={styles.bulkText}>{vi ? 'Lưu playlist' : 'Save playlist'}</Text>
                     </Pressable>
                   </View>
@@ -590,8 +589,8 @@ export const ImportModal: React.FC<Props> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0A0A0F' },
+const styles = themedSheet(() => ({
+  root: { flex: 1, backgroundColor: UI.surface('#0A0A0F') },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -604,17 +603,17 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { color: '#FFF', fontSize: 18, fontWeight: '800' },
+  title: { color: UI.text, fontSize: 18, fontWeight: '800' },
   segment: {
     flexDirection: 'row',
     marginHorizontal: 16,
     padding: 4,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: UI.fg(0.06),
     gap: 4,
   },
   segBtn: {
@@ -626,13 +625,13 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 99,
   },
-  help: { color: HOLYSIC_COLORS.textSecondary, fontSize: 13, lineHeight: 19, marginBottom: 12 },
+  help: { color: UI.text2, fontSize: 13, lineHeight: 19, marginBottom: 12 },
   inputWrap: { position: 'relative' },
   input: {
-    color: '#FFF',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    color: UI.text,
+    backgroundColor: UI.fg(0.06),
     borderWidth: 1,
-    borderColor: HOLYSIC_COLORS.glassBorder,
+    borderColor: UI.fg(0.1),
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 13,
@@ -649,7 +648,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: UI.fg(0.12),
   },
   goBtn: {
     marginTop: 12,
@@ -662,7 +661,7 @@ const styles = StyleSheet.create({
   },
   message: { color: '#FCA5A5', marginTop: 12, fontSize: 13, lineHeight: 19 },
   resultHead: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     marginTop: 18,
     marginBottom: 8,
     fontSize: 13,
@@ -671,22 +670,22 @@ const styles = StyleSheet.create({
   resultRow: {
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: HOLYSIC_COLORS.glassBorder,
+    borderBottomColor: UI.fg(0.1),
   },
   rowMain: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   art: { width: 42, height: 42, borderRadius: 8 },
   artEmpty: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: UI.fg(0.06),
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowTitle: { color: '#FFF', fontWeight: '700', fontSize: 14 },
-  rowSub: { color: HOLYSIC_COLORS.textMuted, fontSize: 12, marginTop: 1 },
+  rowTitle: { color: UI.text, fontWeight: '700', fontSize: 14 },
+  rowSub: { color: UI.text3, fontSize: 12, marginTop: 1 },
   smallBtn: {
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
   },
   option: {
     flexDirection: 'row',
@@ -697,7 +696,7 @@ const styles = StyleSheet.create({
     padding: 9,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: HOLYSIC_COLORS.glassBorder,
+    borderColor: UI.fg(0.1),
   },
   bulkRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   fileCard: {
@@ -706,7 +705,7 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: UI.fg(0.06),
     marginBottom: 6,
   },
   bulkBtn: {
@@ -716,9 +715,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: UI.fg(0.1),
   },
-  bulkText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  bulkText: { color: UI.text, fontWeight: '700', fontSize: 13 },
   filesRow: {
     marginTop: 22,
     flexDirection: 'row',
@@ -726,8 +725,8 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: UI.fg(0.05),
     borderWidth: 1,
-    borderColor: HOLYSIC_COLORS.glassBorder,
+    borderColor: UI.fg(0.1),
   },
-});
+}));

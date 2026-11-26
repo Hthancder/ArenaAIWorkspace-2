@@ -96,6 +96,17 @@ export function setUiScheme(s: UiScheme) {
   subs.forEach((f) => f());
 }
 
+/**
+ * Switch the scheme without notifying (used while the root renders, right before it re-mounts
+ * the UI with the new colours); call notifyUiScheme() from an effect afterwards.
+ */
+export function applyUiSchemeSilently(s: UiScheme) {
+  current = s === 'light' ? LIGHT_UI : DARK_UI;
+}
+export function notifyUiScheme() {
+  subs.forEach((f) => f());
+}
+
 export const getUi = () => current;
 
 const subscribe = (cb: () => void) => {
@@ -118,3 +129,92 @@ export function useThemedStyles<T extends StyleSheet.NamedStyles<T>>(
 
 export const resolveScheme = (mode: ThemeMode, system: string | null | undefined): UiScheme =>
   mode === 'auto' ? (system === 'light' ? 'light' : 'dark') : mode;
+
+// ---------- live tokens for module-level styles ----------
+// Screens keep their `const styles = themedSheet(() => ({ … }))` at module level; the sheet is
+// built per scheme on first use. Values below are read when a style is built / a component
+// renders, and the app re-mounts its UI when the scheme changes (see <ThemedRoot/>), so
+// everything picks up the new colours.
+
+const rgba = (r: number, g: number, b: number, a: number) =>
+  `rgba(${r},${g},${b},${Math.round(a * 1000) / 1000})`;
+
+export const T = {
+  get scheme(): UiScheme {
+    return current.scheme;
+  },
+  get dark() {
+    return current.scheme === 'dark';
+  },
+  get bg() {
+    return current.bg;
+  },
+  get bg2() {
+    return current.bg2;
+  },
+  get sheet() {
+    return current.sheet;
+  },
+  get text() {
+    return current.text;
+  },
+  get text2() {
+    return current.text2;
+  },
+  get text3() {
+    return current.text3;
+  },
+  get icon() {
+    return current.icon;
+  },
+  get scrim() {
+    return current.scrim;
+  },
+  get glass() {
+    return current.glass;
+  },
+  get danger() {
+    return current.danger;
+  },
+  /** foreground ink at an opacity: white on dark, near-black on light (text, hairlines, fills) */
+  fg(a = 1): string {
+    return current.scheme === 'dark' ? rgba(255, 255, 255, a) : rgba(21, 19, 28, a);
+  },
+  /** the inverse ink: text on a solid `fg` button */
+  get inv() {
+    return current.scheme === 'dark' ? '#0A0A0E' : '#FFFFFF';
+  },
+  /** a dark surface colour from the dark design, mapped to its light counterpart */
+  surface(darkHex: string): string {
+    if (current.scheme === 'dark') return darkHex;
+    const h = darkHex.replace('#', '');
+    const full = h.length === 3 ? h.replace(/(.)/g, '$1$1') : h.slice(0, 6);
+    const l =
+      parseInt(full.slice(0, 2), 16) +
+      parseInt(full.slice(2, 4), 16) +
+      parseInt(full.slice(4, 6), 16);
+    if (l <= 3 * 0x10) return LIGHT_UI.bg; // page backgrounds (#000 … #101010)
+    if (l <= 3 * 0x22) return '#FFFFFF'; // raised surfaces / sheets
+    return '#E4E2EC'; // mid greys (tracks, toggles off)
+  },
+  /** a translucent dark tint (glass, scrims) */
+  shade(r: number, g: number, b: number, a: number): string {
+    if (current.scheme === 'dark') return rgba(r, g, b, a);
+    // near-black → a soft scrim; dark surfaces → frosted light glass
+    return r + g + b < 30
+      ? rgba(16, 12, 30, a * 0.45)
+      : rgba(250, 249, 253, Math.min(0.96, a + 0.04));
+  },
+};
+
+/** A StyleSheet built lazily for the current scheme (one cached sheet per scheme). */
+export function themedSheet<S extends StyleSheet.NamedStyles<S>>(factory: () => S): S {
+  const cache: Partial<Record<UiScheme, S>> = {};
+  const get = (): S => (cache[current.scheme] ??= StyleSheet.create(factory()));
+  return new Proxy({} as S, {
+    get: (_t, prop) => (get() as any)[prop],
+    has: (_t, prop) => prop in get(),
+    ownKeys: () => Reflect.ownKeys(get()),
+    getOwnPropertyDescriptor: (_t, prop) => Object.getOwnPropertyDescriptor(get(), prop),
+  });
+}

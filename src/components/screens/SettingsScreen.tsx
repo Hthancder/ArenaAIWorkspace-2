@@ -32,6 +32,7 @@ import { StreamFileCache } from '../../services/audio/streamFileCache';
 import { SourceMemory } from '../../services/providers/sourceMemory';
 import { HolySicMarkIcon } from '../HolySicIcons';
 import { MergedSettings } from '../merge/MergedSettings';
+import { T as UI, themedSheet } from '../../theme/ui';
 
 export const SettingsScreen: React.FC = () => {
   const {
@@ -98,8 +99,8 @@ export const SettingsScreen: React.FC = () => {
               onPress={() => Linking.openURL(UPSTREAM_DISCORD_URL)}
               style={styles.miniLinkPillGhost}
             >
-              <Ionicons name="chatbubbles-outline" size={14} color="#FFF" />
-              <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>
+              <Ionicons name="chatbubbles-outline" size={14} color={UI.text} />
+              <Text style={{ color: UI.text, fontSize: 12, fontWeight: '700' }}>
                 Mochy&apos;s Bar
               </Text>
             </Pressable>
@@ -141,7 +142,7 @@ export const SettingsScreen: React.FC = () => {
               <Text
                 style={{
                   fontWeight: '800',
-                  color: active ? palette.onAccent : '#FFFFFF',
+                  color: active ? palette.onAccent : UI.fg(1),
                 }}
               >
                 {lang === 'vi' ? '🇻🇳 Tiếng Việt' : '🌐 English'}
@@ -180,7 +181,7 @@ export const SettingsScreen: React.FC = () => {
               <Ionicons
                 name={active ? 'checkmark-circle' : 'ellipse-outline'}
                 size={22}
-                color={active ? palette.accent : HOLYSIC_COLORS.textMuted}
+                color={active ? palette.accent : UI.text3}
               />
             </Pressable>
           );
@@ -192,6 +193,60 @@ export const SettingsScreen: React.FC = () => {
         {t(prefs.language, 'customizeLook')}
       </Text>
       <View style={styles.cardGroup}>
+        <View style={styles.themeBlock}>
+          <Text style={styles.rowTitle}>{vi ? 'Giao diện' : 'Appearance'}</Text>
+          <Text style={styles.rowDesc}>
+            {vi
+              ? 'Tự động: sáng ban ngày, tối ban đêm — theo cài đặt của iPhone'
+              : 'Auto follows your iPhone: light by day, dark at night'}
+          </Text>
+          <View style={styles.themeRow}>
+            {(
+              [
+                { id: 'light', icon: 'sunny', vi: 'Sáng', en: 'Light' },
+                { id: 'dark', icon: 'moon', vi: 'Tối', en: 'Dark' },
+                { id: 'auto', icon: 'contrast', vi: 'Tự động', en: 'Auto' },
+              ] as const
+            ).map((o) => {
+              const on = (prefs.themeMode || 'dark') === o.id;
+              return (
+                <Pressable
+                  key={o.id}
+                  onPress={() => updatePrefs({ themeMode: o.id })}
+                  style={[
+                    styles.themeChip,
+                    on && { borderColor: palette.accent, backgroundColor: palette.accent + '22' },
+                  ]}
+                  accessibilityLabel={(vi ? 'Giao diện ' : 'Appearance ') + (vi ? o.vi : o.en)}
+                  accessibilityState={{ selected: on }}
+                >
+                  <View
+                    style={[
+                      styles.themePreview,
+                      o.id === 'light'
+                        ? { backgroundColor: '#F6F5FA' }
+                        : o.id === 'dark'
+                          ? { backgroundColor: '#0A0A0E' }
+                          : { backgroundColor: '#0A0A0E', overflow: 'hidden' },
+                    ]}
+                  >
+                    {o.id === 'auto' && <View style={styles.themeHalf} />}
+                    <Ionicons
+                      name={o.icon}
+                      size={18}
+                      color={
+                        o.id === 'light' ? '#F59E0B' : o.id === 'dark' ? '#C4B5FD' : palette.accent
+                      }
+                    />
+                  </View>
+                  <Text style={[styles.themeLabel, on && { color: palette.accent }]}>
+                    {vi ? o.vi : o.en}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
         <View style={styles.switchRow}>
           <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={styles.rowTitle}>{t(prefs.language, 'pureBlackOled')}</Text>
@@ -204,7 +259,7 @@ export const SettingsScreen: React.FC = () => {
           <Switch
             value={prefs.pureBlack}
             onValueChange={(v) => updatePrefs({ pureBlack: v })}
-            trackColor={{ false: '#2A2A36', true: palette.accent }}
+            trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
           />
         </View>
 
@@ -220,7 +275,7 @@ export const SettingsScreen: React.FC = () => {
           <Switch
             value={prefs.enableBlur}
             onValueChange={(v) => updatePrefs({ enableBlur: v })}
-            trackColor={{ false: '#2A2A36', true: palette.accent }}
+            trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
           />
         </View>
 
@@ -236,7 +291,7 @@ export const SettingsScreen: React.FC = () => {
           <Switch
             value={prefs.showMiniLyricsTicker}
             onValueChange={(v) => updatePrefs({ showMiniLyricsTicker: v })}
-            trackColor={{ false: '#2A2A36', true: palette.accent }}
+            trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
           />
         </View>
 
@@ -266,7 +321,7 @@ export const SettingsScreen: React.FC = () => {
                     style={{
                       fontSize: 12,
                       fontWeight: '700',
-                      color: selected ? palette.onAccent : '#FFF',
+                      color: selected ? palette.onAccent : UI.fg(1),
                     }}
                   >
                     {label}
@@ -281,7 +336,7 @@ export const SettingsScreen: React.FC = () => {
         <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>
           {vi ? 'Ánh sáng Ambient (như YouTube)' : 'Ambient light (YouTube-style)'}
         </Text>
-        <Text style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 12, lineHeight: 17 }}>
+        <Text style={{ color: UI.text3, fontSize: 12, lineHeight: 17 }}>
           {vi
             ? 'Màu thật của ảnh bìa lan ra nền, toả sáng quanh ảnh và nhịp theo tiếng bass.'
             : "The cover's real colours flood the background, glow around the art and pulse with the bass."}
@@ -306,7 +361,7 @@ export const SettingsScreen: React.FC = () => {
                   style={{
                     fontSize: 12,
                     fontWeight: '700',
-                    color: selected ? palette.onAccent : '#FFF',
+                    color: selected ? palette.onAccent : UI.fg(1),
                   }}
                 >
                   {label}
@@ -322,7 +377,7 @@ export const SettingsScreen: React.FC = () => {
           <Switch
             value={prefs.ambientBreathing}
             onValueChange={(v) => updatePrefs({ ambientBreathing: v })}
-            trackColor={{ false: '#2A2A36', true: palette.accent }}
+            trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
           />
         </View>
         <View style={styles.switchRow}>
@@ -332,7 +387,7 @@ export const SettingsScreen: React.FC = () => {
           <Switch
             value={prefs.ambientSpill}
             onValueChange={(v) => updatePrefs({ ambientSpill: v })}
-            trackColor={{ false: '#2A2A36', true: palette.accent }}
+            trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
           />
         </View>
         {ambient.reduced && prefs.ambientLight !== 'off' && (
@@ -368,7 +423,7 @@ export const SettingsScreen: React.FC = () => {
                     style={{
                       fontSize: 12,
                       fontWeight: '700',
-                      color: selected ? palette.onAccent : '#FFF',
+                      color: selected ? palette.onAccent : UI.fg(1),
                     }}
                   >
                     {label}
@@ -408,7 +463,7 @@ export const SettingsScreen: React.FC = () => {
                 onPress={() => moveModuleUp(idx)}
                 style={[styles.upBtn, idx === 0 && { opacity: 0.25 }]}
               >
-                <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
+                <Ionicons name="arrow-up" size={16} color={UI.text} />
               </Pressable>
               <Text style={[styles.moduleLabel, !enabled && { opacity: 0.45 }]}>
                 {idx + 1}. {labelMap[modId]}
@@ -420,7 +475,7 @@ export const SettingsScreen: React.FC = () => {
                     enabledModules: { ...prefs.enabledModules, [modId]: v },
                   })
                 }
-                trackColor={{ false: '#2A2A36', true: palette.accent }}
+                trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
               />
             </View>
           );
@@ -441,7 +496,7 @@ export const SettingsScreen: React.FC = () => {
           <Switch
             value={prefs.rememberSources}
             onValueChange={(v) => updatePrefs({ rememberSources: v })}
-            trackColor={{ false: '#2A2A36', true: palette.accent }}
+            trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
           />
         </View>
 
@@ -457,7 +512,7 @@ export const SettingsScreen: React.FC = () => {
           <Switch
             value={prefs.preferInstantStart}
             onValueChange={(v) => updatePrefs({ preferInstantStart: v })}
-            trackColor={{ false: '#2A2A36', true: palette.accent }}
+            trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
           />
         </View>
 
@@ -475,7 +530,7 @@ export const SettingsScreen: React.FC = () => {
           <Switch
             value={prefs.allowPreviewFallback}
             onValueChange={(v) => updatePrefs({ allowPreviewFallback: v })}
-            trackColor={{ false: '#2A2A36', true: palette.accent }}
+            trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
           />
         </View>
 
@@ -508,7 +563,7 @@ export const SettingsScreen: React.FC = () => {
                   style={{
                     fontSize: 12,
                     fontWeight: '700',
-                    color: active ? palette.onAccent : '#FFF',
+                    color: active ? palette.onAccent : UI.fg(1),
                   }}
                 >
                   AAC {q} kbps
@@ -556,13 +611,11 @@ export const SettingsScreen: React.FC = () => {
                 }
               />
               <View style={{ flex: 1 }}>
-                <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '600' }}>
+                <Text style={{ color: UI.text, fontSize: 13, fontWeight: '600' }}>
                   {srv.name} ({srv.kind})
                 </Text>
                 {srv.lastMessage && (
-                  <Text style={{ color: HOLYSIC_COLORS.textMuted, fontSize: 11 }}>
-                    {srv.lastMessage}
-                  </Text>
+                  <Text style={{ color: UI.text3, fontSize: 11 }}>{srv.lastMessage}</Text>
                 )}
               </View>
               {!srv.builtIn && (
@@ -578,7 +631,7 @@ export const SettingsScreen: React.FC = () => {
               value={newServerUrl}
               onChangeText={setNewServerUrl}
               placeholder="https://your-relay.example.dev"
-              placeholderTextColor={HOLYSIC_COLORS.textMuted}
+              placeholderTextColor={UI.text3}
               autoCapitalize="none"
               style={styles.srvInput}
             />
@@ -586,7 +639,7 @@ export const SettingsScreen: React.FC = () => {
               onPress={() => setNewServerKind((k) => (k === 'relay' ? 'streamer' : 'relay'))}
               style={styles.kindToggle}
             >
-              <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>
+              <Text style={{ color: UI.text, fontSize: 11, fontWeight: '700' }}>
                 {newServerKind.toUpperCase()}
               </Text>
             </Pressable>
@@ -613,13 +666,13 @@ export const SettingsScreen: React.FC = () => {
       </Text>
       <View style={styles.cardGroup}>
         <Text style={styles.guideStep}>
-          <Text style={{ fontWeight: '800', color: '#FFF' }}>1. Expo Go (Nhanh nhất): </Text>
+          <Text style={{ fontWeight: '800', color: UI.text }}>1. Expo Go (Nhanh nhất): </Text>
           {vi
             ? 'Cài Expo Go từ App Store, chạy npx expo start và quét mã QR bằng Camera iPhone.'
             : 'Install Expo Go from the App Store, run npx expo start, and scan the QR code.'}
         </Text>
         <Text style={styles.guideStep}>
-          <Text style={{ fontWeight: '800', color: '#FFF' }}>
+          <Text style={{ fontWeight: '800', color: UI.text }}>
             2. Sideload file .ipa (AltStore / SideStore / TrollStore):{' '}
           </Text>
           {vi
@@ -627,7 +680,7 @@ export const SettingsScreen: React.FC = () => {
             : 'Run the included GitHub Actions "Build iOS IPA" workflow to download HolySic-iOS-Unsigned.ipa — no Mac required!'}
         </Text>
         <Text style={styles.guideStep}>
-          <Text style={{ fontWeight: '800', color: '#FFF' }}>3. Safari PWA: </Text>
+          <Text style={{ fontWeight: '800', color: UI.text }}>3. Safari PWA: </Text>
           {vi
             ? 'Mở bản Web trên Safari iOS → Chia sẻ → "Thêm vào Màn hình chính" để dùng full-screen kèm điều khiển Lock Screen.'
             : 'Open in iOS Safari → Share → "Add to Home Screen" for full-screen standalone mode.'}
@@ -662,7 +715,7 @@ export const SettingsScreen: React.FC = () => {
               </Text>
               <Text style={styles.creditDesc}>{vi ? credit.roleVi : credit.roleEn}</Text>
             </View>
-            <Ionicons name="open-outline" size={17} color={HOLYSIC_COLORS.textSecondary} />
+            <Ionicons name="open-outline" size={17} color={UI.text2} />
           </Pressable>
         ))}
       </View>
@@ -670,7 +723,37 @@ export const SettingsScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = themedSheet(() => ({
+  themeBlock: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 },
+  themeRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  themeChip: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: UI.fg(0.1),
+    backgroundColor: UI.fg(0.04),
+  },
+  themePreview: {
+    width: 54,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(128,128,140,0.35)',
+  },
+  themeHalf: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '50%',
+    backgroundColor: '#F6F5FA',
+  },
+  themeLabel: { color: UI.text2, fontSize: 13, fontWeight: '700' },
   container: {
     flex: 1,
   },
@@ -683,7 +766,7 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 16,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: UI.fg(0.05),
     borderWidth: 1,
     alignItems: 'center',
   },
@@ -695,12 +778,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   brandName: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 19,
     fontWeight: '800',
   },
   brandSub: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12.5,
     lineHeight: 18,
     marginTop: 3,
@@ -725,7 +808,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: UI.fg(0.1),
   },
   quickRow: {
     flexDirection: 'row',
@@ -736,23 +819,23 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: UI.fg(0.05),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: UI.fg(0.08),
   },
   quickToolTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 14.5,
     fontWeight: '800',
     marginTop: 8,
   },
   quickToolSub: {
-    color: HOLYSIC_COLORS.textMuted,
+    color: UI.text3,
     fontSize: 11.5,
     marginTop: 2,
   },
   sectionTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 17.5,
     fontWeight: '800',
     marginTop: 22,
@@ -766,15 +849,15 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 11,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: UI.fg(0.07),
     alignItems: 'center',
   },
   cardGroup: {
     padding: 15,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.045)',
+    backgroundColor: UI.fg(0.045),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: UI.fg(0.08),
   },
   styleRow: {
     flexDirection: 'row',
@@ -783,7 +866,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: UI.fg(0.07),
     marginBottom: 8,
   },
   switchRow: {
@@ -792,21 +875,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: UI.fg(0.08),
   },
   rowTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 14.5,
     fontWeight: '700',
   },
   rowDesc: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12,
     lineHeight: 17,
     marginTop: 2,
   },
   inlineSubLabel: {
-    color: '#E4E4EC',
+    color: UI.fg(0.88),
     fontSize: 13,
     fontWeight: '700',
   },
@@ -814,7 +897,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: UI.fg(0.08),
   },
   moduleRow: {
     flexDirection: 'row',
@@ -822,19 +905,19 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 9,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: UI.fg(0.08),
   },
   upBtn: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.09)',
+    backgroundColor: UI.fg(0.09),
     alignItems: 'center',
     justifyContent: 'center',
   },
   moduleLabel: {
     flex: 1,
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 13.5,
     fontWeight: '600',
   },
@@ -842,7 +925,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: UI.fg(0.1),
   },
   relayTopRow: {
     flexDirection: 'row',
@@ -863,17 +946,17 @@ const styles = StyleSheet.create({
   },
   srvInput: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: UI.fg(0.07),
     borderRadius: 12,
     paddingHorizontal: 11,
     paddingVertical: 8,
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 12.5,
   },
   kindToggle: {
     paddingHorizontal: 10,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: UI.fg(0.1),
     justifyContent: 'center',
   },
   addSrvBtn: {
@@ -883,7 +966,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   guideStep: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 13,
     lineHeight: 19.5,
     marginBottom: 10,
@@ -895,18 +978,18 @@ const styles = StyleSheet.create({
     padding: 11,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: UI.fg(0.07),
     marginBottom: 8,
   },
   creditTitle: {
-    color: '#FFFFFF',
+    color: UI.text,
     fontSize: 14,
     fontWeight: '800',
   },
   creditDesc: {
-    color: HOLYSIC_COLORS.textSecondary,
+    color: UI.text2,
     fontSize: 12,
     marginTop: 2,
     lineHeight: 16.5,
   },
-});
+}));
