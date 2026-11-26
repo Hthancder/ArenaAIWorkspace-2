@@ -45,6 +45,8 @@ import {
 import { Loudness } from '../services/audio/loudness';
 import { ScrobbleSettings, Scrobbler } from '../services/scrobble/scrobbler';
 import { useConnectivity } from '../services/net/connectivity';
+import { fetchNonMusicSegments, segmentAt } from '../services/discovery/sponsorBlock';
+import { exportDownloadToFiles, shareTrack as shareTrackSheet } from '../services/share/shareTools';
 import { AUTO_EQ_PRESETS, OFFLINE_SHOWCASE_TRACKS } from '../data/curatedCatalog';
 import { audioEngine } from '../services/audio/audioEngine';
 import { StreamFileCache } from '../services/audio/streamFileCache';
@@ -220,13 +222,22 @@ interface MochyContextValue extends MochyExtras {
   cycleRepeat: () => void;
   addToQueue: (track: Track, playNext?: boolean) => void;
   removeFromQueue: (index: number) => void;
+  /** Reorder the queue (Spotube / Musike); the playing song keeps playing */
+  moveInQueue: (from: number, to: number) => void;
+  /** Remove every song after the current one */
+  clearUpcoming: () => void;
   jumpToQueueIndex: (index: number) => void;
+  shareTrack: (track: Track) => Promise<void>;
+  exportDownload: (trackId: string) => Promise<void>;
   startInstantMix: (seedQuery?: string) => Promise<void>;
 
   // Lyrics
   lyrics: LyricsData | null;
   isLoadingLyrics: boolean;
   activeLyricIndex: number;
+  /** Lyrics delay for the current song, seconds */
+  lyricsOffsetSec: number;
+  nudgeLyricsOffset: (deltaMs: number | 'reset') => void;
 
   // Sleep Timer
   sleepRemainingSec: number | null;
@@ -360,6 +371,14 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const isOnline = useConnectivity();
 
   queueRef.current = queue;
+  const currentTrackRef = useRef<Track | null>(null);
+  currentTrackRef.current = currentTrack;
+  /** SponsorBlock non-music segments for the song playing now (YouTube audio only) */
+  const skipSegsRef = useRef<{ trackId: string; segs: [number, number][]; skipped: number }>({
+    trackId: '',
+    segs: [],
+    skipped: -1,
+  });
   queueIndexRef.current = queueIndex;
   repeatRef.current = repeatMode;
   shuffleRef.current = shuffle;
@@ -532,18 +551,35 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [currentTrack]);
 
+  const lyricsOffsetSec = currentTrack ? (prefs.lyricsOffsets?.[currentTrack.id] ?? 0) / 1000 : 0;
   const activeLyricIndex = useMemo(() => {
     if (!lyrics || lyrics.lines.length === 0) return -1;
+    const pos = positionSec - lyricsOffsetSec;
     let active = -1;
     for (let i = 0; i < lyrics.lines.length; i++) {
-      if (positionSec + 0.15 >= lyrics.lines[i].startSec) {
+      if (pos + 0.15 >= lyrics.lines[i].startSec) {
         active = i;
       } else {
         break;
       }
     }
     return active;
-  }, [lyrics, positionSec]);
+  }, [lyrics, positionSec, lyricsOffsetSec]);
+
+  // Spotube's "skip non-music segments": only when the audio is the YouTube video itself
+  useEffect(() => {
+    skipSegsRef.current = { trackId: '', segs: [], skipped: -1 };
+    if (!prefs.skipNonMusic || !currentTrack || resolvedStream?.source !== 'innertube') return;
+    const vid = currentTrack.videoId || currentTrack.id;
+    const trackId = currentTrack.id;
+    let cancelled = false;
+    fetchNonMusicSegments(vid).then((segs) => {
+      if (!cancelled && segs.length) skipSegsRef.current = { trackId, segs, skipped: -1 };
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack, resolvedStream?.source, prefs.skipNonMusic]);
 
   const playTokenRef = useRef(0);
 
@@ -868,6 +904,22 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     null
   );
   trackListeningRef.current = (pos, dur, playing) => {
+    const sk = skipSegsRef.current;
+    if (playing && sk.segs.length && sk.trackId === currentTrackRef.current?.id) {
+      const seg = segmentAt(sk.segs, pos);
+      if (seg && sk.skipped !== seg[0]) {
+        sk.skipped = seg[0];
+        const total0 = dur > 0 ? dur : currentTrackRef.current?.durationSec || 0;
+        const target = total0 > 0 ? Math.min(seg[1], total0 - 0.25) : seg[1];
+        setPositionSec(target);
+        audioEngine.seekTo(target);
+        showToast(
+          prefsRef.current.language === 'vi'
+            ? `Đã bỏ qua ${Math.round(seg[1] - seg[0])} giây không phải nhạc`
+            : `Skipped ${Math.round(seg[1] - seg[0])}s of non-music`
+        );
+      }
+    }
     const log = playLogRef.current;
     if (!log) return;
     const delta = pos - log.lastPos;
@@ -1027,7 +1079,33 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
 
   const removeFromQueue = useCallback((index: number) => {
+    if (index === queueIndexRef.current) return;
     setQueue((prev) => prev.filter((_, i) => i !== index));
+    // removing an earlier song shifts the playing song up by one
+    if (index < queueIndexRef.current) setQueueIndex((i) => Math.max(0, i - 1));
+  }, []);
+
+  const moveInQueue = useCallback((from: number, to: number) => {
+    const len = queueRef.current.length;
+    if (from === to || from < 0 || to < 0 || from >= len || to >= len) return;
+    triggerHaptic('selection');
+    setQueue((prev) => {
+      const copy = [...prev];
+      const [item] = copy.splice(from, 1);
+      copy.splice(to, 0, item);
+      return copy;
+    });
+    const cur = queueIndexRef.current;
+    let next = cur;
+    if (from === cur) next = to;
+    else if (from < cur && to >= cur) next = cur - 1;
+    else if (from > cur && to <= cur) next = cur + 1;
+    if (next !== cur) setQueueIndex(next);
+  }, []);
+
+  const clearUpcoming = useCallback(() => {
+    triggerHaptic('light');
+    setQueue((prev) => prev.slice(0, queueIndexRef.current + 1));
   }, []);
 
   const jumpToQueueIndex = useCallback(
@@ -1931,6 +2009,53 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const openCharts = useCallback((genre: number | null = null) => setChartsSheet({ genre }), []);
   const closeCharts = useCallback(() => setChartsSheet(null), []);
 
+  // Per-song lyrics delay (Spotube) — kept for the 300 most recent songs
+  const nudgeLyricsOffset = useCallback(
+    (delta: number | 'reset') => {
+      const tr = currentTrackRef.current;
+      if (!tr) return;
+      triggerHaptic('selection');
+      const map = { ...(prefsRef.current.lyricsOffsets || {}) };
+      const cur = map[tr.id] ?? 0;
+      const next = delta === 'reset' ? 0 : Math.max(-10000, Math.min(10000, cur + delta));
+      delete map[tr.id];
+      if (next !== 0) map[tr.id] = next;
+      const keys = Object.keys(map);
+      if (keys.length > 300) for (const k of keys.slice(0, keys.length - 300)) delete map[k];
+      updatePrefs({ lyricsOffsets: map });
+    },
+    [updatePrefs]
+  );
+
+  const shareTrack = useCallback(
+    async (track: Track) => {
+      try {
+        await shareTrackSheet(track);
+        if (Platform.OS === 'web' && !(globalThis as any).navigator?.share) {
+          showToast(prefsRef.current.language === 'vi' ? 'Đã sao chép liên kết' : 'Link copied');
+        }
+      } catch {
+        /* user cancelled */
+      }
+    },
+    [showToast]
+  );
+
+  const exportDownload = useCallback(
+    async (trackId: string) => {
+      const meta = downloadsRef.current[trackId];
+      const vi = prefsRef.current.language === 'vi';
+      if (!meta) {
+        showToast(vi ? 'Bài này chưa được tải xuống' : 'This song is not downloaded');
+        return;
+      }
+      const ok = await exportDownloadToFiles(meta).catch(() => false);
+      if (!ok)
+        showToast(vi ? 'Không xuất được tệp trên thiết bị này' : 'Could not export the file here');
+    },
+    [showToast]
+  );
+
   const extras = useMemo<MochyExtras>(
     () => ({
       isOnline,
@@ -2057,11 +2182,17 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       cycleRepeat,
       addToQueue,
       removeFromQueue,
+      moveInQueue,
+      clearUpcoming,
+      shareTrack,
+      exportDownload,
       jumpToQueueIndex,
       startInstantMix,
       lyrics,
       isLoadingLyrics,
       activeLyricIndex,
+      lyricsOffsetSec,
+      nudgeLyricsOffset,
       sleepRemainingSec,
       sleepEndOfTrack,
       setSleepTimer,
@@ -2134,11 +2265,17 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       cycleRepeat,
       addToQueue,
       removeFromQueue,
+      moveInQueue,
+      clearUpcoming,
+      shareTrack,
+      exportDownload,
       jumpToQueueIndex,
       startInstantMix,
       lyrics,
       isLoadingLyrics,
       activeLyricIndex,
+      lyricsOffsetSec,
+      nudgeLyricsOffset,
       sleepRemainingSec,
       sleepEndOfTrack,
       setSleepTimer,

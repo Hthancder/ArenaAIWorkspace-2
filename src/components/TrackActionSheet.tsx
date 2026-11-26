@@ -1,9 +1,17 @@
-// iOS Action Sheet for Track Context Menu (Play Next, Queue, Add to Playlist, Offline, Artist/Album, Copy)
+// iOS Action Sheet for Track Context Menu (Play Next, Queue, Add to Playlist, Offline, Artist/Album, Share, Save to Files, Radio, Block)
 
 import { Ionicons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { ArtworkImage } from './ArtworkImage';
 import { MOCHY_COLORS } from '../constants/theme';
 import { useMochy } from '../context/MochyContext';
@@ -30,6 +38,8 @@ export const TrackActionSheet: React.FC = () => {
     blockTrack,
     blockArtist,
     startInstantMix,
+    shareTrack,
+    exportDownload,
   } = useMochy();
 
   const [pickingPlaylist, setPickingPlaylist] = useState(false);
@@ -235,19 +245,35 @@ export const TrackActionSheet: React.FC = () => {
                   </Pressable>
                 )}
 
+                {/* Share (OpenSpot) — the iOS share sheet also offers Copy */}
                 <Pressable
                   style={styles.menuItem}
-                  onPress={async () => {
-                    await Clipboard.setStringAsync(`${actionTrack.title} — ${actionTrack.artist}`);
-                    showToast(vi ? 'Đã sao chép tên bài hát' : 'Copied song info');
+                  onPress={() => {
+                    const tr = actionTrack;
                     close();
+                    shareTrack(tr);
                   }}
                 >
-                  <Ionicons name="copy-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.menuLabel}>
-                    {vi ? 'Sao chép thông tin bài hát' : 'Copy Song Info'}
-                  </Text>
+                  <Ionicons name="share-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.menuLabel}>{vi ? 'Chia sẻ bài hát' : 'Share song'}</Text>
                 </Pressable>
+
+                {/* Save the downloaded file to the Files app with a readable name (Spotube) */}
+                {isOffline && Platform.OS !== 'web' && (
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      const id = actionTrack.id;
+                      close();
+                      exportDownload(id);
+                    }}
+                  >
+                    <Ionicons name="folder-open-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.menuLabel}>
+                      {vi ? 'Lưu tệp vào ứng dụng Tệp' : 'Save file to Files'}
+                    </Text>
+                  </Pressable>
+                )}
 
                 {/* Song radio (Musike autoplay radio seeded from one song) */}
                 <Pressable

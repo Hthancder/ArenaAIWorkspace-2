@@ -2,21 +2,23 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { IpodTheme } from '../../constants/preferences';
 import { useMochy } from '../../context/MochyContext';
+import { useHoldSeek } from '../../hooks/useHoldSeek';
 import { formatTimeSec } from '../MochyIcons';
 
 const IPOD_PALETTES: Record<
   IpodTheme,
-  { body: string; border: string; wheel: string; center: string; wheelText: string; darkLcd: boolean }
+  {
+    body: string;
+    border: string;
+    wheel: string;
+    center: string;
+    wheelText: string;
+    darkLcd: boolean;
+  }
 > = {
   SILVER: {
     body: '#E2E4E9',
@@ -68,7 +70,10 @@ export const IpodClassicView: React.FC = () => {
     prefs,
     updatePrefs,
     haptic,
+    seekBy,
   } = useMochy();
+  const ff = useHoldSeek(seekBy, 1);
+  const rw = useHoldSeek(seekBy, -1);
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -86,19 +91,9 @@ export const IpodClassicView: React.FC = () => {
 
   return (
     <View style={styles.outer}>
-      <View
-        style={[
-          styles.chassis,
-          { backgroundColor: skin.body, borderColor: skin.border },
-        ]}
-      >
+      <View style={[styles.chassis, { backgroundColor: skin.body, borderColor: skin.border }]}>
         {/* Top Retro Backlit LCD */}
-        <View
-          style={[
-            styles.lcdFrame,
-            { backgroundColor: skin.darkLcd ? '#0D1017' : '#F3F6FA' },
-          ]}
-        >
+        <View style={[styles.lcdFrame, { backgroundColor: skin.darkLcd ? '#0D1017' : '#F3F6FA' }]}>
           {/* LCD Status Bar */}
           <View
             style={[
@@ -109,12 +104,7 @@ export const IpodClassicView: React.FC = () => {
               },
             ]}
           >
-            <Text
-              style={[
-                styles.lcdTopTitle,
-                { color: skin.darkLcd ? '#F4F4F8' : '#1E293B' },
-              ]}
-            >
+            <Text style={[styles.lcdTopTitle, { color: skin.darkLcd ? '#F4F4F8' : '#1E293B' }]}>
               {menuOpen ? 'Mochy Queue' : 'Now Playing'}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
@@ -143,21 +133,14 @@ export const IpodClassicView: React.FC = () => {
                       jumpToQueueIndex(idx);
                       setMenuOpen(false);
                     }}
-                    style={[
-                      styles.lcdMenuRow,
-                      selected && { backgroundColor: '#2563EB' },
-                    ]}
+                    style={[styles.lcdMenuRow, selected && { backgroundColor: '#2563EB' }]}
                   >
                     <Text
                       numberOfLines={1}
                       style={{
                         fontSize: 12.5,
                         fontWeight: '700',
-                        color: selected
-                          ? '#FFFFFF'
-                          : skin.darkLcd
-                            ? '#E2E8F0'
-                            : '#0F172A',
+                        color: selected ? '#FFFFFF' : skin.darkLcd ? '#E2E8F0' : '#0F172A',
                         flex: 1,
                       }}
                     >
@@ -175,10 +158,7 @@ export const IpodClassicView: React.FC = () => {
           ) : (
             <View style={styles.lcdBody}>
               <View style={styles.lcdMainRow}>
-                <ArtworkImage
-                  source={{ uri: currentTrack.artworkUrl }}
-                  style={styles.lcdArt}
-                />
+                <ArtworkImage source={{ uri: currentTrack.artworkUrl }} style={styles.lcdArt} />
                 <View style={{ flex: 1 }}>
                   <Text
                     style={{
@@ -240,12 +220,7 @@ export const IpodClassicView: React.FC = () => {
                     { backgroundColor: skin.darkLcd ? '#1E293B' : '#CBD5E1' },
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.lcdBarFill,
-                      { width: `${progress * 100}%` },
-                    ]}
-                  />
+                  <View style={[styles.lcdBarFill, { width: `${progress * 100}%` }]} />
                 </Pressable>
                 <View style={styles.lcdTimes}>
                   <Text
@@ -287,8 +262,10 @@ export const IpodClassicView: React.FC = () => {
 
           <Pressable
             hitSlop={12}
-            onPress={playPrevious}
-            onLongPress={() => seekTo(Math.max(0, positionSec - 10))}
+            onPress={rw.guard(playPrevious)}
+            onLongPress={rw.onLongPress}
+            onPressOut={rw.onPressOut}
+            delayLongPress={rw.delayLongPress}
             style={styles.wheelLeft}
           >
             <Ionicons name="play-back" size={18} color={skin.wheelText} />
@@ -296,8 +273,10 @@ export const IpodClassicView: React.FC = () => {
 
           <Pressable
             hitSlop={12}
-            onPress={playNext}
-            onLongPress={() => seekTo(Math.min(durationSec, positionSec + 10))}
+            onPress={ff.guard(playNext)}
+            onLongPress={ff.onLongPress}
+            onPressOut={ff.onPressOut}
+            delayLongPress={ff.delayLongPress}
             style={styles.wheelRight}
           >
             <Ionicons name="play-forward" size={18} color={skin.wheelText} />
@@ -315,9 +294,7 @@ export const IpodClassicView: React.FC = () => {
             onPress={cycleSkin}
             style={[styles.centerBtn, { backgroundColor: skin.center }]}
           >
-            <Text style={[styles.skinHint, { color: skin.wheelText }]}>
-              {prefs.ipodTheme}
-            </Text>
+            <Text style={[styles.skinHint, { color: skin.wheelText }]}>{prefs.ipodTheme}</Text>
           </Pressable>
         </View>
       </View>

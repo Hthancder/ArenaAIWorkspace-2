@@ -2,14 +2,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { t } from '../../constants/i18n';
 import { LyricsPosition } from '../../constants/preferences';
 import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
@@ -26,7 +19,10 @@ export const LyricsView: React.FC = () => {
     prefs,
     updatePrefs,
     haptic,
+    lyricsOffsetSec,
+    nudgeLyricsOffset,
   } = useMochy();
+  const vi = prefs.language === 'vi';
 
   const scrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -60,9 +56,7 @@ export const LyricsView: React.FC = () => {
     return (
       <View style={styles.centerBox}>
         <Ionicons name="musical-notes-outline" size={44} color={MOCHY_COLORS.textMuted} />
-        <Text style={[styles.helperText, { fontFamily }]}>
-          {t(prefs.language, 'noLyrics')}
-        </Text>
+        <Text style={[styles.helperText, { fontFamily }]}>{t(prefs.language, 'noLyrics')}</Text>
       </View>
     );
   }
@@ -79,15 +73,47 @@ export const LyricsView: React.FC = () => {
       <View style={styles.toolbar}>
         <View style={styles.providerBadge}>
           <Ionicons name="sparkles" size={12} color={palette.accent} />
-          <Text style={[styles.providerText, { color: palette.accent }]}>
+          <Text numberOfLines={1} style={[styles.providerText, { color: palette.accent }]}>
             {lyrics.provider}
-            {lyrics.wordSynced
-              ? ' · Word-Synced'
-              : lyrics.synced
-                ? ' · Synced LRC'
-                : ' · Plain'}
+            {lyrics.wordSynced ? ' · Word-Synced' : lyrics.synced ? ' · Synced LRC' : ' · Plain'}
           </Text>
         </View>
+
+        {lyrics.synced && (
+          <View style={styles.offsetGroup}>
+            <Pressable
+              onPress={() => nudgeLyricsOffset(-500)}
+              hitSlop={6}
+              style={styles.offsetBtn}
+              accessibilityLabel={vi ? 'Lời sớm hơn 0,5 giây' : 'Lyrics 0.5s earlier'}
+            >
+              <Ionicons name="remove" size={14} color="#FFF" />
+            </Pressable>
+            <Pressable
+              onPress={() => nudgeLyricsOffset('reset')}
+              onLongPress={() => nudgeLyricsOffset('reset')}
+              style={styles.offsetLabelWrap}
+            >
+              <Text
+                style={[styles.offsetLabel, lyricsOffsetSec !== 0 && { color: palette.accent }]}
+              >
+                {lyricsOffsetSec === 0
+                  ? vi
+                    ? 'Lệch 0s'
+                    : 'Sync 0s'
+                  : `${lyricsOffsetSec > 0 ? '+' : ''}${lyricsOffsetSec.toFixed(1)}s`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => nudgeLyricsOffset(500)}
+              hitSlop={6}
+              style={styles.offsetBtn}
+              accessibilityLabel={vi ? 'Lời trễ hơn 0,5 giây' : 'Lyrics 0.5s later'}
+            >
+              <Ionicons name="add" size={14} color="#FFF" />
+            </Pressable>
+          </View>
+        )}
 
         <Pressable onPress={cycleAlign} style={styles.alignBtn}>
           <Ionicons
@@ -101,7 +127,6 @@ export const LyricsView: React.FC = () => {
             size={16}
             color="#FFF"
           />
-          <Text style={styles.alignLabel}>{prefs.lyricsPosition}</Text>
         </Pressable>
       </View>
 
@@ -114,18 +139,14 @@ export const LyricsView: React.FC = () => {
           const isActive = idx === activeLyricIndex;
           const isPast = idx < activeLyricIndex;
           const isDuetV2 = line.agent && line.agent.toLowerCase().includes('2');
-          const textAlign = line.isBackground
-            ? 'center'
-            : isDuetV2
-              ? 'right'
-              : baseAlign;
+          const textAlign = line.isBackground ? 'center' : isDuetV2 ? 'right' : baseAlign;
 
           return (
             <Pressable
               key={line.id}
               onPress={() => {
                 haptic('selection');
-                seekTo(line.startSec);
+                seekTo(Math.max(0, line.startSec + lyricsOffsetSec));
               }}
               style={[
                 styles.lineWrap,
@@ -138,7 +159,7 @@ export const LyricsView: React.FC = () => {
               {line.words && line.words.length > 0 && isActive ? (
                 <Text style={[styles.lineTextActive, { textAlign, fontFamily }]}>
                   {line.words.map((w, wIdx) => {
-                    const lit = positionSec + 0.08 >= w.startSec;
+                    const lit = positionSec - lyricsOffsetSec + 0.08 >= w.startSec;
                     return (
                       <Text
                         key={`${line.id}-w-${wIdx}`}
@@ -165,9 +186,7 @@ export const LyricsView: React.FC = () => {
                       textShadowRadius: 14,
                     },
                     !isActive && {
-                      color: isPast
-                        ? 'rgba(255,255,255,0.30)'
-                        : 'rgba(255,255,255,0.52)',
+                      color: isPast ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.52)',
                     },
                     { textAlign, fontFamily },
                   ]}
@@ -212,6 +231,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   providerBadge: {
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -221,22 +241,35 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   providerText: {
+    flexShrink: 1,
     fontSize: 11.5,
     fontWeight: '700',
+  },
+  offsetGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 99,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginLeft: 8,
+    marginRight: 8,
+  },
+  offsetBtn: { width: 28, height: 26, alignItems: 'center', justifyContent: 'center' },
+  offsetLabelWrap: { paddingHorizontal: 2 },
+  offsetLabel: {
+    color: '#FFF',
+    fontSize: 11.5,
+    fontWeight: '800',
+    minWidth: 46,
+    textAlign: 'center',
   },
   alignBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 7,
     paddingVertical: 5,
     borderRadius: 99,
     backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  alignLabel: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
   },
   scrollContent: {
     paddingVertical: 20,

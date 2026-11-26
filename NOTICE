@@ -29,7 +29,8 @@ Every feature below was written from scratch for this codebase. They are credite
 in-app About & Credits screen as well.
 
 - **Spotube** by [KRTirtho](https://github.com/KRTirtho/spotube). License: AGPL-3.0.
-  Ideas used: artist/song blacklist, scrobbling, first-run welcome. No Spotube code is
+  Ideas used: artist/song blacklist, scrobbling, first-run welcome, queue editing, per-song
+  lyrics delay, skipping non-music segments (SponsorBlock), named file export. No Spotube code is
   included. Spotube's AGPL-3.0 license notice is kept here as a courtesy.
 - **OpenSpot Music** by [BlackHatDevX](https://github.com/BlackHatDevX/openspot-music-app). License: MIT.
   Ideas used: Spotify public playlist import (here it reads the public embed page instead of a
@@ -49,6 +50,7 @@ Copyright notices for the MIT-licensed projects:
 - OpenSpot Music: Copyright (c) BlackHatDevX. MIT License.
 - Musike: Copyright (c) Ernani1234. MIT License.
 
-Charts data comes from Apple's public iTunes RSS feeds. Scrobbles go to Last.fm and
+Charts data comes from Apple's public iTunes RSS feeds. Non-music segment data comes from
+SponsorBlock (https://sponsor.ajay.app, CC BY-NC-SA 4.0 database), and can be turned off in Settings. Scrobbles go to Last.fm and
 ListenBrainz only when you connect your own account.
 

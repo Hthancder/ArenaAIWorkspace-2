@@ -25,10 +25,18 @@ export const UPSTREAM_CREDITS: CreditProject[] = [
     name: 'Spotube',
     author: 'KRTirtho',
     roleVi:
-      'Ý tưởng: danh sách chặn, scrobble, màn hình chào mừng (AGPL-3.0, viết lại, không chép mã)',
-    roleEn: 'Ideas: blacklist, scrobbling, welcome flow (AGPL-3.0, reimplemented, no code copied)',
+      'Ý tưởng: danh sách chặn, scrobble, chào mừng, sửa hàng chờ, chỉnh lệch lời, bỏ đoạn không phải nhạc (AGPL-3.0, viết lại, không chép mã)',
+    roleEn:
+      'Ideas: blacklist, scrobbling, welcome, queue editing, lyrics delay, non-music skipping (AGPL-3.0, reimplemented, no code copied)',
     url: 'https://github.com/KRTirtho/spotube',
     highlight: true,
+  },
+  {
+    name: 'SponsorBlock',
+    author: 'Ajay Ramachandran & contributors',
+    roleVi: 'Dữ liệu đoạn không phải nhạc trong MV YouTube (tắt được trong Cài đặt)',
+    roleEn: 'Non-music segment data for YouTube music videos (can be turned off)',
+    url: 'https://sponsor.ajay.app',
   },
   {
     name: 'OpenSpot Music',

@@ -19,8 +19,8 @@ import { PLAYER_STYLE_META, PlayerStyle } from '../../constants/preferences';
 import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useMochy } from '../../context/MochyContext';
 import { formatTimeSec } from '../MochyIcons';
-import { TrackRow } from '../TrackRow';
 import { useHoldSeek } from '../../hooks/useHoldSeek';
+import { QueuePane } from './QueuePane';
 import { SpectrumBars } from './SpectrumBars';
 import { BedsideClockView } from './BedsidePlayer';
 import { IpodClassicView } from './IpodPlayer';
@@ -51,8 +51,6 @@ export const FullPlayerModal: React.FC = () => {
     repeatMode,
     cycleRepeat,
     queue,
-    queueIndex,
-    removeFromQueue,
     isLiked,
     toggleLike,
     setActionTrack,
@@ -176,30 +174,7 @@ export const FullPlayerModal: React.FC = () => {
           {pane === 'lyrics' ? (
             <LyricsView />
           ) : pane === 'queue' ? (
-            <View style={{ flex: 1 }}>
-              <View style={styles.paneHeaderRow}>
-                <Text style={[styles.paneTitle, { fontFamily }]}>
-                  {vi ? `Hàng chờ phát (${queue.length})` : `Up Next (${queue.length})`}
-                </Text>
-                <Pressable onPress={() => setPane('artwork')}>
-                  <Text style={{ color: palette.accent, fontWeight: '700' }}>
-                    {vi ? 'Xong' : 'Done'}
-                  </Text>
-                </Pressable>
-              </View>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {queue.map((item, idx) => (
-                  <TrackRow
-                    key={`${item.id}-${idx}`}
-                    track={item}
-                    queueContext={queue}
-                    indexBadge={idx + 1}
-                    compact
-                    onRemove={idx !== queueIndex ? () => removeFromQueue(idx) : undefined}
-                  />
-                ))}
-              </ScrollView>
-            </View>
+            <QueuePane onDone={() => setPane('artwork')} />
           ) : pane === 'sleep' ? (
             <View style={styles.overlayCard}>
               <Text style={[styles.paneTitle, { fontFamily, marginBottom: 6 }]}>

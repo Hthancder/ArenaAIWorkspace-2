@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
@@ -54,10 +55,15 @@ export const CollectionModal: React.FC = () => {
   // Artist "load more" songs (OpenSpot paginated artist songs)
   const [moreTracks, setMoreTracks] = useState<Track[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Filter & sort inside a collection (Spotube / Musike library tools)
+  const [filterQ, setFilterQ] = useState('');
+  const [sortBy, setSortBy] = useState<'default' | 'title' | 'artist' | 'duration'>('default');
 
   useEffect(() => {
     setSelecting(false);
     setSelected({});
+    setFilterQ('');
+    setSortBy('default');
     setPickPlaylist(false);
     setMoreTracks([]);
   }, [collectionTarget]);
@@ -148,6 +154,28 @@ export const CollectionModal: React.FC = () => {
   }
 
   const headerPalette = buildArtworkPalette(title);
+  const allTracks = tracks;
+  const canFilter = collectionTarget.kind !== 'album' && allTracks.length >= 6;
+  if (canFilter && (filterQ.trim() || sortBy !== 'default')) {
+    const q = filterQ.trim().toLowerCase();
+    let list = q
+      ? allTracks.filter((x) => `${x.title} ${x.artist} ${x.album || ''}`.toLowerCase().includes(q))
+      : [...allTracks];
+    if (sortBy === 'title') list = list.sort((a, b) => a.title.localeCompare(b.title));
+    else if (sortBy === 'artist')
+      list = list.sort(
+        (a, b) => a.artist.localeCompare(b.artist) || a.title.localeCompare(b.title)
+      );
+    else if (sortBy === 'duration') list = list.sort((a, b) => a.durationSec - b.durationSec);
+    tracks = list;
+  }
+  const SORT_LABEL = {
+    default: vi ? 'Mặc định' : 'Default',
+    title: vi ? 'Tên A–Z' : 'Title A–Z',
+    artist: vi ? 'Nghệ sĩ' : 'Artist',
+    duration: vi ? 'Thời lượng' : 'Length',
+  } as const;
+  const SORT_ORDER = ['default', 'title', 'artist', 'duration'] as const;
   const chosen = tracks.filter((x) => selected[x.id]);
   const canSaveAsPlaylist =
     collectionTarget.kind === 'album' ||
@@ -320,6 +348,48 @@ export const CollectionModal: React.FC = () => {
           )}
 
           {/* Tracklist */}
+          {canFilter && (
+            <View style={styles.filterRow}>
+              <View style={styles.filterBox}>
+                <Ionicons name="search" size={15} color={MOCHY_COLORS.textMuted} />
+                <TextInput
+                  value={filterQ}
+                  onChangeText={setFilterQ}
+                  placeholder={
+                    vi ? `Lọc ${allTracks.length} bài…` : `Filter ${allTracks.length} songs…`
+                  }
+                  placeholderTextColor={MOCHY_COLORS.textMuted}
+                  style={styles.filterInput}
+                />
+                {filterQ.length > 0 && (
+                  <Pressable hitSlop={8} onPress={() => setFilterQ('')}>
+                    <Ionicons name="close-circle" size={16} color={MOCHY_COLORS.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+              <Pressable
+                onPress={() =>
+                  setSortBy(SORT_ORDER[(SORT_ORDER.indexOf(sortBy) + 1) % SORT_ORDER.length])
+                }
+                style={[
+                  styles.sortChip,
+                  sortBy !== 'default' && { borderColor: headerPalette.accent },
+                ]}
+              >
+                <Ionicons
+                  name="swap-vertical"
+                  size={14}
+                  color={sortBy !== 'default' ? headerPalette.accent : '#FFF'}
+                />
+                <Text style={styles.sortText}>{SORT_LABEL[sortBy]}</Text>
+              </Pressable>
+            </View>
+          )}
+          {canFilter && filterQ.trim() !== '' && tracks.length === 0 && (
+            <Text style={styles.filterEmpty}>
+              {vi ? 'Không có bài nào khớp bộ lọc' : 'No songs match the filter'}
+            </Text>
+          )}
           {selecting && (
             <View style={styles.selectBar}>
               <Pressable
@@ -543,6 +613,38 @@ export const CollectionModal: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  filterBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  filterInput: { flex: 1, color: '#FFF', fontSize: 14 },
+  sortChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  sortText: { color: '#FFF', fontSize: 12.5, fontWeight: '700' },
+  filterEmpty: { color: MOCHY_COLORS.textMuted, textAlign: 'center', marginVertical: 18 },
   root: {
     flex: 1,
   },

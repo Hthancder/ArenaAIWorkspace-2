@@ -65,6 +65,10 @@ export interface MochyPreferences {
   chartCountry: string;
   /** Live search suggestions while typing */
   searchSuggestions: boolean;
+  /** Skip talking intros/outros in YouTube music videos (SponsorBlock music_offtopic) */
+  skipNonMusic: boolean;
+  /** Per-song lyrics delay in ms (positive = lyrics later) */
+  lyricsOffsets: Record<string, number>;
   /** Welcome tour finished */
   onboarded: boolean;
   /** Mini player look: Mochy card or OpenSpot-style floating capsule */
@@ -107,6 +111,8 @@ export const DEFAULT_PREFERENCES: MochyPreferences = {
   blacklist: { artists: [], tracks: [] },
   chartCountry: 'vn',
   searchSuggestions: true,
+  skipNonMusic: true,
+  lyricsOffsets: {},
   onboarded: false,
   miniPlayerStyle: 'card',
   language: 'vi',

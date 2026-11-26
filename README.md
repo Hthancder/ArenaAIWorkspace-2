@@ -60,6 +60,8 @@
 - **Scrobble Last.fm & ListenBrainz** *(Cog, Spotube)* · **nhập tệp từ ứng dụng Tệp** *(Cog)*
 - **Danh sách chặn** bài/nghệ sĩ · **màn hình chào mừng** *(Spotube)*
 - **Sao lưu/khôi phục** (gộp hoặc thay thế, xem trước) · **chọn nhiều bài** · **gợi ý khi gõ** · **tự phát bài tương tự** · **khôi phục hàng chờ** · **chuẩn bị sẵn bài kế** *(Musike)*
+- **Hàng chờ nâng cao:** đưa bài lên/xuống, xoá các bài sau, lưu hàng chờ thành playlist · **chỉnh lệch lời bài hát** từng bài ±0,5 giây · **bỏ qua đoạn không phải nhạc** trong MV YouTube (SponsorBlock) *(Spotube)*
+- **Chia sẻ bài hát** *(OpenSpot)* · **lưu bài đã tải vào ứng dụng Tệp** với tên "Nghệ sĩ - Tên bài" · **lọc & sắp xếp** trong playlist/đã thích/đã tải *(Spotube, Musike)*
 - **Màu nhấn** (8 màu + tự chọn) · ẩn/hiện mục Trang chủ *(Musike)* · **MiniPlayer viên nang** · lối tắt · banner ngoại tuyến *(OpenSpot)*
 
 ## 🚀 Cài đặt / Installation

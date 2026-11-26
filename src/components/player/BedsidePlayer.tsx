@@ -3,15 +3,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useKeepAwake } from 'expo-keep-awake';
 import React, { useEffect, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { BedsideClockFace, BedsideNightTint } from '../../constants/preferences';
 import { useMochy } from '../../context/MochyContext';
+import { useHoldSeek } from '../../hooks/useHoldSeek';
 
 export const BedsideClockView: React.FC = () => {
   useKeepAwake();
@@ -27,7 +23,10 @@ export const BedsideClockView: React.FC = () => {
     prefs,
     updatePrefs,
     haptic,
+    seekBy,
   } = useMochy();
+  const ff = useHoldSeek(seekBy, 1);
+  const rw = useHoldSeek(seekBy, -1);
 
   const [now, setNow] = useState(() => new Date());
 
@@ -40,10 +39,11 @@ export const BedsideClockView: React.FC = () => {
 
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
-  const dateLabel = now.toLocaleDateString(
-    prefs.language === 'vi' ? 'vi-VN' : 'en-US',
-    { weekday: 'short', month: 'short', day: 'numeric' }
-  );
+  const dateLabel = now.toLocaleDateString(prefs.language === 'vi' ? 'vi-VN' : 'en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
 
   const tintColor =
     prefs.bedsideNightTint === 'ORANGE'
@@ -66,8 +66,7 @@ export const BedsideClockView: React.FC = () => {
     updatePrefs({ bedsideClockFace: next });
   };
 
-  const activeLyric =
-    lyrics && activeLyricIndex >= 0 ? lyrics.lines[activeLyricIndex]?.text : null;
+  const activeLyric = lyrics && activeLyricIndex >= 0 ? lyrics.lines[activeLyricIndex]?.text : null;
 
   return (
     <View style={styles.container}>
@@ -76,9 +75,7 @@ export const BedsideClockView: React.FC = () => {
         {prefs.bedsideClockFace === 'STACKED' ? (
           <View style={{ alignItems: 'center' }}>
             <Text style={[styles.stackedDigits, { color: tintColor }]}>{hh}</Text>
-            <Text style={[styles.stackedDigits, { color: tintColor, marginTop: -18 }]}>
-              {mm}
-            </Text>
+            <Text style={[styles.stackedDigits, { color: tintColor, marginTop: -18 }]}>{mm}</Text>
           </View>
         ) : (
           <Text style={[styles.bigDigits, { color: tintColor }]}>
@@ -104,9 +101,7 @@ export const BedsideClockView: React.FC = () => {
           </View>
           <Pressable onPress={cycleTint} style={styles.tintPill}>
             <Ionicons name="moon" size={13} color={tintColor} />
-            <Text style={[styles.tintText, { color: tintColor }]}>
-              {prefs.bedsideNightTint}
-            </Text>
+            <Text style={[styles.tintText, { color: tintColor }]}>{prefs.bedsideNightTint}</Text>
           </Pressable>
         </View>
 
@@ -117,7 +112,13 @@ export const BedsideClockView: React.FC = () => {
         )}
 
         <View style={styles.nightControls}>
-          <Pressable onPress={playPrevious} style={styles.nightBtn}>
+          <Pressable
+            onPress={rw.guard(playPrevious)}
+            onLongPress={rw.onLongPress}
+            onPressOut={rw.onPressOut}
+            delayLongPress={rw.delayLongPress}
+            style={styles.nightBtn}
+          >
             <Ionicons name="play-skip-back" size={24} color={tintColor} />
           </Pressable>
           <Pressable
@@ -131,7 +132,13 @@ export const BedsideClockView: React.FC = () => {
               style={!isPlaying ? { marginLeft: 2 } : undefined}
             />
           </Pressable>
-          <Pressable onPress={playNext} style={styles.nightBtn}>
+          <Pressable
+            onPress={ff.guard(playNext)}
+            onLongPress={ff.onLongPress}
+            onPressOut={ff.onPressOut}
+            delayLongPress={ff.delayLongPress}
+            style={styles.nightBtn}
+          >
             <Ionicons name="play-skip-forward" size={24} color={tintColor} />
           </Pressable>
         </View>

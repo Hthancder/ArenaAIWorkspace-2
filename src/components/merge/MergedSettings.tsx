@@ -231,10 +231,17 @@ export const MergedSettings: React.FC = () => {
           vi ? 'Gợi ý từ YouTube Music trong lúc gõ' : 'YouTube Music suggestions while typing',
           sw(prefs.searchSuggestions, (v) => updatePrefs({ searchSuggestions: v }))
         )}
+        {row(
+          vi ? 'Bỏ qua đoạn không phải nhạc' : 'Skip non-music parts',
+          vi
+            ? 'Tự bỏ qua lời dẫn, đoạn diễn đầu/cuối MV YouTube (dữ liệu SponsorBlock)'
+            : 'Skips talking intros/outros in YouTube music videos (SponsorBlock data)',
+          sw(prefs.skipNonMusic, (v) => updatePrefs({ skipNonMusic: v }))
+        )}
         <Text style={[styles.rowDesc, { marginTop: 6 }]}>
           {vi
-            ? 'Mẹo: giữ nút ⏭ / ⏮ để tua nhanh / tua lại. Bài kế tiếp được chuẩn bị sẵn khi bài hiện tại đã phát quá nửa.'
-            : 'Tip: hold ⏭ / ⏮ to fast-forward / rewind. The next song is prepared once the current one is half way.'}
+            ? 'Mẹo: giữ nút ⏭ / ⏮ để tua nhanh / tua lại; chỉnh lệch lời bằng nút −/+ trong màn Lời bài hát. Bài kế tiếp được chuẩn bị sẵn khi bài hiện tại đã phát quá nửa.'
+            : 'Tip: hold ⏭ / ⏮ to fast-forward / rewind; fix lyric timing with −/+ on the Lyrics screen. The next song is prepared once the current one is half way.'}
         </Text>
       </View>
 
