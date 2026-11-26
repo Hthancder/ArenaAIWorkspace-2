@@ -195,7 +195,7 @@ export const T = {
       parseInt(full.slice(4, 6), 16);
     if (l <= 3 * 0x10) return LIGHT_UI.bg; // page backgrounds (#000 … #101010)
     if (l <= 3 * 0x22) return '#FFFFFF'; // raised surfaces / sheets
-    return '#E4E2EC'; // mid greys (tracks, toggles off)
+    return '#D9D6E2'; // mid greys (tracks, toggles off)
   },
   /** a translucent dark tint (glass, scrims) */
   shade(r: number, g: number, b: number, a: number): string {

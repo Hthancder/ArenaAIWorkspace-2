@@ -99,7 +99,7 @@ import {
   ResolvedStream,
   Track,
 } from '../types/music';
-import { isLocalTrack, LocalLibrary } from '../services/local/localLibrary';
+import { isLocalTrack, LocalLibrary, taggedAlbumOf } from '../services/local/localLibrary';
 
 export type CollectionTarget =
   | { kind: 'album'; id: string; summary?: AlbumSummary }
@@ -318,6 +318,14 @@ export function triggerHaptic(kind: 'light' | 'medium' | 'selection' = 'light'):
   } catch {
     // ignore
   }
+}
+
+/** Next song simply continues the same album (crossfade would break a gapless transition) */
+function continuesAlbum(cur: Track, next: Track | undefined): boolean {
+  if (!next) return false;
+  const a = taggedAlbumOf(cur);
+  if (!a || a !== taggedAlbumOf(next)) return false;
+  return next.artist === cur.artist || next.source === cur.source;
 }
 
 export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -1062,7 +1070,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setDurationSec(st.durationSec);
       trackListeningRef.current?.(st.currentTimeSec, st.durationSec, st.isPlaying);
 
-      // Crossfade: start the next song while this one is still playing
+      // Crossfade: start the next song while this one is still playing — except between
+      // consecutive songs of the same album (live sets, DJ mixes, concept albums stay gapless)
       const cf = prefsRef.current.crossfadeSec || 0;
       const cur = currentTrackRef.current;
       if (
@@ -1080,9 +1089,14 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
           prefsRef.current.autoPlaySimilar)
       ) {
         crossfadeFiredRef.current = playTokenRef.current;
-        audioEngine.beginCrossfade(cf);
-        playNext();
-        return;
+        const upcoming = !shuffleRef.current
+          ? queueRef.current[queueIndexRef.current + 1]
+          : undefined;
+        if (!continuesAlbum(cur, upcoming)) {
+          audioEngine.beginCrossfade(cf);
+          playNext();
+          return;
+        }
       }
 
       if (st.didJustFinish) {

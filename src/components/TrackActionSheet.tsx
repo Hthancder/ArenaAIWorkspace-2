@@ -97,7 +97,11 @@ export const TrackActionSheet: React.FC = () => {
 
             {/* Header */}
             <View style={styles.header}>
-              <ArtworkImage source={{ uri: sheetTrack.artworkUrl }} style={styles.art} />
+              <ArtworkImage
+                source={{ uri: sheetTrack.artworkUrl }}
+                fallbackSeed={sheetTrack.title}
+                style={styles.art}
+              />
               <View style={{ flex: 1 }}>
                 <Text numberOfLines={1} style={styles.title}>
                   {sheetTrack.title}

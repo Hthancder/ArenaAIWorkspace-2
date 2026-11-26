@@ -84,7 +84,11 @@ export const TrackRow: React.FC<TrackRowProps> = ({
       )}
 
       <View style={styles.artWrap}>
-        <ArtworkImage source={{ uri: track.artworkUrl }} style={styles.art} />
+        <ArtworkImage
+          source={{ uri: track.artworkUrl }}
+          fallbackSeed={track.title}
+          style={styles.art}
+        />
         {active && (
           <View style={styles.playingOverlay}>
             <Ionicons name={isPlaying ? 'stats-chart' : 'pause'} size={16} color={palette.accent} />

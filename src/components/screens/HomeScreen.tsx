@@ -60,20 +60,28 @@ export const HomeScreen: React.FC = () => {
   const ambientColors = useAmbientColors();
   const vi = prefs.language === 'vi';
   const localState = useLocalLibrary();
-  const shelfTop = useMemo(() => mostPlayed(history, vi), [history, vi]);
-  const shelfOld = useMemo(() => forgotten(history, likedTracks, vi), [history, likedTracks, vi]);
-  const shelfNew = useMemo(
-    () =>
-      recentlyAdded(
-        {
-          local: localState.files.map((f) => ({ track: f.track, addedAt: f.meta.addedAt })),
-          downloads,
-          liked: likedTracks,
-        },
-        vi
-      ),
-    [localState.files, downloads, likedTracks, vi]
-  );
+  // Each song shows on one smart shelf only: Nghe nhiều claims first, then Mới thêm, then
+  // Lâu chưa nghe (a shelf that would end up nearly empty is hidden by SmartShelf)
+  const { shelfTop, shelfNew, shelfOld } = useMemo(() => {
+    const top = mostPlayed(history, vi);
+    const taken = new Set(top.map((x) => x.track.id));
+    const fresh = recentlyAdded(
+      {
+        local: localState.files.map((f) => ({ track: f.track, addedAt: f.meta.addedAt })),
+        downloads,
+        liked: likedTracks,
+      },
+      vi
+    ).filter((x) => !taken.has(x.track.id));
+    fresh.forEach((x) => taken.add(x.track.id));
+    const old = forgotten(history, likedTracks, vi).filter((x) => !taken.has(x.track.id));
+    return { shelfTop: top, shelfNew: fresh, shelfOld: old };
+  }, [history, likedTracks, localState.files, downloads, vi]);
+  // Keep listening: newest play of each song once (a song played twice in a row isn't two cards)
+  const recentUnique = useMemo(() => {
+    const seen = new Set<string>();
+    return history.filter((ev) => !seen.has(ev.track.id) && !!seen.add(ev.track.id)).slice(0, 10);
+  }, [history]);
   const shown = (id: HomeSectionId) => !prefs.hiddenHomeSections.includes(id);
   const country = CHART_COUNTRIES.find((c) => c.code === prefs.chartCountry) || CHART_COUNTRIES[0];
   const globalCode = country.code === 'us' ? 'gb' : 'us';
@@ -397,18 +405,22 @@ export const HomeScreen: React.FC = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalCards}
           >
-            {history.slice(0, 8).map((ev) => (
+            {recentUnique.map((ev) => (
               <Pressable
                 key={ev.id}
                 onPress={() =>
                   playTrack(
                     ev.track,
-                    history.map((h) => h.track)
+                    recentUnique.map((h) => h.track)
                   )
                 }
                 style={styles.squareCard}
               >
-                <ArtworkImage source={{ uri: ev.track.artworkUrl }} style={styles.squareArt} />
+                <ArtworkImage
+                  source={{ uri: ev.track.artworkUrl }}
+                  fallbackSeed={ev.track.title + ev.track.artist}
+                  style={styles.squareArt}
+                />
                 <Text numberOfLines={1} style={[styles.squareTitle, { fontFamily }]}>
                   {ev.track.title}
                 </Text>
@@ -729,7 +741,11 @@ const SmartShelf: React.FC<{
             accessibilityLabel={`${title}: ${it.track.title}`}
           >
             <View>
-              <ArtworkImage source={{ uri: it.track.artworkUrl }} style={styles.squareArt} />
+              <ArtworkImage
+                source={{ uri: it.track.artworkUrl }}
+                fallbackSeed={it.track.title + it.track.artist}
+                style={styles.squareArt}
+              />
               {rank && i < 3 ? (
                 <View style={[styles.rankBadge, { backgroundColor: accent }]}>
                   <Text style={[styles.rankText, { color: onAccent }]}>{i + 1}</Text>

@@ -90,7 +90,11 @@ export const BedsideClockView: React.FC = () => {
       {/* Quiet Music Tile */}
       <View style={[styles.musicTile, { borderColor: tintColor + '28' }]}>
         <View style={styles.musicHeader}>
-          <ArtworkImage source={{ uri: currentTrack.artworkUrl }} style={styles.miniArt} />
+          <ArtworkImage
+            source={{ uri: currentTrack.artworkUrl }}
+            fallbackSeed={currentTrack.title}
+            style={styles.miniArt}
+          />
           <View style={{ flex: 1 }}>
             <Text numberOfLines={1} style={[styles.songTitle, { color: tintColor }]}>
               {currentTrack.title}

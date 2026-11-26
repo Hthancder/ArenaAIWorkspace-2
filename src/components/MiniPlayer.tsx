@@ -76,6 +76,7 @@ export const MiniPlayer: React.FC = () => {
         <View style={[styles.row, capsule && { paddingVertical: 7 }]}>
           <ArtworkImage
             source={{ uri: currentTrack.artworkUrl }}
+            fallbackSeed={currentTrack.title}
             style={[styles.cover, capsule && styles.capsuleCover]}
           />
 

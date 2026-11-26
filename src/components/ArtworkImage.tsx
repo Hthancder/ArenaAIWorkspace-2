@@ -16,12 +16,22 @@ const FALLBACK_GRADIENTS: [string, string][] = [
   ['#0F766E', '#1E3A8A'],
   ['#7C3AED', '#1E1B4B'],
   ['#B91C1C', '#2A0A0A'],
+  ['#0284C7', '#082F49'],
+  ['#65A30D', '#14290A'],
+  ['#C026D3', '#2E0A33'],
+  ['#E11D48', '#3B0716'],
+  ['#0891B2', '#132A2E'],
+  ['#9333EA', '#3B0764'],
 ];
 
+/** FNV-1a — spreads similar titles across the palette (no runs of one colour) */
 function hashString(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
 }
 
 export function normalizeArtworkUrl(raw?: string | null): string {

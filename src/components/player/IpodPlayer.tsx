@@ -158,7 +158,11 @@ export const IpodClassicView: React.FC = () => {
           ) : (
             <View style={styles.lcdBody}>
               <View style={styles.lcdMainRow}>
-                <ArtworkImage source={{ uri: currentTrack.artworkUrl }} style={styles.lcdArt} />
+                <ArtworkImage
+                  source={{ uri: currentTrack.artworkUrl }}
+                  fallbackSeed={currentTrack.title}
+                  style={styles.lcdArt}
+                />
                 <View style={{ flex: 1 }}>
                   <Text
                     style={{

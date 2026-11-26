@@ -462,7 +462,11 @@ export const ImportModal: React.FC<Props> = ({
                   <View key={i} style={styles.resultRow}>
                     <View style={styles.rowMain}>
                       {t ? (
-                        <ArtworkImage source={{ uri: t.artworkUrl }} style={styles.art} />
+                        <ArtworkImage
+                          source={{ uri: t.artworkUrl }}
+                          fallbackSeed={t.title}
+                          style={styles.art}
+                        />
                       ) : (
                         <View style={[styles.art, styles.artEmpty]}>
                           <Ionicons name="help" size={18} color={UI.text3} />

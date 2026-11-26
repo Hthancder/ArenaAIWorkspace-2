@@ -377,6 +377,7 @@ export const FullPlayerModal: React.FC = () => {
                 >
                   <ArtworkImage
                     source={{ uri: currentTrack.artworkUrl }}
+                    fallbackSeed={currentTrack.title}
                     style={styles.coverImage}
                   />
                 </View>

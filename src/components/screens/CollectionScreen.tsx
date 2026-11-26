@@ -7,6 +7,7 @@ import { ArtistBioCard } from '../ArtistBioCard';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -349,12 +350,17 @@ export const CollectionModal: React.FC = () => {
                   <Pressable
                     onPress={async () => {
                       const rel = await exportPlaylistM3U(title, allTracks);
-                      if (rel)
-                        showToast(
-                          vi
-                            ? `Đã lưu ${rel.split('/').pop()} vào Tệp › HolySic › Playlists`
-                            : `Saved ${rel.split('/').pop()} to Files › HolySic › Playlists`
-                        );
+                      if (!rel) return;
+                      const fname = rel.split('/').pop();
+                      showToast(
+                        Platform.OS === 'web'
+                          ? vi
+                            ? `Đã tải ${fname} · bản sao trong Nhạc trên máy › Playlists`
+                            : `Downloaded ${fname} · a copy is in Local Files › Playlists`
+                          : vi
+                            ? `Đã lưu ${fname} vào Tệp › HolySic › Playlists`
+                            : `Saved ${fname} to Files › HolySic › Playlists`
+                      );
                     }}
                     style={styles.chipBtn}
                     accessibilityLabel={vi ? 'Xuất M3U' : 'Export M3U'}
@@ -555,7 +561,11 @@ export const CollectionModal: React.FC = () => {
                     size={22}
                     color={selected[song.id] ? headerPalette.accent : UI.text3}
                   />
-                  <ArtworkImage source={{ uri: song.artworkUrl }} style={styles.selArt} />
+                  <ArtworkImage
+                    source={{ uri: song.artworkUrl }}
+                    fallbackSeed={song.title}
+                    style={styles.selArt}
+                  />
                   <View style={{ flex: 1 }}>
                     <Text numberOfLines={1} style={{ color: UI.text, fontWeight: '700' }}>
                       {song.title}

@@ -46,18 +46,20 @@ const oneLine = (s: string) => s.replace(/[\r\n]+/g, ' ').trim();
 /**
  * Build the playlist text.
  * `localPathFor(track)`: location for a song on the device, relative to where the .m3u8 is saved
- * (or undefined when it isn't a local song).
+ * (or undefined when it isn't a local song). `albumFor`: the real album (not a folder stand-in).
  */
 export function buildM3U(
   name: string,
   tracks: Track[],
-  localPathFor: (t: Track) => string | undefined
+  localPathFor: (t: Track) => string | undefined,
+  albumFor: (t: Track) => string | undefined = (t) => t.album
 ): string {
   const lines = ['#EXTM3U', `#PLAYLIST:${oneLine(name)}`, '#EXTENC:UTF-8'];
   for (const t of tracks) {
     const dur = Math.round(t.durationSec || 0) || -1;
     lines.push(`#EXTINF:${dur},${oneLine(t.artist || '')} - ${oneLine(t.title || '')}`);
-    if (t.album) lines.push(`#EXTALB:${oneLine(t.album)}`);
+    const album = albumFor(t);
+    if (album) lines.push(`#EXTALB:${oneLine(album)}`);
     if (t.artworkUrl && /^https?:/i.test(t.artworkUrl)) lines.push(`#EXTIMG:${t.artworkUrl}`);
     const local = localPathFor(t);
     if (local) {

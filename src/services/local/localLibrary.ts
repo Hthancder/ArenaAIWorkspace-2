@@ -820,9 +820,10 @@ class LocalLibraryStore {
     };
     if (!meta.trackNo && guess.trackNo) meta.trackNo = guess.trackNo;
     const shown =
-      ed.trackNo || ed.albumArtist
+      ed.trackNo || ed.albumArtist || ed.album
         ? {
             ...meta,
+            album: ed.album || meta.album,
             trackNo: ed.trackNo || meta.trackNo,
             albumArtist: ed.albumArtist || meta.albumArtist,
           }
@@ -1034,8 +1035,11 @@ class LocalLibraryStore {
     const dir = 'Playlists';
     const fileName = (sanitizeName(name) || 'Playlist') + '.m3u8';
     const rel = join(dir, fileName);
-    const text = buildM3U(name, tracks, (t) =>
-      isLocalTrack(t) ? '../' + localPathOf(t) : undefined
+    const text = buildM3U(
+      name,
+      tracks,
+      (t) => (isLocalTrack(t) ? '../' + localPathOf(t) : undefined),
+      taggedAlbumOf
     );
     this.backend.writeText(rel, text);
     await this.scan();
@@ -1361,3 +1365,14 @@ export const LocalLibrary = new LocalLibraryStore();
 export const isLocalTrack = (t?: Track | null) => !!t && t.id.startsWith(LOCAL_ID_PREFIX);
 export const localPathOf = (t: Track) => t.id.slice(LOCAL_ID_PREFIX.length);
 export const localDirOf = (t: Track) => dirOf(localPathOf(t));
+
+/**
+ * The album as tagged / edited — never the folder name the library shows as a stand-in.
+ * Streamed songs return their own album.
+ */
+export function taggedAlbumOf(t: Track): string | undefined {
+  if (!isLocalTrack(t)) return t.album || undefined;
+  const rel = localPathOf(t);
+  const f = LocalLibrary.getState().files.find((x) => x.path === rel);
+  return LocalLibrary.getEdit(rel)?.album || f?.meta.album || undefined;
+}

@@ -52,7 +52,11 @@ export const TurntableVinylStage: React.FC = () => {
 
           {/* Center Artwork Label */}
           <View style={[styles.centerLabel, { borderColor: palette.accent }]}>
-            <ArtworkImage source={{ uri: currentTrack.artworkUrl }} style={styles.labelArt} />
+            <ArtworkImage
+              source={{ uri: currentTrack.artworkUrl }}
+              fallbackSeed={currentTrack.title}
+              style={styles.labelArt}
+            />
             <View style={styles.spindleHole} />
           </View>
         </Animated.View>

@@ -95,7 +95,11 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
               ]}
             >
               <View>
-                <ArtworkImage source={{ uri: item.artworkUrl }} style={styles.art} />
+                <ArtworkImage
+                  source={{ uri: item.artworkUrl }}
+                  fallbackSeed={item.title}
+                  style={styles.art}
+                />
                 {current && (
                   <View style={styles.nowOverlay}>
                     <Ionicons

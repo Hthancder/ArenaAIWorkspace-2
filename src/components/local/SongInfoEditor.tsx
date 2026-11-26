@@ -67,6 +67,11 @@ const FIELDS: { key: Field; vi: string; en: string; numeric?: boolean; half?: bo
 ];
 
 const str = (v: unknown) => (v === undefined || v === null || v === 0 ? '' : String(v));
+const UNKNOWN_ARTISTS = new Set(['Không rõ nghệ sĩ', 'Unknown artist']);
+const mmss = (sec: number) => {
+  const v = Math.max(0, Math.round(sec));
+  return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`;
+};
 
 export const SongInfoEditor: React.FC = () => {
   const t = useSongEditorTarget();
@@ -102,7 +107,8 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
 
   const initial: Values = {
     title: track.title,
-    artist: track.artist,
+    // the "unknown artist" stand-in is a label, not a value to keep
+    artist: UNKNOWN_ARTISTS.has(track.artist) ? '' : track.artist,
     album: edit?.album || file.album || '',
     albumArtist: edit?.albumArtist || meta?.albumArtist || '',
     year: str(track.releaseYear),
@@ -120,7 +126,10 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
   const [results, setResults] = useState<MetaCandidate[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const searchRun = useRef(0);
+  const dirty =
+    cover !== undefined || (Object.keys(initial) as Field[]).some((k) => v[k] !== initial[k]);
 
   const search = async (free?: string) => {
     const run = ++searchRun.current;
@@ -156,14 +165,23 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
   }, []);
 
   const keyOf = (m: MetaCandidate) => `${m.source}|${m.title}|${m.artist}|${m.album}`;
+  const applySeq = useRef(0);
   const apply = async (m0: MetaCandidate) => {
     setPicked(keyOf(m0));
+    const seq = ++applySeq.current;
     const m = await enrich(m0);
+    if (seq !== applySeq.current) return; // a newer pick won
     setV((cur) => ({
       title: m.title || cur.title,
       artist: m.artist || cur.artist,
       album: m.album || cur.album,
-      albumArtist: m.albumArtist || cur.albumArtist,
+      // album artist: the store's when given, else the main artist of that album
+      albumArtist:
+        m.albumArtist ||
+        cur.albumArtist ||
+        (m.album && m.artist
+          ? m.artist.split(/\s+[([]?(?:feat\.?|ft\.?|featuring)\s+/i)[0].trim()
+          : ''),
       year: str(m.year) || cur.year,
       genre: m.genre || cur.genre,
       trackNo: str(m.trackNo) || cur.trackNo,
@@ -191,8 +209,20 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
   };
 
   const close = () => openSongEditor(null);
+  /** Cancel / tap outside: ask once before throwing edits away */
+  const requestClose = () => {
+    if (dirty && !confirmDiscard) {
+      setConfirmDiscard(true);
+      return;
+    }
+    close();
+  };
   const save = async () => {
     if (saving) return;
+    if (!dirty) {
+      close();
+      return;
+    }
     setSaving(true);
     // a field equal to what the file says is not an edit (so tag changes still come through)
     const own = (k: Field, fileVal: unknown) => {
@@ -234,7 +264,7 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
 
   return (
     <View style={s.root}>
-      <Pressable style={s.scrim} onPress={close} />
+      <Pressable style={s.scrim} onPress={requestClose} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={s.wrap}
@@ -243,8 +273,10 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
         <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <View style={s.handle} />
           <View style={s.topBar}>
-            <Pressable onPress={close} hitSlop={10} accessibilityLabel="Close">
-              <Text style={s.topBtn}>{vi ? 'Huỷ' : 'Cancel'}</Text>
+            <Pressable onPress={requestClose} hitSlop={10} accessibilityLabel="Close">
+              <Text style={[s.topBtn, confirmDiscard && { color: c.danger, fontWeight: '800' }]}>
+                {confirmDiscard ? (vi ? 'Bỏ thay đổi?' : 'Discard?') : vi ? 'Huỷ' : 'Cancel'}
+              </Text>
             </Pressable>
             <Text style={s.topTitle}>{vi ? 'Sửa thông tin' : 'Edit info'}</Text>
             <Pressable
@@ -256,7 +288,13 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
               {saving ? (
                 <ActivityIndicator color={palette.accent} />
               ) : (
-                <Text style={[s.topBtn, { color: palette.accent, fontWeight: '800' }]}>
+                <Text
+                  style={[
+                    s.topBtn,
+                    s.saveBtn,
+                    { color: dirty ? palette.accent : c.text3, fontWeight: '800' },
+                  ]}
+                >
                   {vi ? 'Lưu' : 'Save'}
                 </Text>
               )}
@@ -302,8 +340,8 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
                     onPress={() => setCover(edit?.art ? null : undefined)}
                     style={s.coverBtn}
                   >
-                    <Ionicons name="arrow-undo-outline" size={17} color={c.danger} />
-                    <Text style={[s.coverBtnText, { color: c.danger }]}>
+                    <Ionicons name="arrow-undo-outline" size={17} color={c.icon} />
+                    <Text style={s.coverBtnText}>
                       {vi ? 'Dùng ảnh của tệp' : 'Use the file’s art'}
                     </Text>
                   </Pressable>
@@ -379,6 +417,10 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
               const k = keyOf(m);
               const on = picked === k;
               const pct = Math.round(m.score * 100);
+              const durOff =
+                !!m.durationSec &&
+                !!track.durationSec &&
+                Math.abs(m.durationSec - track.durationSec) > 7;
               return (
                 <Pressable
                   key={k}
@@ -404,6 +446,16 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
                     </Text>
                     <View style={s.candMeta}>
                       <Text style={s.candSource}>{m.source}</Text>
+                      {!!m.durationSec && (
+                        <Text style={[s.candSource, durOff && { color: '#F59E0B' }]}>
+                          {mmss(m.durationSec)}
+                          {durOff
+                            ? vi
+                              ? ` · bài trên máy ${mmss(track.durationSec)}`
+                              : ` · yours is ${mmss(track.durationSec)}`
+                            : ''}
+                        </Text>
+                      )}
                       {pct >= 30 && (
                         <View
                           style={[
@@ -487,6 +539,7 @@ const makeStyles = (c: UiColors) => ({
     marginBottom: 6,
   },
   topBtn: { color: c.text2, fontSize: 16, fontWeight: '600' as const, minWidth: 48 },
+  saveBtn: { textAlign: 'right' as const },
   topTitle: { color: c.text, fontSize: 16, fontWeight: '800' as const },
   coverRow: {
     flexDirection: 'row' as const,

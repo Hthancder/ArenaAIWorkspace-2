@@ -236,8 +236,8 @@ export const MergedSettings: React.FC = () => {
             <Text style={styles.rowDesc}>
               {prefs.crossfadeSec > 0
                 ? vi
-                  ? `Bài sau to dần trong ${prefs.crossfadeSec} giây cuối của bài trước`
-                  : `The next song fades in over the last ${prefs.crossfadeSec}s`
+                  ? `Bài sau to dần trong ${prefs.crossfadeSec} giây cuối của bài trước · giữ liền mạch khi nghe trọn album`
+                  : `The next song fades in over the last ${prefs.crossfadeSec}s · albums played in order stay gapless`
                 : vi
                   ? 'Tắt — các bài nối tiếp nhau bình thường'
                   : 'Off — songs play back to back'}

@@ -3,7 +3,7 @@
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import { Track } from '../../types/music';
-import { isLocalTrack, LocalLibrary, localPathOf } from '../local/localLibrary';
+import { isLocalTrack, LocalLibrary, localPathOf, taggedAlbumOf } from '../local/localLibrary';
 import { buildM3U, isRemoteLocation, M3UEntry, M3UPlaylist } from './m3u';
 
 /**
@@ -16,7 +16,12 @@ export async function exportPlaylistM3U(
   tracks: Track[]
 ): Promise<string | undefined> {
   if (Platform.OS === 'web') {
-    const text = buildM3U(name, tracks, (t) => (isLocalTrack(t) ? localPathOf(t) : undefined));
+    const text = buildM3U(
+      name,
+      tracks,
+      (t) => (isLocalTrack(t) ? localPathOf(t) : undefined),
+      taggedAlbumOf
+    );
     const blob = new Blob([text], { type: 'audio/x-mpegurl' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

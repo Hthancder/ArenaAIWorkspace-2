@@ -730,6 +730,9 @@ export const LocalLibraryScreen: React.FC = () => {
           </Text>
           <Text numberOfLines={1} style={styles.rowSub}>
             {f.track.artist}
+            {f.meta.album && !(nav.kind === 'group' && nav.group === 'album')
+              ? ` · ${f.meta.album}`
+              : ''}
             {f.track.durationSec ? ` · ${fmtDur(f.track.durationSec)}` : ''}
             {q && nav.kind === 'folder' && f.dir !== currentDir ? ` · ${f.dir || '/'}` : ''}
           </Text>

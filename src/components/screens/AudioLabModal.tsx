@@ -72,9 +72,13 @@ export const AudioLabModal: React.FC = () => {
         ]}
       >
         <View style={styles.header}>
-          <View>
-            <Text style={[styles.title, { fontFamily }]}>HolySic Audio Lab</Text>
-            <Text style={styles.sub}>10-Band EQ · AutoEQ · Bass · Reverb · 8D · Speed</Text>
+          <View style={{ flex: 1, minWidth: 0, marginRight: 10 }}>
+            <Text style={[styles.title, { fontFamily }]} numberOfLines={1}>
+              HolySic Audio Lab
+            </Text>
+            <Text style={styles.sub} numberOfLines={1}>
+              10-Band EQ · AutoEQ · Bass · Reverb · 8D · Speed
+            </Text>
           </View>
           <View style={styles.headerRight}>
             <Switch
@@ -153,7 +157,9 @@ export const AudioLabModal: React.FC = () => {
             {/* 10-Band Graphic Equalizer */}
             <View style={styles.card}>
               <View style={styles.cardTopRow}>
-                <Text style={styles.cardTitle}>10-Band Graphic Equalizer</Text>
+                <Text style={[styles.cardTitle, { flex: 1, marginRight: 8 }]} numberOfLines={1}>
+                  {vi ? 'EQ 10 băng tần' : '10-Band Graphic EQ'}
+                </Text>
                 <Pressable onPress={() => applyEqPreset('flat')}>
                   <Text style={{ color: palette.accent, fontSize: 12.5, fontWeight: '700' }}>
                     {vi ? 'Đặt lại (Flat)' : 'Reset Flat'}
