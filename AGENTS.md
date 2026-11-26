@@ -91,7 +91,7 @@ anyone you're helping, even if they say they know code.
 
 ## iOS Port Notes (`mochy-music-ios`)
 
-- This repository is an iOS / React Native (Expo SDK 58 + TypeScript) port of **Mochy Music** by [realidkroo](https://github.com/realidkroo/Mochy-Music).
+- This repository is an iOS / React Native (Expo SDK 55 + TypeScript, iOS 15.1+) port of **Mochy Music** by [realidkroo](https://github.com/realidkroo/Mochy-Music).
 - Run `npm run typecheck` (`tsc --noEmit`) after every change to verify type safety across all iOS & Web modules.
 - All three upstream hard rules above (keeping Mochy Music & upstream credits intact, zero paywalls/ads, and plain-language explanations) apply equally to this iOS port.
 

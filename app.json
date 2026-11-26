@@ -58,6 +58,14 @@
           "enableBackgroundPlayback": true,
           "microphonePermission": "Allow Mochy Music to analyze audio for optional visualizers."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
       ]
     ]
   }

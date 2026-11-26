@@ -97,7 +97,10 @@ class MochyAudioEngine {
             currentTimeSec: st.currentTime || 0,
             durationSec: st.duration > 0 ? st.duration : track.durationSec || 0,
             didJustFinish: st.didJustFinish,
-            error: st.error || null,
+            error:
+              st.playbackState === 'failed' || st.playbackState === 'error'
+                ? 'Native playback failed'
+                : null,
           });
         });
       } else {
@@ -122,12 +125,9 @@ class MochyAudioEngine {
           artworkUrl: track.artworkUrl.startsWith('http') ? track.artworkUrl : undefined,
         },
         {
-          showNextTrack: true,
-          showPreviousTrack: true,
+          // expo-audio SDK 55 (iOS 15.1+) exposes seek forward/backward lock-screen buttons
           showSeekForward: true,
           showSeekBackward: true,
-          seekForwardIntervalSeconds: 10,
-          seekBackwardIntervalSeconds: 10,
         }
       );
 

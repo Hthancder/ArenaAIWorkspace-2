@@ -8,9 +8,9 @@
 *An iOS (Expo / React Native + TypeScript) port of [Mochy Music](https://github.com/realidkroo/Mochy-Music) — a sleek open-source music player with zero tracking and zero paywalls, free forever.*
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Expo SDK 58](https://img.shields.io/badge/Expo-SDK%2058-000000.svg)](https://expo.dev)
-[![React Native](https://img.shields.io/badge/React%20Native-0.88-61DAFB.svg)](https://reactnative.dev)
-[![iOS](https://img.shields.io/badge/iOS-13%2B-000000.svg)](https://developer.apple.com/ios/)
+[![Expo SDK 55](https://img.shields.io/badge/Expo-SDK%2055-000000.svg)](https://expo.dev)
+[![React Native](https://img.shields.io/badge/React%20Native-0.83-61DAFB.svg)](https://reactnative.dev)
+[![iOS](https://img.shields.io/badge/iOS-15.1%2B-000000.svg)](https://developer.apple.com/ios/)
 
 </div>
 
