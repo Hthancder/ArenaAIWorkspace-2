@@ -24,6 +24,8 @@ import { useLocalLibrary } from '../local/LocalLibraryScreen';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
+import { EmptyState } from '../ui/EmptyState';
+import { PopIn } from '../ui/PopIn';
 
 type LibFilter = 'playlists' | 'liked' | 'offline' | 'history';
 
@@ -39,6 +41,7 @@ export const LibraryScreen: React.FC = () => {
     openImport,
     openCollection,
     setIsRecapOpen,
+    setActiveTab,
   } = useHolySic();
 
   const [tab, setTab] = useState<LibFilter>('playlists');
@@ -227,6 +230,21 @@ export const LibraryScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {tab === 'playlists' && playlists.length === 0 && (
+          <EmptyState
+            icon="albums-outline"
+            accent={palette.accent}
+            title={vi ? 'Chưa có danh sách phát' : 'No playlists yet'}
+            message={
+              vi
+                ? 'Tạo playlist mới hoặc nhập từ Spotify, YouTube, Apple Music.'
+                : 'Make a new playlist or import one from Spotify, YouTube or Apple Music.'
+            }
+            actionLabel={vi ? 'Tạo playlist' : 'New playlist'}
+            actionIcon="add"
+            onAction={() => setShowCreateModal(true)}
+          />
+        )}
         {tab === 'playlists' && (
           <View style={styles.playlistList}>
             {playlists.map((pl) => (
@@ -269,7 +287,19 @@ export const LibraryScreen: React.FC = () => {
         {tab === 'liked' && (
           <>
             {likedTracks.length === 0 ? (
-              <Text style={styles.emptyNote}>{t(prefs.language, 'emptyLiked')}</Text>
+              <EmptyState
+                icon="heart-outline"
+                accent={palette.accent}
+                title={vi ? 'Chưa có bài hát đã thích' : 'No liked songs yet'}
+                message={
+                  vi
+                    ? 'Chạm trái tim trong trình phát để lưu bài hát vào đây.'
+                    : 'Tap the heart in the player to keep a song here.'
+                }
+                actionLabel={vi ? 'Tìm nhạc' : 'Find music'}
+                actionIcon="search"
+                onAction={() => setActiveTab('search')}
+              />
             ) : (
               likedTracks.map((song) => (
                 <TrackRow key={song.id} track={song} queueContext={likedTracks} />
@@ -281,7 +311,16 @@ export const LibraryScreen: React.FC = () => {
         {tab === 'offline' && (
           <>
             {offlineList.length === 0 ? (
-              <Text style={styles.emptyNote}>{t(prefs.language, 'emptyOffline')}</Text>
+              <EmptyState
+                icon="cloud-download-outline"
+                accent={palette.accent}
+                title={vi ? 'Chưa có bài tải về' : 'No downloads yet'}
+                message={
+                  vi
+                    ? 'Mở menu ⋯ của một bài hát và chọn “Tải xuống để nghe offline”.'
+                    : 'Open a song’s ⋯ menu and choose “Download for offline”.'
+                }
+              />
             ) : (
               offlineList.map((item) => (
                 <TrackRow
@@ -297,11 +336,19 @@ export const LibraryScreen: React.FC = () => {
         {tab === 'history' && (
           <>
             {history.length === 0 ? (
-              <Text style={styles.emptyNote}>
-                {vi
-                  ? 'Lịch sử nghe sẽ tự động xuất hiện tại đây.'
-                  : 'Recently played songs appear here.'}
-              </Text>
+              <EmptyState
+                icon="time-outline"
+                accent={palette.accent}
+                title={vi ? 'Chưa nghe bài nào' : 'Nothing played yet'}
+                message={
+                  vi
+                    ? 'Những bài bạn vừa nghe sẽ tự hiện ở đây.'
+                    : 'Songs you play show up here automatically.'
+                }
+                actionLabel={vi ? 'Về Trang chủ' : 'Go Home'}
+                actionIcon="home-outline"
+                onAction={() => setActiveTab('home')}
+              />
             ) : (
               history.map((ev) => (
                 <TrackRow key={ev.id} track={ev.track} queueContext={history.map((h) => h.track)} />
@@ -322,45 +369,57 @@ export const LibraryScreen: React.FC = () => {
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <Tap style={styles.modalBackdrop} onPress={() => setShowCreateModal(false)}>
-            <Tap feedback="none" style={styles.modalBox} onPress={(e) => e.stopPropagation?.()}>
-              <Text style={styles.modalTitle}>{t(prefs.language, 'createPlaylist')}</Text>
-              <TextInput
-                value={plName}
-                onChangeText={setPlName}
-                placeholder={vi ? 'Tên danh sách phát…' : 'Playlist title…'}
-                autoFocus
-                returnKeyType="next"
-                placeholderTextColor={UI.text3}
-                style={styles.modalInput}
-              />
-              <TextInput
-                value={plDesc}
-                onChangeText={setPlDesc}
-                placeholder={vi ? 'Mô tả ngắn (tuỳ chọn)…' : 'Optional description…'}
-                placeholderTextColor={UI.text3}
-                style={styles.modalInput}
-              />
-              <View style={styles.modalActions}>
-                <Tap onPress={() => setShowCreateModal(false)} style={styles.cancelModalBtn}>
-                  <Text style={{ color: UI.text, fontWeight: '600' }}>{vi ? 'Huỷ' : 'Cancel'}</Text>
-                </Tap>
-                <Tap
-                  onPress={() => {
-                    if (!plName.trim()) return;
-                    createPlaylist(plName, plDesc);
-                    setPlName('');
-                    setPlDesc('');
-                    setShowCreateModal(false);
-                  }}
-                  style={[styles.confirmModalBtn, { backgroundColor: palette.accent }]}
-                >
-                  <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
-                    {vi ? 'Tạo ngay' : 'Create'}
-                  </Text>
-                </Tap>
-              </View>
-            </Tap>
+          <Tap
+            feedback="none"
+            style={styles.modalBackdrop}
+            onPress={() => setShowCreateModal(false)}
+          >
+            <PopIn visible={showCreateModal} style={{ width: '100%', alignItems: 'center' }}>
+              <Tap feedback="none" style={styles.modalBox} onPress={(e) => e.stopPropagation?.()}>
+                <Text style={styles.modalTitle}>{t(prefs.language, 'createPlaylist')}</Text>
+                <TextInput
+                  value={plName}
+                  onChangeText={setPlName}
+                  placeholder={vi ? 'Tên danh sách phát…' : 'Playlist title…'}
+                  autoFocus
+                  returnKeyType="next"
+                  placeholderTextColor={UI.text3}
+                  style={styles.modalInput}
+                />
+                <TextInput
+                  value={plDesc}
+                  onChangeText={setPlDesc}
+                  placeholder={vi ? 'Mô tả ngắn (tuỳ chọn)…' : 'Optional description…'}
+                  placeholderTextColor={UI.text3}
+                  style={styles.modalInput}
+                />
+                <View style={styles.modalActions}>
+                  <Tap onPress={() => setShowCreateModal(false)} style={styles.cancelModalBtn}>
+                    <Text style={{ color: UI.text, fontWeight: '600' }}>
+                      {vi ? 'Huỷ' : 'Cancel'}
+                    </Text>
+                  </Tap>
+                  <Tap
+                    onPress={() => {
+                      if (!plName.trim()) return;
+                      createPlaylist(plName, plDesc);
+                      setPlName('');
+                      setPlDesc('');
+                      setShowCreateModal(false);
+                    }}
+                    disabled={!plName.trim()}
+                    style={[
+                      styles.confirmModalBtn,
+                      { backgroundColor: palette.accent, opacity: plName.trim() ? 1 : 0.45 },
+                    ]}
+                  >
+                    <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
+                      {vi ? 'Tạo ngay' : 'Create'}
+                    </Text>
+                  </Tap>
+                </View>
+              </Tap>
+            </PopIn>
           </Tap>
         </KeyboardAvoidingView>
       </Modal>

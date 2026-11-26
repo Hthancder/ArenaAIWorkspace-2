@@ -2,8 +2,10 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { PLAYER_STYLE_META } from '../../constants/preferences';
+import { Tap } from '../ui/Tap';
 import { ArtworkImage } from '../ArtworkImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HOLYSIC_COLORS } from '../../constants/theme';
@@ -19,6 +21,27 @@ export const RecapModal: React.FC = () => {
 
   const [flipped, setFlipped] = useState(false);
   const vi = prefs.language === 'vi';
+
+  // the ID card turns over: edge-on at the midpoint, the other face swaps in, and it lands flat
+  const flipV = useRef(new Animated.Value(0)).current;
+  const flipping = useRef(false);
+  const flip = () => {
+    if (flipping.current) return;
+    flipping.current = true;
+    haptic('selection');
+    Animated.timing(flipV, { toValue: 1, duration: 150, useNativeDriver: true }).start(() => {
+      setFlipped((f) => !f);
+      flipV.setValue(-1);
+      Animated.spring(flipV, {
+        toValue: 0,
+        useNativeDriver: true,
+        speed: 16,
+        bounciness: 6,
+      }).start(() => {
+        flipping.current = false;
+      });
+    });
+  };
 
   const stats = useMemo(() => {
     // real listened time only (no padding / no minimum)
@@ -74,9 +97,15 @@ export const RecapModal: React.FC = () => {
       >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>HolySic Recap & ID Card</Text>
-          <Pressable onPress={() => setIsRecapOpen(false)} style={styles.closeBtn}>
+          <Tap
+            feedback="opacity"
+            hitSlop={8}
+            onPress={() => setIsRecapOpen(false)}
+            style={styles.closeBtn}
+            accessibilityLabel={prefs.language === 'vi' ? 'Đóng' : 'Close'}
+          >
             <Ionicons name="close" size={21} color="#FFFFFF" />
-          </Pressable>
+          </Tap>
         </View>
 
         <ScrollView
@@ -85,11 +114,23 @@ export const RecapModal: React.FC = () => {
         >
           {/* Flippable HolySic Listener ID Card */}
           <Pressable
-            onPress={() => {
-              haptic('selection');
-              setFlipped((f) => !f);
-            }}
+            onPress={flip}
+            accessibilityRole="button"
+            accessibilityHint={vi ? 'Lật thẻ' : 'Flip the card'}
           >
+            <Animated.View
+              style={{
+                transform: [
+                  { perspective: 900 },
+                  {
+                    rotateY: flipV.interpolate({
+                      inputRange: [-1, 0, 1],
+                      outputRange: ['-90deg', '0deg', '90deg'],
+                    }),
+                  },
+                ],
+              }}
+            >
             <LinearGradient
               colors={
                 flipped
@@ -122,15 +163,24 @@ export const RecapModal: React.FC = () => {
                   <View style={styles.idBottomRow}>
                     <View>
                       <Text style={styles.idMetaKey}>{vi ? 'ĐÃ THÍCH' : 'LIKED'}</Text>
-                      <Text style={styles.idMetaVal}>{likedTracks.length} tracks</Text>
+                      <Text style={styles.idMetaVal}>
+                        {likedTracks.length} {vi ? 'bài' : 'tracks'}
+                      </Text>
                     </View>
                     <View>
                       <Text style={styles.idMetaKey}>OFFLINE</Text>
-                      <Text style={styles.idMetaVal}>{Object.keys(downloads).length} files</Text>
+                      <Text style={styles.idMetaVal}>
+                        {Object.keys(downloads).length} {vi ? 'bài' : 'files'}
+                      </Text>
                     </View>
                     <View>
-                      <Text style={styles.idMetaKey}>PLAYER</Text>
-                      <Text style={styles.idMetaVal}>{prefs.playerStyle}</Text>
+                      <Text style={styles.idMetaKey}>{vi ? 'TRÌNH PHÁT' : 'PLAYER'}</Text>
+                      <Text style={styles.idMetaVal} numberOfLines={1}>
+                        {(() => {
+                          const m = PLAYER_STYLE_META.find((x) => x.id === prefs.playerStyle);
+                          return m ? (vi ? m.titleVi : m.titleEn).replace(/\s*\(.*\)$/, '') : '';
+                        })()}
+                      </Text>
                     </View>
                   </View>
                 </>
@@ -162,6 +212,7 @@ export const RecapModal: React.FC = () => {
                 </View>
               )}
             </LinearGradient>
+            </Animated.View>
           </Pressable>
 
           {/* Top Songs */}

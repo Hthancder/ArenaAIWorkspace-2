@@ -14,6 +14,8 @@ export const LyricsView: React.FC = () => {
   const {
     lyrics,
     isLoadingLyrics,
+    reloadLyrics,
+    currentTrack,
     activeLyricIndex,
     seekTo,
     darkPalette: palette,
@@ -55,10 +57,36 @@ export const LyricsView: React.FC = () => {
   }
 
   if (!lyrics || lyrics.lines.length === 0) {
+    const live = !!currentTrack?.isLive;
     return (
       <View style={styles.centerBox}>
-        <Ionicons name="musical-notes-outline" size={44} color={HOLYSIC_COLORS.textMuted} />
-        <Text style={[styles.helperText, { fontFamily }]}>{t(prefs.language, 'noLyrics')}</Text>
+        <Ionicons
+          name={live ? 'radio-outline' : 'musical-notes-outline'}
+          size={44}
+          color={HOLYSIC_COLORS.textMuted}
+        />
+        <Text style={[styles.helperText, { fontFamily }]}>
+          {live
+            ? vi
+              ? 'Radio trực tiếp không có lời bài hát'
+              : 'Live radio has no lyrics'
+            : t(prefs.language, 'noLyrics')}
+        </Text>
+        {!live && currentTrack && (
+          <Tap
+            onPress={() => {
+              haptic('light');
+              reloadLyrics();
+            }}
+            style={[styles.retryBtn, { borderColor: palette.accent + '55' }]}
+            accessibilityRole="button"
+          >
+            <Ionicons name="refresh" size={15} color={palette.accent} />
+            <Text style={[styles.retryText, { color: palette.accent }]}>
+              {vi ? 'Tìm lại' : 'Search again'}
+            </Text>
+          </Tap>
+        )}
       </View>
     );
   }
@@ -76,8 +104,24 @@ export const LyricsView: React.FC = () => {
         <View style={styles.providerBadge}>
           <Ionicons name="sparkles" size={12} color={palette.accent} />
           <Text numberOfLines={1} style={[styles.providerText, { color: palette.accent }]}>
-            {lyrics.provider === 'Local' ? 'Local file' : lyrics.provider}
-            {lyrics.wordSynced ? ' · Word-Synced' : lyrics.synced ? ' · Synced LRC' : ' · Plain'}
+            {lyrics.provider === 'Local'
+              ? vi
+                ? 'Tệp trên máy'
+                : 'Local file'
+              : lyrics.provider === 'Built-in'
+                ? 'HolySic'
+                : lyrics.provider}
+            {lyrics.wordSynced
+              ? vi
+                ? ' · Theo từng chữ'
+                : ' · Word-synced'
+              : lyrics.synced
+                ? vi
+                  ? ' · Đồng bộ'
+                  : ' · Synced'
+                : vi
+                  ? ' · Không đồng bộ'
+                  : ' · Plain'}
           </Text>
         </View>
 
@@ -230,6 +274,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 21,
   },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  retryText: { fontSize: 13.5, fontWeight: '700' },
   toolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',

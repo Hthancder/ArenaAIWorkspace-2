@@ -19,6 +19,7 @@ import { GlassSurface } from './GlassSurface';
 import { useHoldSeek } from '../hooks/useHoldSeek';
 import { AmbientSpill, useAmbientColors } from './ambient/AmbientLight';
 import { T as UI, themedSheet } from '../theme/ui';
+import { LikeHeart } from './ui/LikeHeart';
 import { Tap } from './ui/Tap';
 
 export const MiniPlayer: React.FC = () => {
@@ -206,11 +207,16 @@ export const MiniPlayer: React.FC = () => {
                 if (tapOk()) toggleLike(currentTrack);
               }}
               style={styles.ctrlBtn}
+              accessibilityRole="button"
+              accessibilityState={{ selected: liked }}
+              accessibilityLabel={prefs.language === 'vi' ? 'Thích' : 'Love'}
             >
-              <Ionicons
-                name={liked ? 'heart' : 'heart-outline'}
+              <LikeHeart
+                key={currentTrack.id}
+                liked={liked}
                 size={21}
-                color={liked ? HOLYSIC_COLORS.roseLike : UI.fg(1)}
+                likedColor={HOLYSIC_COLORS.roseLike}
+                color={UI.fg(1)}
               />
             </Tap>
 

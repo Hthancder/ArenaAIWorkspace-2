@@ -286,6 +286,10 @@ export const TrackRow: React.FC<TrackRowProps> = ({
             setActionTrack(track);
           }}
           style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel={
+            (prefs.language === 'vi' ? 'Tuỳ chọn ' : 'Options for ') + track.title
+          }
         >
           <Ionicons name="ellipsis-horizontal" size={18} color={UI.text2} />
         </Tap>

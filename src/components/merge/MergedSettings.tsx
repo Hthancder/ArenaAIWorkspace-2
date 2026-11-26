@@ -241,7 +241,7 @@ export const MergedSettings: React.FC = () => {
           <View style={styles.cfRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.rowTitle}>
-                {vi ? 'Chuyển bài mượt (Crossfade)' : 'Crossfade'}
+                {vi ? 'Chuyển bài mượt' : 'Crossfade'}
               </Text>
               <Text style={styles.rowDesc}>
                 {prefs.crossfadeSec > 0

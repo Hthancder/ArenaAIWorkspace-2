@@ -267,7 +267,7 @@ export const ImportModal: React.FC<Props> = ({
         style={styles.root}
       >
         <View style={styles.header}>
-          <Tap onPress={onClose} style={styles.iconBtn} accessibilityLabel="Close">
+          <Tap onPress={onClose} style={styles.iconBtn} accessibilityLabel={vi ? 'Đóng' : 'Close'}>
             <Ionicons name="close" size={20} color={UI.text} />
           </Tap>
           <Text style={[styles.title, { fontFamily }]}>{vi ? 'Nhập nhạc' : 'Import music'}</Text>

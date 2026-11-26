@@ -42,6 +42,7 @@ import { IpodClassicView } from './IpodPlayer';
 import { LyricsView } from './LyricsView';
 import { TurntableVinylStage } from './TurntablePlayer';
 import { SheetSlot, useModalLayer, usePresentGate } from '../overlay/ModalLayers';
+import { LikeHeart } from '../ui/LikeHeart';
 import { Tap } from '../ui/Tap';
 
 type SubPane = 'artwork' | 'lyrics' | 'queue' | 'sleep' | 'diagnostics' | 'styles';
@@ -642,11 +643,16 @@ export const FullPlayerModal: React.FC = () => {
                     styles.likeCircle,
                     liked && { backgroundColor: 'rgba(255, 77, 121, 0.18)' },
                   ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: liked }}
+                  accessibilityLabel={vi ? 'Thích' : 'Love'}
                 >
-                  <Ionicons
-                    name={liked ? 'heart' : 'heart-outline'}
+                  <LikeHeart
+                    key={currentTrack.id}
+                    liked={liked}
                     size={24}
-                    color={liked ? HOLYSIC_COLORS.roseLike : '#FFFFFF'}
+                    likedColor={HOLYSIC_COLORS.roseLike}
+                    color="#FFFFFF"
                   />
                 </Tap>
               </View>

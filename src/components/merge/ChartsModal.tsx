@@ -69,7 +69,7 @@ export const ChartsModal: React.FC<Props> = ({ visible, onClose, initialGenre = 
     >
       <View style={[styles.root, { paddingTop: insets.top > 30 ? 12 : 16 }]}>
         <View style={styles.header}>
-          <Tap onPress={onClose} style={styles.iconBtn} accessibilityLabel="Close">
+          <Tap onPress={onClose} style={styles.iconBtn} accessibilityLabel={vi ? 'Đóng' : 'Close'}>
             <Ionicons name="chevron-down" size={22} color={UI.text} />
           </Tap>
           <View style={{ flex: 1 }}>

@@ -271,6 +271,8 @@ interface HolySicContextValue extends HolySicExtras {
   // Lyrics
   lyrics: LyricsData | null;
   isLoadingLyrics: boolean;
+  /** Search the lyrics providers again for the current song (after a miss / offline) */
+  reloadLyrics: () => void;
   activeLyricIndex: number;
   /** Lyrics delay for the current song, seconds */
   lyricsOffsetSec: number;
@@ -375,6 +377,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [lyrics, setLyrics] = useState<LyricsData | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
+  const [lyricsAttempt, setLyricsAttempt] = useState(0);
+  const reloadLyrics = useCallback(() => setLyricsAttempt((n) => n + 1), []);
 
   const [sleepRemainingSec, setSleepRemainingSec] = useState<number | null>(null);
   const [sleepEndOfTrack, setSleepEndOfTrack] = useState(false);
@@ -738,7 +742,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => {
       cancelled = true;
     };
-  }, [currentTrack]);
+  }, [currentTrack, lyricsAttempt]);
 
   const lyricsOffsetSec = currentTrack ? (prefs.lyricsOffsets?.[currentTrack.id] ?? 0) / 1000 : 0;
   // the active line only changes a few times a minute: follow the clock, re-render on change
@@ -2496,6 +2500,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       startInstantMix,
       lyrics,
       isLoadingLyrics,
+      reloadLyrics,
       activeLyricIndex,
       lyricsOffsetSec,
       nudgeLyricsOffset,
@@ -2581,6 +2586,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       startInstantMix,
       lyrics,
       isLoadingLyrics,
+      reloadLyrics,
       activeLyricIndex,
       lyricsOffsetSec,
       nudgeLyricsOffset,
