@@ -42,6 +42,9 @@ jobs:
           CI: '1'
         run: npx expo prebuild --platform ios --clean
 
+      - name: Harden the widget target for iOS 15 (weak-link iOS 16+ frameworks, no asset symbols)
+        run: node scripts/ios/harden-widget-target.js ios HolySicWidget
+
       - name: Install CocoaPods
         working-directory: ios
         run: pod install
@@ -107,6 +110,13 @@ jobs:
           fi
           WMIN=$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APPEX/Info.plist")
           echo "::notice title=Widget::HolySicWidget.appex embedded (MinimumOSVersion $WMIN)"
+          WEXE0=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APPEX/Info.plist")
+          WINFO=$(plutil -convert json -o - "$APPEX/Info.plist" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(" · ".join(f"{k}={d.get(k)}" for k in ["CFBundleIdentifier","CFBundleExecutable","CFBundlePackageType","CFBundleShortVersionString","CFBundleVersion","MinimumOSVersion"]) + " · ext=" + str(d.get("NSExtension")))')
+          echo "::notice title=Widget Info.plist::$WINFO"
+          # dyld must be able to start the extension on iOS 15, or iOS never lists the widget:
+          # every library not shipped with iOS 15 becomes a weak link (report → annotations)
+          python3 scripts/ios/weaklink-macho.py "$APPEX/$WEXE0" | tee widget-macho.txt
+          echo "::notice title=Widget binary (libraries dyld loads)::$(grep -v '^ *$' widget-macho.txt | tr '\n' '|' | cut -c1-3500)"
           # Unsigned builds carry no entitlements; sideloaders (TrollStore, AltStore, SideStore) read
           # them from the binary, so fake-sign with ldid to keep the App Group the widget reads from.
           brew list ldid >/dev/null 2>&1 || brew install ldid || true

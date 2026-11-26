@@ -2,6 +2,7 @@
 // widget), whether this install can feed it, and how to add it.
 
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AppState, Platform, Pressable, Text, View } from 'react-native';
@@ -50,6 +51,7 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
     lyrics,
     activeLyricIndex,
     isLoadingLyrics,
+    haptic,
   } = useHolySic();
   const vi = prefs.language === 'vi';
   const [help, setHelp] = useState(false);
@@ -111,13 +113,30 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
     if (native && !native.extensionEmbedded) return 'noExtension' as const;
     const linked = native ? native.groupAvailable : widgetLinked();
     if (!linked) return 'noGroup' as const;
+    // embedded + App Group fine, but iOS has never started the extension (it would stamp
+    // "widgetPing" the moment the widget gallery shows it)
+    if (native && native.placedCount === 0 && !native.lastPing) return 'neverRan' as const;
     if (native && native.placedCount === 0) return 'notPlaced' as const;
     return 'linked' as const;
   }, [native]);
   const placed = native?.placedCount ?? 0;
+  const [copied, setCopied] = useState(false);
+  // one line to paste into a bug report
+  const diag = native
+    ? [
+        `iOS ${native.osVersion ?? '?'}`,
+        `ext ${native.extensionEmbedded ? (native.extensionMinOS ?? 'ok') : 'missing'}`,
+        `v ${native.appVersion ?? '?'}/${native.extensionVersion ?? '?'}`,
+        `group ${native.groupAvailable ? 'ok' : 'none'} (${native.group})`,
+        `placed ${placed}`,
+        native.lastPing
+          ? `ran ${Math.max(0, Math.round((Date.now() / 1000 - native.lastPing) / 60))}m ago · ${native.pingFrom}`
+          : 'ran never',
+      ].join(' · ')
+    : '';
   useEffect(() => {
     // nothing on the Home Screen yet / something to fix → open the instructions straight away
-    if (status === 'notPlaced' || status === 'noExtension' || status === 'noGroup') setHelp(true);
+    if (status !== 'linked' && status !== 'preview' && status !== 'expoGo') setHelp(true);
   }, [status]);
 
   const top = shade(artColors?.primary, 0.55, '#2A1452');
@@ -146,6 +165,13 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
       text: vi
         ? 'Widget đã sẵn sàng nhưng chưa được thêm ra màn hình chính — làm theo 3 bước bên dưới'
         : 'The widget is ready but not on your Home Screen yet — follow the 3 steps below',
+    },
+    neverRan: {
+      icon: 'alert-circle' as const,
+      color: '#FBBF24',
+      text: vi
+        ? 'Widget có trong app nhưng iOS chưa chạy nó lần nào — làm theo các bước bên dưới để iOS nạp lại widget'
+        : 'The widget is inside the app but iOS has never started it — follow the steps below so iOS loads it',
     },
     noExtension: {
       icon: 'close-circle' as const,
@@ -435,6 +461,35 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
                 ? 'Không thấy HolySic trong danh sách widget? Mở HolySic ít nhất một lần sau khi cài, rồi khởi động lại iPhone — iOS chỉ nạp widget của app sideload sau đó.\n\n1. Giữ ngón tay trên màn hình chính đến khi biểu tượng rung\n2. Chạm + ở góc trên → tìm “HolySic”\n3. Vuốt để chọn widget “Đang phát” hoặc “Lời bài hát”, chọn cỡ Nhỏ / Vừa / Lớn → Thêm widget\nMàn hình khoá (iOS 16+): giữ màn hình khoá → Tuỳ chỉnh → Thêm tiện ích → HolySic\n\nNút trên widget (phát, chuyển bài, thích) mở HolySic và thực hiện ngay. Thanh tiến độ tự chạy trên iOS 16+, iOS 15 cập nhật mỗi ~10 giây. Widget lời bài hát đổi dòng đúng lúc theo lời đồng bộ (cả khi app chạy nền); chạm vào để mở lời trong trình phát.'
                 : 'Can’t find HolySic in the widget list? Open HolySic at least once after installing, then restart the iPhone — iOS only loads widgets of sideloaded apps after that.\n\n1. Touch and hold the Home Screen until the icons jiggle\n2. Tap + in the corner → search “HolySic”\n3. Swipe to “Now Playing” or “Lyrics”, pick Small / Medium / Large → Add Widget\nLock Screen (iOS 16+): hold the Lock Screen → Customize → Add Widgets → HolySic\n\nWidget buttons (play, skip, like) open HolySic and act right away. The progress bar runs live on iOS 16+, about every 10 s on iOS 15. The lyrics widget switches lines on time from synced lyrics (also while HolySic is in the background); tap it to open the lyrics in the player.'}
             </Text>
+            {status === 'neverRan' && (
+              <Text style={[styles.helpText, styles.fixText]}>
+                {vi
+                  ? 'Cách sửa:\n1. Cài bản IPA mới nhất (đã sửa lỗi widget không khởi động trên iOS 15).\n2. TrollStore: Cài đặt → “Refresh App Registrations” (Làm mới đăng ký ứng dụng), rồi khởi động lại iPhone.\n3. Mở HolySic, phát một bài, rồi mở danh sách widget (giữ màn hình → +) và tìm “HolySic”.\n4. Quay lại đây — dòng trạng thái tự cập nhật khi iOS đã chạy widget.'
+                  : 'How to fix:\n1. Install the latest IPA (fixes the widget not starting on iOS 15).\n2. TrollStore: Settings → “Refresh App Registrations”, then restart the iPhone.\n3. Open HolySic, play a song, then open the widget gallery (hold the Home Screen → +) and search “HolySic”.\n4. Come back here — the status updates once iOS has run the widget.'}
+              </Text>
+            )}
+            {native && (
+              <Pressable
+                onPress={() => {
+                  Clipboard.setStringAsync(diag).catch(() => {});
+                  haptic('light');
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1600);
+                }}
+                style={styles.diagRow}
+                accessibilityRole="button"
+                accessibilityLabel={vi ? 'Sao chép chi tiết kỹ thuật' : 'Copy technical details'}
+              >
+                <Text style={styles.diagText} numberOfLines={3}>
+                  {diag}
+                </Text>
+                <Ionicons
+                  name={copied ? 'checkmark' : 'copy-outline'}
+                  size={14}
+                  color={copied ? '#34D399' : UI.text3}
+                />
+              </Pressable>
+            )}
             {status === 'noExtension' && (
               <Text style={[styles.helpText, styles.fixText]}>
                 {vi
@@ -603,6 +658,22 @@ const styles = themedSheet(() => ({
     backgroundColor: UI.fg(0.05),
   },
   helpText: { color: UI.text2, fontSize: 12.5, lineHeight: 18 },
+  diagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: UI.fg(0.05),
+  },
+  diagText: {
+    flex: 1,
+    color: UI.text3,
+    fontSize: 10.5,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
   fixText: {
     marginTop: 8,
     padding: 10,

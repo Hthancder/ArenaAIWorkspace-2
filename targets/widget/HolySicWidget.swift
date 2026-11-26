@@ -173,6 +173,7 @@ struct NowPlayingProvider: TimelineProvider {
   }
 
   func getSnapshot(in context: Context, completion: @escaping (NowPlayingEntry) -> Void) {
+    Heartbeat.beat(context.isPreview ? "gallery" : "snapshot")
     // the widget gallery shows a sample until something has played
     if let np = SharedStore.nowPlaying() {
       completion(NowPlayingEntry(date: Date(), np: np, art: SharedStore.artwork()))
@@ -182,6 +183,7 @@ struct NowPlayingProvider: TimelineProvider {
   }
 
   func getTimeline(in context: Context, completion: @escaping (Timeline<NowPlayingEntry>) -> Void) {
+    Heartbeat.beat("timeline")
     let now = Date()
     let stored = SharedStore.nowPlaying()
     let art = SharedStore.artwork()
@@ -261,13 +263,40 @@ extension View {
   }
 }
 
-extension WidgetConfiguration {
-  func contentMarginsDisabledIfAvailable() -> some WidgetConfiguration {
+/// iOS 17 adds content margins around every widget; HolySic draws edge to edge. This is done at
+/// the View level on purpose: an opaque `some WidgetConfiguration` that switches type behind
+/// `if #available` needs a newer Swift runtime than iOS 15 has, and a widget extension that fails
+/// there never shows up in the widget gallery at all.
+struct EdgeToEdge: ViewModifier {
+  @ViewBuilder
+  func body(content: Content) -> some View {
     if #available(iOSApplicationExtension 17.0, *) {
-      return self.contentMarginsDisabled()
+      content.modifier(EdgeToEdge17())
     } else {
-      return self
+      content
     }
+  }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct EdgeToEdge17: ViewModifier {
+  @Environment(\.widgetContentMargins) var margins
+  func body(content: Content) -> some View {
+    content.padding(
+      EdgeInsets(
+        top: -margins.top, leading: -margins.leading, bottom: -margins.bottom,
+        trailing: -margins.trailing))
+  }
+}
+
+/// The widget writes when iOS last ran it into the App Group, so the app can tell
+/// "the extension really runs on this iPhone" apart from "it is only embedded".
+enum Heartbeat {
+  static func beat(_ where: String) {
+    guard let d = SharedStore.defaults else { return }
+    d.set(Date().timeIntervalSince1970, forKey: "widgetPing")
+    d.set(where, forKey: "widgetPingFrom")
+    d.set(UIDevice.current.systemVersion, forKey: "widgetPingOS")
   }
 }
 
@@ -887,6 +916,7 @@ struct LyricsProvider: TimelineProvider {
   }
 
   func getSnapshot(in context: Context, completion: @escaping (LyricsEntry) -> Void) {
+    Heartbeat.beat(context.isPreview ? "gallery" : "snapshot")
     if let np = SharedStore.nowPlaying() {
       let lines = SharedStore.lyrics(for: np)
       let idx = lines.map { lyricIndex($0, at: np.elapsed(at: Date())) } ?? -1
@@ -898,6 +928,7 @@ struct LyricsProvider: TimelineProvider {
   }
 
   func getTimeline(in context: Context, completion: @escaping (Timeline<LyricsEntry>) -> Void) {
+    Heartbeat.beat("timeline")
     let now = Date()
     let np = SharedStore.nowPlaying()
     let art = SharedStore.artwork()
@@ -1254,12 +1285,11 @@ struct HolySicLyricsWidget: Widget {
 
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: kind, provider: LyricsProvider()) { entry in
-      HolySicLyricsEntryView(entry: entry)
+      HolySicLyricsEntryView(entry: entry).modifier(EdgeToEdge())
     }
     .configurationDisplayName("HolySic · Lời bài hát")
     .description("Lời bài hát chạy theo nhạc, ngay trên màn hình chính và màn hình khoá.")
     .supportedFamilies(families)
-    .contentMarginsDisabledIfAvailable()
   }
 }
 
@@ -1278,12 +1308,11 @@ struct HolySicWidget: Widget {
 
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: kind, provider: NowPlayingProvider()) { entry in
-      HolySicWidgetEntryView(entry: entry)
+      HolySicWidgetEntryView(entry: entry).modifier(EdgeToEdge())
     }
     .configurationDisplayName("HolySic · Đang phát")
     .description("Bài đang phát, ảnh bìa, tiến độ và hàng chờ — chạm để điều khiển.")
     .supportedFamilies(families)
-    .contentMarginsDisabledIfAvailable()
   }
 }
 

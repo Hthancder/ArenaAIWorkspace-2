@@ -22,6 +22,15 @@ export interface NativeWidgetStatus {
   placed?: Record<string, number>;
   placedCount?: number;
   placedError?: string;
+  osVersion?: string;
+  /** unix seconds of the last time iOS ran the widget extension (absent = never) */
+  lastPing?: number;
+  /** gallery | snapshot | timeline */
+  pingFrom?: string;
+  extensionBundleId?: string;
+  extensionMinOS?: string;
+  extensionVersion?: string;
+  appVersion?: string;
 }
 
 export const HolySicWidgetModule =

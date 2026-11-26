@@ -4,6 +4,7 @@
 // can tell the user exactly what to fix.
 
 import ExpoModulesCore
+import UIKit
 import WidgetKit
 
 public class HolySicWidgetModule: Module {
@@ -79,7 +80,28 @@ public class HolySicWidgetModule: Module {
         "groupAvailable":
           FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: g) != nil,
         "bundleId": Bundle.main.bundleIdentifier ?? "",
+        "osVersion": UIDevice.current.systemVersion,
       ]
+      // the widget stamps the App Group every time iOS runs it (gallery preview, timeline)
+      if let d = UserDefaults(suiteName: g) {
+        let ping = d.double(forKey: "widgetPing")
+        if ping > 0 {
+          info["lastPing"] = ping
+          info["pingFrom"] = d.string(forKey: "widgetPingFrom") ?? ""
+        }
+      }
+      // what iOS needs from the extension bundle itself
+      if let plugins = Bundle.main.builtInPlugInsURL,
+        let name = exts.first(where: { $0.lowercased().contains("widget") }),
+        let ext = Bundle(url: plugins.appendingPathComponent(name))
+      {
+        info["extensionBundleId"] = ext.bundleIdentifier ?? ""
+        info["extensionMinOS"] = ext.object(forInfoDictionaryKey: "MinimumOSVersion") as? String ?? ""
+        info["extensionVersion"] =
+          ext.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        info["appVersion"] =
+          Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+      }
       WidgetCenter.shared.getCurrentConfigurations { result in
         switch result {
         case .success(let configs):
