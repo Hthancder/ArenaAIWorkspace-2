@@ -23,7 +23,14 @@ export interface HolySicAudioSessionNative {
   getRoute(): NativeRouteInfo;
   setPreferredSampleRate(rate: number): Promise<NativeRouteInfo>;
   resetPreferredSampleRate(): Promise<NativeRouteInfo>;
+  /** iPhone (hardware) volume 0…1 */
+  getSystemVolume(): number;
+  /** move the real system volume; false when no window / slider is available */
+  setSystemVolume(value: number): Promise<boolean>;
+  /** open the native AirPlay / Bluetooth output picker */
+  showRoutePicker(): Promise<boolean>;
   addListener(event: 'onRouteChange', cb: (r: NativeRouteInfo) => void): { remove(): void };
+  addListener(event: 'onSystemVolume', cb: (e: { volume: number }) => void): { remove(): void };
 }
 
 export const HolySicAudioSessionModule =

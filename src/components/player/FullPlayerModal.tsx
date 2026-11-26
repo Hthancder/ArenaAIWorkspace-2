@@ -4,13 +4,17 @@ import { SignalPathList } from '../audio/SignalPathList';
 import { useSignalPath } from '../audio/useSignalPath';
 import { PlayerPaneBus } from '../../services/ui/playerPaneBus';
 import { FitStage } from './FitStage';
-import { Ionicons } from '@expo/vector-icons';
+import { ScrubBar } from './ScrubBar';
+import { AudioOutput, useAudioOutput } from '../../services/audio/audioOutput';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  LayoutChangeEvent,
+  Animated,
   Modal,
+  PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -77,6 +81,7 @@ export const FullPlayerModal: React.FC = () => {
     seekBy,
     loudnessLabel,
     ambient,
+    haptic,
   } = useHolySic();
   const bitPath = useSignalPath();
   const playerVisible = usePresentGate(isPlayerOpen, 'player');
@@ -92,6 +97,7 @@ export const FullPlayerModal: React.FC = () => {
   const { width: winW, height: winH } = useWindowDimensions();
   // narrow phones (SE / mini / 375pt): stack the deck icon over its label so nothing wraps
   const compactDeck = winW < 400;
+  const tinyDeck = winW < 350; // iPhone SE 1st gen / 320pt
   // 4" screens: while lyrics/queue/sleep are open, drop the volume row to give the pane room
   const roomyPane = winH < 640 && pane !== 'artwork';
   // widget "lyrics" deep link → open on the lyrics pane
@@ -103,14 +109,93 @@ export const FullPlayerModal: React.FC = () => {
       }),
     []
   );
-  const [seekBarWidth, setSeekBarWidth] = useState(300);
-  const [volBarWidth, setVolBarWidth] = useState(240);
+  // seek bar: while dragging, the timestamps preview the target and the seek happens on release
+  const [seekPreview, setSeekPreview] = useState<number | null>(null);
+  const output = useAudioOutput();
+  // IPA builds: the volume slider drives the real iPhone volume (synced with the side buttons)
+  const systemVol = output.systemVolume;
+  const outName = output.route?.outputs?.[0];
+  const outIsExternal = !!outName && !/Speaker|Receiver/i.test(outName.type);
+
+  // ── swipe down to close (the player follows the finger, the app shows through behind it) ──
+  const { height: screenH } = useWindowDimensions();
+  const dragY = useRef(new Animated.Value(0)).current;
+  const swipeRef = useRef({
+    close: () => setIsPlayerOpen(false),
+    h: screenH,
+    next: playNext,
+    prev: playPrevious,
+    haptic,
+    pane,
+  });
+  swipeRef.current = {
+    close: () => setIsPlayerOpen(false),
+    h: screenH,
+    next: playNext,
+    prev: playPrevious,
+    haptic,
+    pane,
+  };
+  useEffect(() => {
+    if (isPlayerOpen) dragY.setValue(0);
+  }, [isPlayerOpen, dragY]);
+  const dismissPan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) => g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx) * 1.4,
+      onPanResponderMove: (_e, g) => dragY.setValue(Math.max(0, g.dy)),
+      onPanResponderRelease: (_e, g) => {
+        if (g.dy > 130 || (g.dy > 40 && g.vy > 0.9)) {
+          swipeRef.current.haptic('light');
+          Animated.timing(dragY, {
+            toValue: swipeRef.current.h,
+            duration: 220,
+            useNativeDriver: true,
+          }).start(() => swipeRef.current.close());
+        } else {
+          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+        }
+      },
+      onPanResponderTerminate: () =>
+        Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start(),
+    })
+  ).current;
+  // ── swipe the cover left / right to change song ──
+  const coverX = useRef(new Animated.Value(0)).current;
+  const coverPan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderMove: (_e, g) => coverX.setValue(g.dx),
+      onPanResponderRelease: (_e, g) => {
+        const go = Math.abs(g.dx) > 90 || (Math.abs(g.dx) > 30 && Math.abs(g.vx) > 0.7);
+        if (go) {
+          const dir = g.dx < 0 ? -1 : 1;
+          swipeRef.current.haptic('medium');
+          Animated.timing(coverX, {
+            toValue: dir * 420,
+            duration: 160,
+            useNativeDriver: true,
+          }).start(() => {
+            if (dir < 0) swipeRef.current.next();
+            else swipeRef.current.prev();
+            coverX.setValue(-dir * 260);
+            Animated.spring(coverX, { toValue: 0, useNativeDriver: true, bounciness: 5 }).start();
+          });
+        } else {
+          Animated.spring(coverX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+        }
+      },
+      onPanResponderTerminate: () =>
+        Animated.spring(coverX, { toValue: 0, useNativeDriver: true }).start(),
+    })
+  ).current;
 
   if (!currentTrack) return null;
   const vi = prefs.language === 'vi';
   const liked = isLiked(currentTrack.id);
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const progress = durationSec > 0 ? Math.min(1, Math.max(0, positionSec / durationSec)) : 0;
+  const shownPos = seekPreview ?? positionSec;
 
   const ambientBackdrop =
     ambientOn && prefs.playerBackground === 'AMBIENT' && prefs.playerStyle !== 'IPOD';
@@ -124,624 +209,720 @@ export const FullPlayerModal: React.FC = () => {
           ? [palette.surface, '#0A0A0F', '#040406']
           : palette.gradient;
 
-  const handleSeekPress = (evt: any) => {
-    const locX = evt?.nativeEvent?.locationX;
-    if (typeof locX === 'number' && seekBarWidth > 0 && durationSec > 0) {
-      const ratio = Math.max(0, Math.min(1, locX / seekBarWidth));
-      seekTo(ratio * durationSec);
-    }
-  };
-
-  const handleVolumePress = (evt: any) => {
-    const locX = evt?.nativeEvent?.locationX;
-    if (typeof locX === 'number' && volBarWidth > 0) {
-      setVolume(Math.max(0, Math.min(1, locX / volBarWidth)));
-    }
-  };
+  const volValue = systemVol ?? volume;
+  const changeVolume = (v: number) =>
+    systemVol != null ? AudioOutput.setSystemVolume(v) : setVolume(v);
 
   return (
     <Modal
       visible={playerVisible}
       animationType="slide"
-      presentationStyle="fullScreen"
+      transparent
+      statusBarTranslucent
       onRequestClose={() => setIsPlayerOpen(false)}
     >
-      <LinearGradient
-        colors={gradientColors}
-        start={{ x: 0.1, y: 0 }}
-        end={{ x: 0.9, y: 1 }}
+      {/* while swiping down, the app shows through (dimmed) behind the player */}
+      <Animated.View
+        pointerEvents="none"
         style={[
-          styles.root,
+          StyleSheet.absoluteFill,
           {
-            paddingTop: Math.max(insets.top, 14),
-            paddingBottom: Math.max(insets.bottom, 16),
+            backgroundColor: '#000',
+            opacity: dragY.interpolate({
+              inputRange: [0, Math.max(1, screenH)],
+              outputRange: [0.55, 0],
+              extrapolate: 'clamp',
+            }),
           },
         ]}
+      />
+      <Animated.View
+        style={{
+          flex: 1,
+          overflow: 'hidden',
+          borderTopLeftRadius: 0,
+          transform: [{ translateY: dragY }],
+          // web preview: drags must not turn into text selection
+          ...(Platform.OS === 'web' ? ({ userSelect: 'none' } as object) : null),
+        }}
       >
-        {ambientBackdrop && (
-          <AmbientBackdrop
-            artworkUrl={currentTrack.artworkUrl}
-            colors={ambientColors}
-            level={ambient.level}
-            energy={energy}
-          />
-        )}
-        {/* Top Bar */}
-        <View style={styles.topBar}>
-          <Pressable hitSlop={10} onPress={() => setIsPlayerOpen(false)} style={styles.topIconBtn}>
-            <Ionicons name="chevron-down" size={24} color="#FFFFFF" />
-          </Pressable>
-
-          {/* Interactive Stream Quality Pill -> Opens HolySic Diagnostics */}
-          <Pressable
-            onPress={() => setPane((p) => (p === 'diagnostics' ? 'artwork' : 'diagnostics'))}
-            style={[styles.qualityBadgeBtn, { borderColor: palette.accent + '40' }]}
-          >
-            <Ionicons
-              name={
-                prefs.bitPerfect
-                  ? bitPath.perfect
-                    ? 'checkmark-circle'
-                    : 'pulse'
-                  : resolvedStream?.isOffline
-                    ? 'arrow-down-circle'
-                    : 'sparkles'
-              }
-              size={12}
-              color={palette.accent}
+        <LinearGradient
+          colors={gradientColors}
+          start={{ x: 0.1, y: 0 }}
+          end={{ x: 0.9, y: 1 }}
+          style={[
+            styles.root,
+            {
+              paddingTop: Math.max(insets.top, 14),
+              paddingBottom: Math.max(insets.bottom, 16),
+            },
+          ]}
+        >
+          {ambientBackdrop && (
+            <AmbientBackdrop
+              artworkUrl={currentTrack.artworkUrl}
+              colors={ambientColors}
+              level={ambient.level}
+              energy={energy}
             />
-            <Text numberOfLines={1} style={[styles.qualityBadgeLabel, { color: palette.accent }]}>
-              {prefs.bitPerfect ? 'Bit-perfect · ' : ''}
-              {resolvedStream?.qualityLabel || currentTrack.qualityBadge || 'HolySic Stream'}
-              {loudnessLabel ? ` · RG ${loudnessLabel}` : ''}
-            </Text>
-          </Pressable>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          )}
+          {/* Top Bar — also the grab area for swipe-down-to-close */}
+          <View style={styles.topBar} {...dismissPan.panHandlers}>
             <Pressable
-              hitSlop={8}
-              onPress={() => setPane((p) => (p === 'styles' ? 'artwork' : 'styles'))}
-              style={[
-                styles.styleChipBtn,
-                pane === 'styles' && { backgroundColor: palette.accent },
-              ]}
-            >
-              <Ionicons
-                name="color-wand-outline"
-                size={16}
-                color={pane === 'styles' ? palette.onAccent : '#FFFFFF'}
-              />
-            </Pressable>
-
-            <Pressable
-              hitSlop={8}
-              onPress={() => setActionTrack(currentTrack)}
+              hitSlop={10}
+              onPress={() => setIsPlayerOpen(false)}
               style={styles.topIconBtn}
             >
-              <Ionicons name="ellipsis-horizontal" size={21} color="#FFFFFF" />
+              <Ionicons name="chevron-down" size={24} color="#FFFFFF" />
             </Pressable>
-          </View>
-        </View>
 
-        {/* Center Stage */}
-        <View style={styles.stageArea}>
-          {pane === 'lyrics' ? (
-            <LyricsView />
-          ) : pane === 'queue' ? (
-            <QueuePane onDone={() => setPane('artwork')} />
-          ) : pane === 'sleep' ? (
-            <View style={styles.overlayCard}>
-              {/* scrolls on short screens (4" SE) instead of spilling over the title */}
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={[styles.paneTitle, { fontFamily, marginBottom: 6 }]}>
-                  {vi ? 'Hẹn giờ tắt nhạc' : 'Sleep Timer'}
-                </Text>
-                <Text style={styles.subHelper}>
-                  {sleepEndOfTrack
-                    ? vi
-                      ? 'Đang bật: Tự dừng khi hết bài hiện tại'
-                      : 'Active: Stops after current song'
-                    : sleepRemainingSec !== null
+            {/* Interactive Stream Quality Pill -> Opens HolySic Diagnostics */}
+            <Pressable
+              onPress={() => setPane((p) => (p === 'diagnostics' ? 'artwork' : 'diagnostics'))}
+              style={[styles.qualityBadgeBtn, { borderColor: palette.accent + '40' }]}
+            >
+              <Ionicons
+                name={
+                  prefs.bitPerfect
+                    ? bitPath.perfect
+                      ? 'checkmark-circle'
+                      : 'pulse'
+                    : resolvedStream?.isOffline
+                      ? 'arrow-down-circle'
+                      : 'sparkles'
+                }
+                size={12}
+                color={palette.accent}
+              />
+              <Text numberOfLines={1} style={[styles.qualityBadgeLabel, { color: palette.accent }]}>
+                {prefs.bitPerfect ? 'Bit-perfect · ' : ''}
+                {resolvedStream?.qualityLabel || currentTrack.qualityBadge || 'HolySic Stream'}
+                {loudnessLabel ? ` · RG ${loudnessLabel}` : ''}
+              </Text>
+            </Pressable>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <Pressable
+                hitSlop={8}
+                onPress={() => setPane((p) => (p === 'styles' ? 'artwork' : 'styles'))}
+                style={[
+                  styles.styleChipBtn,
+                  pane === 'styles' && { backgroundColor: palette.accent },
+                ]}
+              >
+                <Ionicons
+                  name="color-wand-outline"
+                  size={16}
+                  color={pane === 'styles' ? palette.onAccent : '#FFFFFF'}
+                />
+              </Pressable>
+
+              <Pressable
+                hitSlop={8}
+                onPress={() => setActionTrack(currentTrack)}
+                style={styles.topIconBtn}
+              >
+                <Ionicons name="ellipsis-horizontal" size={21} color="#FFFFFF" />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Center Stage */}
+          <View style={styles.stageArea} {...(pane === 'artwork' ? dismissPan.panHandlers : null)}>
+            {pane === 'lyrics' ? (
+              <LyricsView />
+            ) : pane === 'queue' ? (
+              <QueuePane onDone={() => setPane('artwork')} />
+            ) : pane === 'sleep' ? (
+              <View style={styles.overlayCard}>
+                {/* scrolls on short screens (4" SE) instead of spilling over the title */}
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <Text style={[styles.paneTitle, { fontFamily, marginBottom: 6 }]}>
+                    {vi ? 'Hẹn giờ tắt nhạc' : 'Sleep Timer'}
+                  </Text>
+                  <Text style={styles.subHelper}>
+                    {sleepEndOfTrack
                       ? vi
-                        ? `Còn lại: ${formatTimeSec(sleepRemainingSec)}`
-                        : `Remaining: ${formatTimeSec(sleepRemainingSec)}`
-                      : vi
-                        ? 'Chọn thời gian để HolySic tự động dừng phát nhạc'
-                        : 'Choose when HolySic gently pauses playback'}
-                </Text>
-                <View style={styles.sleepGrid}>
-                  {[5, 15, 30, 45, 60].map((mins) => (
+                        ? 'Đang bật: Tự dừng khi hết bài hiện tại'
+                        : 'Active: Stops after current song'
+                      : sleepRemainingSec !== null
+                        ? vi
+                          ? `Còn lại: ${formatTimeSec(sleepRemainingSec)}`
+                          : `Remaining: ${formatTimeSec(sleepRemainingSec)}`
+                        : vi
+                          ? 'Chọn thời gian để HolySic tự động dừng phát nhạc'
+                          : 'Choose when HolySic gently pauses playback'}
+                  </Text>
+                  <View style={styles.sleepGrid}>
+                    {[5, 15, 30, 45, 60].map((mins) => (
+                      <Pressable
+                        key={mins}
+                        onPress={() => {
+                          setSleepTimer(mins);
+                          setPane('artwork');
+                        }}
+                        style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
+                      >
+                        <Text style={styles.sleepOptionText}>
+                          {mins} {vi ? 'phút' : 'min'}
+                        </Text>
+                      </Pressable>
+                    ))}
                     <Pressable
-                      key={mins}
                       onPress={() => {
-                        setSleepTimer(mins);
+                        setSleepTimer('end_of_track');
                         setPane('artwork');
                       }}
                       style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
                     >
                       <Text style={styles.sleepOptionText}>
-                        {mins} {vi ? 'phút' : 'min'}
+                        {vi ? 'Hết bài này' : 'End of Song'}
                       </Text>
                     </Pressable>
-                  ))}
-                  <Pressable
-                    onPress={() => {
-                      setSleepTimer('end_of_track');
-                      setPane('artwork');
-                    }}
-                    style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
-                  >
-                    <Text style={styles.sleepOptionText}>{vi ? 'Hết bài này' : 'End of Song'}</Text>
+                  </View>
+                  {(sleepRemainingSec !== null || sleepEndOfTrack) && (
+                    <Pressable onPress={() => setSleepTimer(null)} style={styles.turnOffSleepBtn}>
+                      <Text style={{ color: '#F87171', fontWeight: '700' }}>
+                        {vi ? 'Tắt hẹn giờ' : 'Turn Off Timer'}
+                      </Text>
+                    </Pressable>
+                  )}
+                </ScrollView>
+              </View>
+            ) : pane === 'diagnostics' ? (
+              <View style={styles.overlayCard}>
+                <View style={styles.paneHeaderRow}>
+                  <Text style={[styles.paneTitle, { fontFamily }]}>
+                    {vi ? 'Chẩn đoán luồng phát' : 'Stream Source Diagnostics'}
+                  </Text>
+                  <Pressable onPress={() => setPane('artwork')}>
+                    <Ionicons name="close" size={22} color="#FFF" />
                   </Pressable>
                 </View>
-                {(sleepRemainingSec !== null || sleepEndOfTrack) && (
-                  <Pressable onPress={() => setSleepTimer(null)} style={styles.turnOffSleepBtn}>
-                    <Text style={{ color: '#F87171', fontWeight: '700' }}>
-                      {vi ? 'Tắt hẹn giờ' : 'Turn Off Timer'}
-                    </Text>
-                  </Pressable>
-                )}
-              </ScrollView>
-            </View>
-          ) : pane === 'diagnostics' ? (
-            <View style={styles.overlayCard}>
-              <View style={styles.paneHeaderRow}>
-                <Text style={[styles.paneTitle, { fontFamily }]}>
-                  {vi ? 'Chẩn đoán luồng phát' : 'Stream Source Diagnostics'}
+                <Text style={styles.subHelper}>
+                  {resolvedStream
+                    ? `${resolvedStream.sourceLabel} · ${resolvedStream.qualityLabel} (${resolvedStream.codec})`
+                    : 'Resolving modules…'}
                 </Text>
-                <Pressable onPress={() => setPane('artwork')}>
-                  <Ionicons name="close" size={22} color="#FFF" />
-                </Pressable>
-              </View>
-              <Text style={styles.subHelper}>
-                {resolvedStream
-                  ? `${resolvedStream.sourceLabel} · ${resolvedStream.qualityLabel} (${resolvedStream.codec})`
-                  : 'Resolving modules…'}
-              </Text>
-              <ScrollView style={{ marginTop: 12 }}>
-                {prefs.bitPerfect && (
-                  <View style={styles.bpBox}>
-                    <Text style={styles.bpBoxTitle}>
-                      {bitPath.perfect
-                        ? vi
-                          ? 'Bit-perfect: tín hiệu đi nguyên vẹn'
-                          : 'Bit-perfect: the signal is untouched'
-                        : vi
-                          ? 'Đường tín hiệu (Bit-perfect)'
-                          : 'Signal path (bit-perfect)'}
-                    </Text>
-                    <SignalPathList
-                      checks={bitPath.checks}
-                      text="#FFFFFF"
-                      text2="rgba(255,255,255,0.62)"
-                      line="rgba(255,255,255,0.14)"
-                    />
-                  </View>
-                )}
-                {(resolvedStream?.diagnostics || []).map((d, idx) => (
-                  <View key={idx} style={styles.diagRow}>
-                    <Ionicons
-                      name={
-                        d.ok === true
-                          ? 'checkmark-circle'
-                          : d.ok === false
-                            ? 'close-circle'
-                            : 'ellipse-outline'
-                      }
-                      size={18}
-                      color={d.ok ? '#34D399' : '#94A3B8'}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.diagTitle}>
-                        {d.module} · {d.step}
-                        {d.latencyMs !== undefined ? ` (${d.latencyMs}ms)` : ''}
+                <ScrollView style={{ marginTop: 12 }}>
+                  {prefs.bitPerfect && (
+                    <View style={styles.bpBox}>
+                      <Text style={styles.bpBoxTitle}>
+                        {bitPath.perfect
+                          ? vi
+                            ? 'Bit-perfect: tín hiệu đi nguyên vẹn'
+                            : 'Bit-perfect: the signal is untouched'
+                          : vi
+                            ? 'Đường tín hiệu (Bit-perfect)'
+                            : 'Signal path (bit-perfect)'}
                       </Text>
-                      <Text style={styles.diagDetail}>{d.detail}</Text>
+                      <SignalPathList
+                        checks={bitPath.checks}
+                        text="#FFFFFF"
+                        text2="rgba(255,255,255,0.62)"
+                        line="rgba(255,255,255,0.14)"
+                      />
                     </View>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          ) : pane === 'styles' ? (
-            <View style={styles.overlayCard}>
-              <View style={styles.paneHeaderRow}>
-                <Text style={[styles.paneTitle, { fontFamily }]}>
-                  {vi ? 'Chọn giao diện Player HolySic' : 'HolySic Player Presets'}
-                </Text>
-                <Pressable onPress={() => setPane('artwork')}>
-                  <Ionicons name="close" size={22} color="#FFF" />
-                </Pressable>
+                  )}
+                  {(resolvedStream?.diagnostics || []).map((d, idx) => (
+                    <View key={idx} style={styles.diagRow}>
+                      <Ionicons
+                        name={
+                          d.ok === true
+                            ? 'checkmark-circle'
+                            : d.ok === false
+                              ? 'close-circle'
+                              : 'ellipse-outline'
+                        }
+                        size={18}
+                        color={d.ok ? '#34D399' : '#94A3B8'}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.diagTitle}>
+                          {d.module} · {d.step}
+                          {d.latencyMs !== undefined ? ` (${d.latencyMs}ms)` : ''}
+                        </Text>
+                        <Text style={styles.diagDetail}>{d.detail}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
               </View>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {PLAYER_STYLE_META.map((meta) => {
-                  const selected = prefs.playerStyle === meta.id;
-                  return (
-                    <Pressable
-                      key={meta.id}
-                      onPress={() => {
-                        updatePrefs({ playerStyle: meta.id as PlayerStyle });
-                        setPane('artwork');
-                      }}
+            ) : pane === 'styles' ? (
+              <View style={styles.overlayCard}>
+                <View style={styles.paneHeaderRow}>
+                  <Text style={[styles.paneTitle, { fontFamily }]}>
+                    {vi ? 'Chọn giao diện Player HolySic' : 'HolySic Player Presets'}
+                  </Text>
+                  <Pressable onPress={() => setPane('artwork')}>
+                    <Ionicons name="close" size={22} color="#FFF" />
+                  </Pressable>
+                </View>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {PLAYER_STYLE_META.map((meta) => {
+                    const selected = prefs.playerStyle === meta.id;
+                    return (
+                      <Pressable
+                        key={meta.id}
+                        onPress={() => {
+                          updatePrefs({ playerStyle: meta.id as PlayerStyle });
+                          setPane('artwork');
+                        }}
+                        style={[
+                          styles.styleSelectCard,
+                          selected && {
+                            borderColor: palette.accent,
+                            backgroundColor: palette.container + '66',
+                          },
+                        ]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.styleCardTitle}>
+                            {vi ? meta.titleVi : meta.titleEn}
+                          </Text>
+                          <Text style={styles.styleCardDesc}>{vi ? meta.descVi : meta.descEn}</Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.styleCardBadge,
+                            {
+                              backgroundColor: selected ? palette.accent : 'rgba(255,255,255,0.1)',
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: '800',
+                              color: selected ? palette.onAccent : '#FFF',
+                            }}
+                          >
+                            {meta.badge}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : prefs.playerStyle === 'IPOD' ? (
+              <FitStage>
+                <IpodClassicView />
+              </FitStage>
+            ) : prefs.playerStyle === 'BEDSIDE' ? (
+              <BedsideClockView />
+            ) : prefs.playerStyle === 'TURNTABLE' ? (
+              <FitStage>
+                <CoverGlow
+                  colors={ambientColors}
+                  level={ambientOn ? ambient.level * 0.8 : 0}
+                  energy={energy}
+                  size={300}
+                >
+                  <TurntableVinylStage />
+                </CoverGlow>
+              </FitStage>
+            ) : (
+              /* Flagship & Poster Cover Stage — wrapped in the ambient glow */
+              <FitStage>
+                <View style={styles.flagshipCoverCenter}>
+                  <CoverGlow
+                    colors={ambientColors}
+                    level={ambientOn ? ambient.level : 0}
+                    energy={energy}
+                    size={prefs.playerStyle === 'POSTER' ? 270 : 300}
+                  >
+                    {/* swipe the cover ← next · → previous */}
+                    <Animated.View
+                      {...coverPan.panHandlers}
+                      accessibilityHint={
+                        vi ? 'Vuốt trái / phải để chuyển bài' : 'Swipe left or right to change song'
+                      }
                       style={[
-                        styles.styleSelectCard,
-                        selected && {
-                          borderColor: palette.accent,
-                          backgroundColor: palette.container + '66',
+                        styles.coverShadowWrap,
+                        prefs.playerStyle === 'POSTER' && styles.posterCoverWrap,
+                        {
+                          transform: [
+                            { translateX: coverX },
+                            {
+                              rotate: coverX.interpolate({
+                                inputRange: [-400, 0, 400],
+                                outputRange: ['-6deg', '0deg', '6deg'],
+                              }),
+                            },
+                            { scale: isPlaying ? 1 : 0.94 },
+                          ],
                         },
                       ]}
                     >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.styleCardTitle}>
-                          {vi ? meta.titleVi : meta.titleEn}
-                        </Text>
-                        <Text style={styles.styleCardDesc}>{vi ? meta.descVi : meta.descEn}</Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.styleCardBadge,
-                          { backgroundColor: selected ? palette.accent : 'rgba(255,255,255,0.1)' },
-                        ]}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            fontWeight: '800',
-                            color: selected ? palette.onAccent : '#FFF',
-                          }}
-                        >
-                          {meta.badge}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          ) : prefs.playerStyle === 'IPOD' ? (
-            <FitStage>
-              <IpodClassicView />
-            </FitStage>
-          ) : prefs.playerStyle === 'BEDSIDE' ? (
-            <BedsideClockView />
-          ) : prefs.playerStyle === 'TURNTABLE' ? (
-            <FitStage>
-              <CoverGlow
-                colors={ambientColors}
-                level={ambientOn ? ambient.level * 0.8 : 0}
-                energy={energy}
-                size={300}
-              >
-                <TurntableVinylStage />
-              </CoverGlow>
-            </FitStage>
-          ) : (
-            /* Flagship & Poster Cover Stage — wrapped in the ambient glow */
-            <FitStage>
-              <View style={styles.flagshipCoverCenter}>
-                <CoverGlow
-                  colors={ambientColors}
-                  level={ambientOn ? ambient.level : 0}
-                  energy={energy}
-                  size={prefs.playerStyle === 'POSTER' ? 270 : 300}
-                >
-                  <View
-                    style={[
-                      styles.coverShadowWrap,
-                      prefs.playerStyle === 'POSTER' && styles.posterCoverWrap,
-                      !isPlaying && { transform: [{ scale: 0.94 }] },
-                    ]}
-                  >
-                    <ArtworkImage
-                      source={{ uri: currentTrack.artworkUrl }}
-                      fallbackSeed={currentTrack.title}
-                      style={styles.coverImage}
-                    />
-                  </View>
-                </CoverGlow>
-                {/* Poster: a real 32-band spectrum of what's playing (FFT of the actual PCM) */}
-                {prefs.playerStyle === 'POSTER' && (
-                  <View style={styles.posterVisualizer}>
-                    <SpectrumBars
-                      isPlaying={isPlaying}
-                      color={palette.accent}
-                      colorHigh={ambientColors.corners[1]}
-                      height={64}
-                      bars={32}
-                      peaks
-                      showStatus
-                      language={prefs.language}
-                    />
-                  </View>
-                )}
-              </View>
-            </FitStage>
-          )}
-        </View>
-
-        {/* Hide standard Flagship controls when in self-contained iPod / Bedside view (unless user is on sub-pane) */}
-        {((prefs.playerStyle !== 'IPOD' && prefs.playerStyle !== 'BEDSIDE') ||
-          pane !== 'artwork') && (
-          <View style={styles.controlsBlock}>
-            {/* Song Info + LikeBurst Heart */}
-            <View style={styles.songInfoRow}>
-              <View style={{ flex: 1, marginRight: 12 }}>
-                <Text numberOfLines={1} style={[styles.trackTitle, { fontFamily }]}>
-                  {currentTrack.title}
-                </Text>
-                <Text numberOfLines={1} style={[styles.trackArtist, { fontFamily }]}>
-                  {currentTrack.artist}
-                  {currentTrack.album ? ` · ${currentTrack.album}` : ''}
-                </Text>
-              </View>
-
-              <Pressable
-                hitSlop={10}
-                onPress={() => toggleLike(currentTrack)}
-                style={[
-                  styles.likeCircle,
-                  liked && { backgroundColor: 'rgba(255, 77, 121, 0.18)' },
-                ]}
-              >
-                <Ionicons
-                  name={liked ? 'heart' : 'heart-outline'}
-                  size={24}
-                  color={liked ? HOLYSIC_COLORS.roseLike : '#FFFFFF'}
-                />
-              </Pressable>
-            </View>
-
-            {/* Live radio: no timeline, just an on-air bar */}
-            {currentTrack.isLive ? (
-              <View style={styles.seekSection}>
-                <View style={[styles.seekTrack, { backgroundColor: 'rgba(239,68,68,0.25)' }]}>
-                  <View style={[styles.seekFill, { width: '100%', backgroundColor: '#EF4444' }]} />
+                      <ArtworkImage
+                        source={{ uri: currentTrack.artworkUrl }}
+                        fallbackSeed={currentTrack.title}
+                        style={styles.coverImage}
+                      />
+                    </Animated.View>
+                  </CoverGlow>
+                  {/* Poster: a real 32-band spectrum of what's playing (FFT of the actual PCM) */}
+                  {prefs.playerStyle === 'POSTER' && (
+                    <View style={styles.posterVisualizer}>
+                      <SpectrumBars
+                        isPlaying={isPlaying}
+                        color={palette.accent}
+                        colorHigh={ambientColors.corners[1]}
+                        height={64}
+                        bars={32}
+                        peaks
+                        showStatus
+                        language={prefs.language}
+                      />
+                    </View>
+                  )}
                 </View>
-                <View style={styles.timestampRow}>
-                  <Text style={[styles.timestampText, { color: '#FCA5A5', fontWeight: '900' }]}>
-                    ● LIVE · {formatTimeSec(positionSec)}
-                  </Text>
-                  <Text style={styles.timestampText}>{currentTrack.genre || 'Radio'}</Text>
-                </View>
-              </View>
-            ) : (
-              <View style={styles.seekSection}>
-                <Pressable
-                  onLayout={(e: LayoutChangeEvent) =>
-                    setSeekBarWidth(e.nativeEvent.layout.width || 300)
-                  }
-                  onPress={handleSeekPress}
-                  style={styles.seekHitBox}
-                >
-                  <View style={styles.seekTrack}>
-                    <View
-                      style={[
-                        styles.seekFill,
-                        { width: `${progress * 100}%`, backgroundColor: palette.accent },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.seekThumb,
-                        {
-                          left: `${progress * 100}%`,
-                          backgroundColor: palette.accent,
-                        },
-                      ]}
-                    />
-                  </View>
-                </Pressable>
-
-                <View style={styles.timestampRow}>
-                  <Text style={styles.timestampText}>{formatTimeSec(positionSec)}</Text>
-                  <Pressable
-                    onPress={() => updatePrefs({ showRemainingTime: !prefs.showRemainingTime })}
-                  >
-                    <Text style={styles.timestampText}>
-                      {prefs.showRemainingTime
-                        ? `-${formatTimeSec(Math.max(0, durationSec - positionSec))}`
-                        : formatTimeSec(durationSec)}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            )}
-
-            {/* Primary Transport Row */}
-            <View style={styles.transportRow}>
-              <Pressable hitSlop={10} onPress={toggleShuffle} style={styles.sideCtrl}>
-                <Ionicons
-                  name="shuffle"
-                  size={22}
-                  color={shuffle ? palette.accent : 'rgba(255,255,255,0.48)'}
-                />
-              </Pressable>
-
-              <Pressable
-                hitSlop={10}
-                onPress={rw.guard(playPrevious)}
-                onLongPress={rw.onLongPress}
-                onPressOut={rw.onPressOut}
-                delayLongPress={rw.delayLongPress}
-                style={styles.skipBtn}
-              >
-                <Ionicons name="play-skip-back" size={30} color="#FFFFFF" />
-              </Pressable>
-
-              <Pressable
-                onPress={togglePlay}
-                style={[styles.bigPlayBtn, { backgroundColor: palette.accent }]}
-              >
-                {isBuffering ? (
-                  <ActivityIndicator size="small" color={palette.onAccent} />
-                ) : (
-                  <Ionicons
-                    name={isPlaying ? 'pause' : 'play'}
-                    size={32}
-                    color={palette.onAccent}
-                    style={!isPlaying ? { marginLeft: 3 } : undefined}
-                  />
-                )}
-              </Pressable>
-
-              <Pressable
-                hitSlop={10}
-                onPress={ff.guard(playNext)}
-                onLongPress={ff.onLongPress}
-                onPressOut={ff.onPressOut}
-                delayLongPress={ff.delayLongPress}
-                style={styles.skipBtn}
-              >
-                <Ionicons name="play-skip-forward" size={30} color="#FFFFFF" />
-              </Pressable>
-
-              <Pressable hitSlop={10} onPress={cycleRepeat} style={styles.sideCtrl}>
-                <Ionicons
-                  name="repeat"
-                  size={22}
-                  color={repeatMode !== 'OFF' ? palette.accent : 'rgba(255,255,255,0.48)'}
-                />
-                {repeatMode === 'ONE' && (
-                  <Text style={[styles.repeatOneDot, { color: palette.accent }]}>1</Text>
-                )}
-              </Pressable>
-            </View>
-
-            {/* Volume Bar (bit-perfect: software volume locked at 100 %) */}
-            {roomyPane ? null : prefs.bitPerfect ? (
-              <Pressable
-                onPress={() => setPane('diagnostics')}
-                style={styles.volumeRow}
-                accessibilityLabel="Bit-perfect volume"
-              >
-                <Ionicons name="lock-closed" size={14} color={palette.accent} />
-                <Text style={styles.bpVolText} numberOfLines={1}>
-                  {prefs.language === 'vi'
-                    ? 'Bit-perfect · âm lượng 100 % — chỉnh bằng nút âm lượng'
-                    : 'Bit-perfect · volume 100 % — use the volume buttons'}
-                </Text>
-              </Pressable>
-            ) : (
-              <View style={styles.volumeRow}>
-                <Ionicons name="volume-low" size={16} color="rgba(255,255,255,0.5)" />
-                <Pressable
-                  onLayout={(e) => setVolBarWidth(e.nativeEvent.layout.width || 220)}
-                  onPress={handleVolumePress}
-                  style={styles.volTrackHit}
-                >
-                  <View style={styles.volTrack}>
-                    <View
-                      style={[
-                        styles.volFill,
-                        { width: `${volume * 100}%`, backgroundColor: 'rgba(255,255,255,0.82)' },
-                      ]}
-                    />
-                  </View>
-                </Pressable>
-                <Ionicons name="volume-high" size={16} color="rgba(255,255,255,0.5)" />
-              </View>
+              </FitStage>
             )}
           </View>
-        )}
 
-        {/* Bottom HolySic Action Deck (Lyrics · Queue · Audio Lab · Sleep Timer) */}
-        <View style={styles.bottomDeck}>
-          <Pressable
-            onPress={() => setPane((p) => (p === 'lyrics' ? 'artwork' : 'lyrics'))}
-            style={[
-              styles.deckPill,
-              compactDeck && styles.deckPillCompact,
-              pane === 'lyrics' && { backgroundColor: palette.container },
-            ]}
-          >
-            <Ionicons
-              name="chatbubble-ellipses-outline"
-              size={18}
-              color={pane === 'lyrics' ? palette.accent : '#FFFFFF'}
-            />
-            <Text
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-              style={[styles.deckLabel, pane === 'lyrics' && { color: palette.accent }]}
-            >
-              {vi ? 'Lời nhạc' : 'Lyrics'}
-            </Text>
-          </Pressable>
+          {/* Hide standard Flagship controls when in self-contained iPod / Bedside view (unless user is on sub-pane) */}
+          {((prefs.playerStyle !== 'IPOD' && prefs.playerStyle !== 'BEDSIDE') ||
+            pane !== 'artwork') && (
+            <View style={styles.controlsBlock}>
+              {/* Song Info + LikeBurst Heart */}
+              <View style={styles.songInfoRow} {...dismissPan.panHandlers}>
+                <View style={{ flex: 1, marginRight: 12 }}>
+                  <Text numberOfLines={1} style={[styles.trackTitle, { fontFamily }]}>
+                    {currentTrack.title}
+                  </Text>
+                  <Text numberOfLines={1} style={[styles.trackArtist, { fontFamily }]}>
+                    {currentTrack.artist}
+                    {currentTrack.album ? ` · ${currentTrack.album}` : ''}
+                  </Text>
+                </View>
 
-          <Pressable
-            onPress={() => setPane((p) => (p === 'queue' ? 'artwork' : 'queue'))}
-            style={[
-              styles.deckPill,
-              compactDeck && styles.deckPillCompact,
-              pane === 'queue' && { backgroundColor: palette.container },
-            ]}
-          >
-            <Ionicons name="list" size={18} color={pane === 'queue' ? palette.accent : '#FFFFFF'} />
-            <Text
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-              style={[styles.deckLabel, pane === 'queue' && { color: palette.accent }]}
-            >
-              {vi ? 'Hàng chờ' : 'Queue'}
-            </Text>
-          </Pressable>
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => toggleLike(currentTrack)}
+                  style={[
+                    styles.likeCircle,
+                    liked && { backgroundColor: 'rgba(255, 77, 121, 0.18)' },
+                  ]}
+                >
+                  <Ionicons
+                    name={liked ? 'heart' : 'heart-outline'}
+                    size={24}
+                    color={liked ? HOLYSIC_COLORS.roseLike : '#FFFFFF'}
+                  />
+                </Pressable>
+              </View>
 
-          <Pressable
-            onPress={() => setIsAudioLabOpen(true)}
-            style={[
-              styles.deckPill,
-              compactDeck && styles.deckPillCompact,
-              audioLab.enabled && { backgroundColor: palette.container },
-            ]}
-          >
-            <Ionicons
-              name="options-outline"
-              size={18}
-              color={audioLab.enabled ? palette.accent : '#FFFFFF'}
-            />
-            <Text
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-              style={[styles.deckLabel, audioLab.enabled && { color: palette.accent }]}
-            >
-              Audio Lab
-            </Text>
-          </Pressable>
+              {/* Live radio: no timeline, just an on-air bar */}
+              {currentTrack.isLive ? (
+                <View style={styles.seekSection}>
+                  <View style={[styles.seekTrack, { backgroundColor: 'rgba(239,68,68,0.25)' }]}>
+                    <View
+                      style={[styles.seekFill, { width: '100%', backgroundColor: '#EF4444' }]}
+                    />
+                  </View>
+                  <View style={styles.timestampRow}>
+                    <Text style={[styles.timestampText, { color: '#FCA5A5', fontWeight: '900' }]}>
+                      ● LIVE · {formatTimeSec(positionSec)}
+                    </Text>
+                    <Text style={styles.timestampText}>{currentTrack.genre || 'Radio'}</Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.seekSection}>
+                  <ScrubBar
+                    value={progress}
+                    thumb
+                    thickness={5}
+                    color={palette.accent}
+                    trackColor="rgba(255,255,255,0.22)"
+                    disabled={durationSec <= 0}
+                    onChange={(r) => setSeekPreview(r * durationSec)}
+                    onCommit={(r) => {
+                      if (durationSec > 0) seekTo(r * durationSec);
+                      // keep the preview a beat so the bar doesn't flash back before the seek lands
+                      setTimeout(() => setSeekPreview(null), 250);
+                    }}
+                    haptic={() => haptic('selection')}
+                    step={durationSec > 0 ? Math.min(1, 10 / durationSec) : 0.05}
+                    accessibilityLabel={vi ? 'Tiến độ bài hát' : 'Song position'}
+                    accessibilityValueText={`${formatTimeSec(shownPos)} / ${formatTimeSec(durationSec)}`}
+                    style={{ marginVertical: -10 }}
+                  />
 
-          <Pressable
-            onPress={() => setPane((p) => (p === 'sleep' ? 'artwork' : 'sleep'))}
-            style={[
-              styles.deckPill,
-              compactDeck && styles.deckPillCompact,
-              (sleepRemainingSec !== null || sleepEndOfTrack || pane === 'sleep') && {
-                backgroundColor: palette.container,
-              },
-            ]}
-          >
-            <Ionicons
-              name="moon-outline"
-              size={17}
-              color={sleepRemainingSec !== null || sleepEndOfTrack ? palette.accent : '#FFFFFF'}
-            />
-            <Text
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-              style={styles.deckLabel}
+                  <View style={styles.timestampRow}>
+                    <Text
+                      style={[styles.timestampText, seekPreview != null && { color: '#FFFFFF' }]}
+                    >
+                      {formatTimeSec(shownPos)}
+                    </Text>
+                    <Pressable
+                      onPress={() => updatePrefs({ showRemainingTime: !prefs.showRemainingTime })}
+                    >
+                      <Text style={styles.timestampText}>
+                        {prefs.showRemainingTime
+                          ? `-${formatTimeSec(Math.max(0, durationSec - shownPos))}`
+                          : formatTimeSec(durationSec)}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+
+              {/* Primary Transport Row */}
+              <View style={styles.transportRow}>
+                <Pressable hitSlop={10} onPress={toggleShuffle} style={styles.sideCtrl}>
+                  <Ionicons
+                    name="shuffle"
+                    size={22}
+                    color={shuffle ? palette.accent : 'rgba(255,255,255,0.48)'}
+                  />
+                </Pressable>
+
+                <Pressable
+                  hitSlop={10}
+                  onPress={rw.guard(playPrevious)}
+                  onLongPress={rw.onLongPress}
+                  onPressOut={rw.onPressOut}
+                  delayLongPress={rw.delayLongPress}
+                  style={styles.skipBtn}
+                >
+                  <Ionicons name="play-skip-back" size={30} color="#FFFFFF" />
+                </Pressable>
+
+                <Pressable
+                  onPress={togglePlay}
+                  style={[styles.bigPlayBtn, { backgroundColor: palette.accent }]}
+                >
+                  {isBuffering ? (
+                    <ActivityIndicator size="small" color={palette.onAccent} />
+                  ) : (
+                    <Ionicons
+                      name={isPlaying ? 'pause' : 'play'}
+                      size={32}
+                      color={palette.onAccent}
+                      style={!isPlaying ? { marginLeft: 3 } : undefined}
+                    />
+                  )}
+                </Pressable>
+
+                <Pressable
+                  hitSlop={10}
+                  onPress={ff.guard(playNext)}
+                  onLongPress={ff.onLongPress}
+                  onPressOut={ff.onPressOut}
+                  delayLongPress={ff.delayLongPress}
+                  style={styles.skipBtn}
+                >
+                  <Ionicons name="play-skip-forward" size={30} color="#FFFFFF" />
+                </Pressable>
+
+                <Pressable hitSlop={10} onPress={cycleRepeat} style={styles.sideCtrl}>
+                  <Ionicons
+                    name="repeat"
+                    size={22}
+                    color={repeatMode !== 'OFF' ? palette.accent : 'rgba(255,255,255,0.48)'}
+                  />
+                  {repeatMode === 'ONE' && (
+                    <Text style={[styles.repeatOneDot, { color: palette.accent }]}>1</Text>
+                  )}
+                </Pressable>
+              </View>
+
+              {/* Volume — IPA: the real iPhone volume (side buttons move it too); bit-perfect keeps
+                the player at unity gain, so only the hardware volume is offered there */}
+              {roomyPane ? null : prefs.bitPerfect && systemVol == null ? (
+                <Pressable
+                  onPress={() => setPane('diagnostics')}
+                  style={styles.volumeRow}
+                  accessibilityLabel="Bit-perfect volume"
+                >
+                  <Ionicons name="lock-closed" size={14} color={palette.accent} />
+                  <Text style={styles.bpVolText} numberOfLines={1}>
+                    {prefs.language === 'vi'
+                      ? 'Bit-perfect · âm lượng 100 % — chỉnh bằng nút âm lượng'
+                      : 'Bit-perfect · volume 100 % — use the volume buttons'}
+                  </Text>
+                </Pressable>
+              ) : (
+                <View>
+                  <View style={styles.volumeRow}>
+                    <Ionicons name="volume-low" size={16} color="rgba(255,255,255,0.5)" />
+                    <ScrubBar
+                      value={volValue}
+                      onChange={changeVolume}
+                      color="rgba(255,255,255,0.86)"
+                      trackColor="rgba(255,255,255,0.18)"
+                      thickness={4}
+                      haptic={() => haptic('selection')}
+                      accessibilityLabel={vi ? 'Âm lượng' : 'Volume'}
+                      style={{ flex: 1, marginVertical: -12 }}
+                    />
+                    <Ionicons name="volume-high" size={16} color="rgba(255,255,255,0.5)" />
+                    {output.supported && (
+                      <Pressable
+                        hitSlop={12}
+                        onPress={() => {
+                          haptic('light');
+                          AudioOutput.showRoutePicker();
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          vi
+                            ? 'Chọn thiết bị phát (AirPlay, Bluetooth)'
+                            : 'Output device (AirPlay, Bluetooth)'
+                        }
+                        style={styles.airplayBtn}
+                      >
+                        <MaterialIcons
+                          name="airplay"
+                          size={19}
+                          color={outIsExternal ? palette.accent : 'rgba(255,255,255,0.6)'}
+                        />
+                      </Pressable>
+                    )}
+                  </View>
+                  {(outIsExternal || prefs.bitPerfect) && !!outName && (
+                    <Pressable onPress={() => setPane('diagnostics')} style={styles.routeRow}>
+                      <Ionicons
+                        name={
+                          prefs.bitPerfect
+                            ? 'lock-closed'
+                            : /Bluetooth|AirPlay/i.test(outName.type)
+                              ? 'bluetooth'
+                              : 'headset'
+                        }
+                        size={11}
+                        color={palette.accent}
+                      />
+                      <Text numberOfLines={1} style={[styles.routeText, { color: palette.accent }]}>
+                        {prefs.bitPerfect ? 'Bit-perfect · ' : ''}
+                        {outName.name}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Bottom HolySic Action Deck (Lyrics · Queue · Audio Lab · Sleep Timer) */}
+          <View style={styles.bottomDeck}>
+            <Pressable
+              onPress={() => setPane((p) => (p === 'lyrics' ? 'artwork' : 'lyrics'))}
+              style={[
+                styles.deckPill,
+                compactDeck && styles.deckPillCompact,
+                pane === 'lyrics' && { backgroundColor: palette.container },
+              ]}
             >
-              {sleepRemainingSec !== null
-                ? formatTimeSec(sleepRemainingSec)
-                : sleepEndOfTrack
-                  ? '1x'
-                  : vi
-                    ? 'Hẹn giờ'
-                    : 'Sleep'}
-            </Text>
-          </Pressable>
-        </View>
-      </LinearGradient>
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={18}
+                color={pane === 'lyrics' ? palette.accent : '#FFFFFF'}
+              />
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                style={[
+                  styles.deckLabel,
+                  tinyDeck && styles.deckLabelTiny,
+                  pane === 'lyrics' && { color: palette.accent },
+                ]}
+              >
+                {vi ? 'Lời nhạc' : 'Lyrics'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setPane((p) => (p === 'queue' ? 'artwork' : 'queue'))}
+              style={[
+                styles.deckPill,
+                compactDeck && styles.deckPillCompact,
+                pane === 'queue' && { backgroundColor: palette.container },
+              ]}
+            >
+              <Ionicons
+                name="list"
+                size={18}
+                color={pane === 'queue' ? palette.accent : '#FFFFFF'}
+              />
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                style={[
+                  styles.deckLabel,
+                  tinyDeck && styles.deckLabelTiny,
+                  pane === 'queue' && { color: palette.accent },
+                ]}
+              >
+                {vi ? 'Hàng chờ' : 'Queue'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setIsAudioLabOpen(true)}
+              style={[
+                styles.deckPill,
+                compactDeck && styles.deckPillCompact,
+                audioLab.enabled && { backgroundColor: palette.container },
+              ]}
+            >
+              <Ionicons
+                name="options-outline"
+                size={18}
+                color={audioLab.enabled ? palette.accent : '#FFFFFF'}
+              />
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                style={[
+                  styles.deckLabel,
+                  tinyDeck && styles.deckLabelTiny,
+                  audioLab.enabled && { color: palette.accent },
+                ]}
+              >
+                Audio Lab
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setPane((p) => (p === 'sleep' ? 'artwork' : 'sleep'))}
+              style={[
+                styles.deckPill,
+                compactDeck && styles.deckPillCompact,
+                (sleepRemainingSec !== null || sleepEndOfTrack || pane === 'sleep') && {
+                  backgroundColor: palette.container,
+                },
+              ]}
+            >
+              <Ionicons
+                name="moon-outline"
+                size={17}
+                color={sleepRemainingSec !== null || sleepEndOfTrack ? palette.accent : '#FFFFFF'}
+              />
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                style={[styles.deckLabel, tinyDeck && styles.deckLabelTiny]}
+              >
+                {sleepRemainingSec !== null
+                  ? formatTimeSec(sleepRemainingSec)
+                  : sleepEndOfTrack
+                    ? '1x'
+                    : vi
+                      ? 'Hẹn giờ'
+                      : 'Sleep'}
+              </Text>
+            </Pressable>
+          </View>
+        </LinearGradient>
+      </Animated.View>
       <SheetSlot layer="player" />
     </Modal>
   );
@@ -964,26 +1145,15 @@ const styles = StyleSheet.create({
   seekSection: {
     marginBottom: 12,
   },
-  seekHitBox: {
-    paddingVertical: 10,
-  },
   seekTrack: {
     height: 5,
     borderRadius: 3,
     backgroundColor: 'rgba(255,255,255,0.22)',
-    position: 'relative',
-    justifyContent: 'center',
+    marginVertical: 7,
   },
   seekFill: {
     height: '100%',
     borderRadius: 3,
-  },
-  seekThumb: {
-    position: 'absolute',
-    width: 13,
-    height: 13,
-    borderRadius: 6.5,
-    marginLeft: -6.5,
   },
   timestampRow: {
     flexDirection: 'row',
@@ -1044,18 +1214,25 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '600',
   },
-  volTrackHit: {
-    flex: 1,
-    paddingVertical: 8,
+  airplayBtn: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 2,
   },
-  volTrack: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    overflow: 'hidden',
+  routeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: -6,
+    marginBottom: 6,
   },
-  volFill: {
-    height: '100%',
+  routeText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    maxWidth: 260,
   },
   bottomDeck: {
     flexDirection: 'row',
@@ -1085,5 +1262,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11.5,
     fontWeight: '700',
+  },
+  deckLabelTiny: {
+    fontSize: 10,
+    letterSpacing: -0.2,
   },
 });

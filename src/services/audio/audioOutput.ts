@@ -5,7 +5,7 @@
 // run at the song's own rate. Web / Expo Go: no route info — the checks say so honestly.
 
 import { useSyncExternalStore } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import type {
   HolySicAudioSessionNative,
   NativeRouteInfo,
@@ -31,9 +31,11 @@ export interface OutputState {
   route: NativeRouteInfo | null;
   /** the rate HolySic asked the hardware for (0 = none) */
   requestedRate: number;
+  /** iPhone (hardware) volume 0…1 — null when this build can't read it (web / Expo Go) */
+  systemVolume: number | null;
 }
 
-let state: OutputState = { supported: false, route: null, requestedRate: 0 };
+let state: OutputState = { supported: false, route: null, requestedRate: 0, systemVolume: null };
 const subs = new Set<() => void>();
 const set = (patch: Partial<OutputState>) => {
   state = { ...state, ...patch };
@@ -51,7 +53,46 @@ function start() {
     m.addListener('onRouteChange', (route) => set({ route }));
   } catch {
     set({ supported: false });
+    return;
   }
+  try {
+    set({ systemVolume: m.getSystemVolume() });
+    m.addListener('onSystemVolume', ({ volume }) => {
+      // ignore the echo of our own writes while the user is dragging
+      if (Date.now() - lastVolumeWrite < 400) return;
+      set({ systemVolume: volume });
+    });
+    // volume can change while HolySic is in the background (Control Center, other apps)
+    AppState.addEventListener('change', (st) => {
+      if (st !== 'active') return;
+      try {
+        set({ systemVolume: m.getSystemVolume(), route: m.getRoute() });
+      } catch {
+        // ignore
+      }
+    });
+  } catch {
+    // older native build without the volume functions
+  }
+}
+
+let lastVolumeWrite = 0;
+let volumeTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingVolume: number | null = null;
+let volumeInFlight = false;
+async function flushVolume() {
+  const m = mod();
+  if (!m || pendingVolume == null || volumeInFlight) return;
+  const v = pendingVolume;
+  pendingVolume = null;
+  volumeInFlight = true;
+  try {
+    await m.setSystemVolume(v);
+  } catch {
+    // ignore
+  }
+  volumeInFlight = false;
+  if (pendingVolume != null) flushVolume();
 }
 
 const subscribe = (f: () => void) => {
@@ -68,6 +109,39 @@ export function useAudioOutput(): OutputState {
 }
 
 export const AudioOutput = {
+  /** The in-app slider can move the real iPhone volume (IPA builds) */
+  hasSystemVolume(): boolean {
+    start();
+    return state.systemVolume != null;
+  },
+
+  /**
+   * Set the iPhone volume. The UI updates at once; native writes are coalesced (one in flight,
+   * the latest value wins) so a fast drag stays smooth.
+   */
+  setSystemVolume(v: number) {
+    const value = Math.max(0, Math.min(1, v));
+    lastVolumeWrite = Date.now();
+    set({ systemVolume: value });
+    pendingVolume = value;
+    if (volumeTimer) return;
+    volumeTimer = setTimeout(() => {
+      volumeTimer = null;
+      flushVolume();
+    }, 16);
+  },
+
+  /** Native AirPlay / Bluetooth output picker. false = not available in this build */
+  async showRoutePicker(): Promise<boolean> {
+    const m = mod();
+    if (!m) return false;
+    try {
+      return await m.showRoutePicker();
+    } catch {
+      return false;
+    }
+  },
+
   /** Ask the hardware to run at the song's sample rate (USB DACs follow; built-in stays 48 kHz) */
   async matchSampleRate(rateHz: number | undefined): Promise<void> {
     start();

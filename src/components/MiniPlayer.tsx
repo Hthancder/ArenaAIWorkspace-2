@@ -1,8 +1,17 @@
 // Floating Glass MiniPlayer with HolySic's MiniLyricsTicker & Artwork Tonal Progress
 
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useRef } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { ArtworkImage } from './ArtworkImage';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../constants/theme';
 import { useHolySic } from '../context/HolySicContext';
@@ -20,6 +29,8 @@ export const MiniPlayer: React.FC = () => {
     durationSec,
     togglePlay,
     playNext,
+    playPrevious,
+    haptic,
     setIsPlayerOpen,
     isLiked,
     toggleLike,
@@ -33,6 +44,69 @@ export const MiniPlayer: React.FC = () => {
   const ff = useHoldSeek(seekBy, 1);
 
   const ambientColors = useAmbientColors();
+
+  // Swipe gestures, like the iOS Music mini player: ← next song · → previous · ↑ open the player
+  const dragX = useRef(new Animated.Value(0)).current;
+  const dragY = useRef(new Animated.Value(0)).current;
+  const acts = useRef({ playNext, playPrevious, open: () => setIsPlayerOpen(true), haptic });
+  acts.current = { playNext, playPrevious, open: () => setIsPlayerOpen(true), haptic };
+  const axis = useRef<'x' | 'y' | null>(null);
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) =>
+        (Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy)) ||
+        (g.dy < -12 && Math.abs(g.dy) > Math.abs(g.dx)),
+      onPanResponderGrant: (_e, g) => {
+        // the grant can arrive with dx = dy = 0 (web) — lock the axis on the first real movement
+        axis.current =
+          Math.abs(g.dx) + Math.abs(g.dy) < 6 ? null : Math.abs(g.dx) > Math.abs(g.dy) ? 'x' : 'y';
+      },
+      onPanResponderMove: (_e, g) => {
+        if (!axis.current) {
+          if (Math.abs(g.dx) + Math.abs(g.dy) < 6) return;
+          axis.current = Math.abs(g.dx) > Math.abs(g.dy) ? 'x' : 'y';
+        }
+        if (axis.current === 'x') dragX.setValue(g.dx * 0.9);
+        else dragY.setValue(Math.max(-60, Math.min(0, g.dy * 0.6)));
+      },
+      onPanResponderRelease: (_e, g) => {
+        const back = () => {
+          Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+        };
+        if (!axis.current) axis.current = Math.abs(g.dx) > Math.abs(g.dy) ? 'x' : 'y';
+        if (axis.current === 'y') {
+          if (g.dy < -40 || g.vy < -0.6) {
+            acts.current.haptic('light');
+            acts.current.open();
+          }
+          back();
+          return;
+        }
+        if (Math.abs(g.dx) > 80 || (Math.abs(g.dx) > 30 && Math.abs(g.vx) > 0.6)) {
+          const dir = g.dx < 0 ? -1 : 1;
+          acts.current.haptic('medium');
+          Animated.timing(dragX, {
+            toValue: dir * 140,
+            duration: 120,
+            useNativeDriver: true,
+          }).start(() => {
+            if (dir < 0) acts.current.playNext();
+            else acts.current.playPrevious();
+            dragX.setValue(-dir * 90);
+            back();
+          });
+        } else {
+          back();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dragX, { toValue: 0, useNativeDriver: true }).start();
+        Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
+
   if (!currentTrack) return null;
   // OpenSpot-style floating capsule vs. HolySic card
   const capsule = prefs.miniPlayerStyle === 'capsule';
@@ -51,115 +125,143 @@ export const MiniPlayer: React.FC = () => {
       : null;
 
   return (
-    <Pressable onPress={() => setIsPlayerOpen(true)} style={styles.outer}>
-      {ambient.spill && !prefs.pureBlack && (
-        <AmbientSpill
-          colors={ambientColors}
-          level={ambient.level * (isPlaying ? 1 : 0.55)}
-          style={capsule ? styles.spillCapsule : styles.spill}
-        />
-      )}
-      <GlassSurface
-        intensity={68}
-        tintColor={palette.surface + 'D8'}
-        style={[styles.card, capsule && styles.capsuleCard, { borderColor: palette.accent + '2E' }]}
-      >
-        {capsule && (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.capsuleFill,
-              { width: `${progress * 100}%`, backgroundColor: palette.accent + '22' },
-            ]}
+    <Animated.View
+      {...pan.panHandlers}
+      accessibilityHint="Swipe left or right to change song, swipe up to open the player"
+      style={{
+        transform: [
+          { translateX: dragX },
+          { translateY: dragY },
+          {
+            scale: dragY.interpolate({
+              inputRange: [-60, 0],
+              outputRange: [1.03, 1],
+              extrapolate: 'clamp',
+            }),
+          },
+        ],
+        ...(Platform.OS === 'web' ? ({ userSelect: 'none' } as object) : null),
+        opacity: dragX.interpolate({
+          inputRange: [-160, 0, 160],
+          outputRange: [0.35, 1, 0.35],
+          extrapolate: 'clamp',
+        }),
+      }}
+    >
+      <Pressable onPress={() => setIsPlayerOpen(true)} style={styles.outer}>
+        {ambient.spill && !prefs.pureBlack && (
+          <AmbientSpill
+            colors={ambientColors}
+            level={ambient.level * (isPlaying ? 1 : 0.55)}
+            style={capsule ? styles.spillCapsule : styles.spill}
           />
         )}
-        <View style={[styles.row, capsule && { paddingVertical: 7 }]}>
-          <ArtworkImage
-            source={{ uri: currentTrack.artworkUrl }}
-            fallbackSeed={currentTrack.title}
-            style={[styles.cover, capsule && styles.capsuleCover]}
-          />
+        <GlassSurface
+          intensity={68}
+          tintColor={palette.surface + 'D8'}
+          style={[
+            styles.card,
+            capsule && styles.capsuleCard,
+            { borderColor: palette.accent + '2E' },
+          ]}
+        >
+          {capsule && (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.capsuleFill,
+                { width: `${progress * 100}%`, backgroundColor: palette.accent + '22' },
+              ]}
+            />
+          )}
+          <View style={[styles.row, capsule && { paddingVertical: 7 }]}>
+            <ArtworkImage
+              source={{ uri: currentTrack.artworkUrl }}
+              fallbackSeed={currentTrack.title}
+              style={[styles.cover, capsule && styles.capsuleCover]}
+            />
 
-          <View style={styles.meta}>
-            <Text numberOfLines={1} style={[styles.title, { fontFamily }]}>
-              {currentTrack.title}
-            </Text>
-            {activeLine ? (
-              <Text
-                numberOfLines={1}
-                style={[styles.lyricTicker, { color: palette.accent, fontFamily }]}
-              >
-                ♪ {activeLine}
+            <View style={styles.meta}>
+              <Text numberOfLines={1} style={[styles.title, { fontFamily }]}>
+                {currentTrack.title}
               </Text>
-            ) : (
-              <Text numberOfLines={1} style={[styles.artist, { fontFamily }]}>
-                {currentTrack.isLive ? '● LIVE · ' : ''}
-                {currentTrack.artist}
-              </Text>
-            )}
+              {activeLine ? (
+                <Text
+                  numberOfLines={1}
+                  style={[styles.lyricTicker, { color: palette.accent, fontFamily }]}
+                >
+                  ♪ {activeLine}
+                </Text>
+              ) : (
+                <Text numberOfLines={1} style={[styles.artist, { fontFamily }]}>
+                  {currentTrack.isLive ? '● LIVE · ' : ''}
+                  {currentTrack.artist}
+                </Text>
+              )}
+            </View>
+
+            <Pressable
+              hitSlop={8}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                toggleLike(currentTrack);
+              }}
+              style={styles.ctrlBtn}
+            >
+              <Ionicons
+                name={liked ? 'heart' : 'heart-outline'}
+                size={21}
+                color={liked ? HOLYSIC_COLORS.roseLike : UI.fg(1)}
+              />
+            </Pressable>
+
+            <Pressable
+              hitSlop={8}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                togglePlay();
+              }}
+              style={[styles.playPill, { backgroundColor: palette.accent }]}
+            >
+              {isBuffering ? (
+                <ActivityIndicator size="small" color={palette.onAccent} />
+              ) : (
+                <Ionicons
+                  name={isPlaying ? 'pause' : 'play'}
+                  size={19}
+                  color={palette.onAccent}
+                  style={!isPlaying ? { marginLeft: 2 } : undefined}
+                />
+              )}
+            </Pressable>
+
+            <Pressable
+              hitSlop={8}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                ff.guard(playNext)();
+              }}
+              onLongPress={ff.onLongPress}
+              onPressOut={ff.onPressOut}
+              delayLongPress={ff.delayLongPress}
+              style={styles.ctrlBtn}
+            >
+              <Ionicons name="play-skip-forward" size={20} color={UI.text} />
+            </Pressable>
           </View>
 
-          <Pressable
-            hitSlop={8}
-            onPress={(e) => {
-              e.stopPropagation?.();
-              toggleLike(currentTrack);
-            }}
-            style={styles.ctrlBtn}
-          >
-            <Ionicons
-              name={liked ? 'heart' : 'heart-outline'}
-              size={21}
-              color={liked ? HOLYSIC_COLORS.roseLike : UI.fg(1)}
+          {/* Bottom hairline progress bar */}
+          <View style={[styles.progressTrack, capsule && { display: 'none' }]}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${progress * 100}%`, backgroundColor: palette.accent },
+              ]}
             />
-          </Pressable>
-
-          <Pressable
-            hitSlop={8}
-            onPress={(e) => {
-              e.stopPropagation?.();
-              togglePlay();
-            }}
-            style={[styles.playPill, { backgroundColor: palette.accent }]}
-          >
-            {isBuffering ? (
-              <ActivityIndicator size="small" color={palette.onAccent} />
-            ) : (
-              <Ionicons
-                name={isPlaying ? 'pause' : 'play'}
-                size={19}
-                color={palette.onAccent}
-                style={!isPlaying ? { marginLeft: 2 } : undefined}
-              />
-            )}
-          </Pressable>
-
-          <Pressable
-            hitSlop={8}
-            onPress={(e) => {
-              e.stopPropagation?.();
-              ff.guard(playNext)();
-            }}
-            onLongPress={ff.onLongPress}
-            onPressOut={ff.onPressOut}
-            delayLongPress={ff.delayLongPress}
-            style={styles.ctrlBtn}
-          >
-            <Ionicons name="play-skip-forward" size={20} color={UI.text} />
-          </Pressable>
-        </View>
-
-        {/* Bottom hairline progress bar */}
-        <View style={[styles.progressTrack, capsule && { display: 'none' }]}>
-          <View
-            style={[
-              styles.progressFill,
-              { width: `${progress * 100}%`, backgroundColor: palette.accent },
-            ]}
-          />
-        </View>
-      </GlassSurface>
-    </Pressable>
+          </View>
+        </GlassSurface>
+      </Pressable>
+    </Animated.View>
   );
 };
 

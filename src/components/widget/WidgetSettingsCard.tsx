@@ -3,10 +3,16 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useMemo, useState } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AppState, Platform, Pressable, Text, View } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
-import { widgetLinked, widgetSupported } from '../../services/widget/nowPlayingWidget';
+import {
+  widgetLinked,
+  widgetStatus,
+  widgetSupported,
+  WidgetStatus,
+} from '../../services/widget/nowPlayingWidget';
+import { WidgetCardAnchor } from './widgetAnchor';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { ArtworkImage } from '../ArtworkImage';
 
@@ -82,11 +88,37 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
           ? 'Không có lời — thưởng thức giai điệu nhé'
           : 'No lyrics — enjoy the music';
 
+  // ask iOS itself: is the extension still inside the app, does the App Group work, and how many
+  // HolySic widgets are on the Home / Lock Screen right now (re-checked when you come back)
+  const [native, setNative] = useState<WidgetStatus | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !widgetSupported()) return;
+    let alive = true;
+    const load = () =>
+      widgetStatus().then((st) => {
+        if (alive) setNative(st);
+      });
+    load();
+    const sub = AppState.addEventListener('change', (a) => a === 'active' && load());
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, []);
   const status = useMemo(() => {
     if (Platform.OS !== 'ios') return 'preview' as const;
     if (!widgetSupported()) return 'expoGo' as const;
-    return widgetLinked() ? ('linked' as const) : ('noGroup' as const);
-  }, []);
+    if (native && !native.extensionEmbedded) return 'noExtension' as const;
+    const linked = native ? native.groupAvailable : widgetLinked();
+    if (!linked) return 'noGroup' as const;
+    if (native && native.placedCount === 0) return 'notPlaced' as const;
+    return 'linked' as const;
+  }, [native]);
+  const placed = native?.placedCount ?? 0;
+  useEffect(() => {
+    // nothing on the Home Screen yet / something to fix → open the instructions straight away
+    if (status === 'notPlaced' || status === 'noExtension' || status === 'noGroup') setHelp(true);
+  }, [status]);
 
   const top = shade(artColors?.primary, 0.55, '#2A1452');
   const bottom = shade(artColors?.dark, 0.6, '#06050B');
@@ -100,9 +132,27 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
     linked: {
       icon: 'checkmark-circle' as const,
       color: '#34D399',
+      text: native
+        ? vi
+          ? `Đang hoạt động — ${placed} widget HolySic trên màn hình, cập nhật theo bài đang phát`
+          : `Working — ${placed} HolySic widget${placed === 1 ? '' : 's'} on screen, following what plays`
+        : vi
+          ? 'Đã kết nối — widget cập nhật theo bài đang phát'
+          : 'Connected — the widget follows what is playing',
+    },
+    notPlaced: {
+      icon: 'add-circle' as const,
+      color: '#60A5FA',
       text: vi
-        ? 'Đã kết nối — widget cập nhật theo bài đang phát'
-        : 'Connected — the widget follows what is playing',
+        ? 'Widget đã sẵn sàng nhưng chưa được thêm ra màn hình chính — làm theo 3 bước bên dưới'
+        : 'The widget is ready but not on your Home Screen yet — follow the 3 steps below',
+    },
+    noExtension: {
+      icon: 'close-circle' as const,
+      color: '#F87171',
+      text: vi
+        ? 'Trình cài đặt đã gỡ widget khỏi app khi ký lại, nên iOS không có widget HolySic để hiển thị'
+        : 'The installer stripped the widget extension while re-signing, so iOS has no HolySic widget to show',
     },
     noGroup: {
       icon: 'alert-circle' as const,
@@ -129,9 +179,11 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
 
   return (
     <>
-      <Text style={[styles.sectionTitle, fontFamily ? { fontFamily } : null]}>
-        {vi ? 'Widget màn hình chính' : 'Home Screen widget'}
-      </Text>
+      <View ref={(v) => WidgetCardAnchor.set(v)} collapsable={false}>
+        <Text style={[styles.sectionTitle, fontFamily ? { fontFamily } : null]}>
+          {vi ? 'Widget màn hình chính' : 'Home Screen widget'}
+        </Text>
+      </View>
       <View style={styles.card}>
         <View style={styles.seg}>
           {(
@@ -380,9 +432,16 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
           <View style={styles.helpBox}>
             <Text style={styles.helpText}>
               {vi
-                ? '1. Giữ ngón tay trên màn hình chính đến khi biểu tượng rung\n2. Chạm + ở góc trên → tìm “HolySic”\n3. Vuốt để chọn widget “Đang phát” hoặc “Lời bài hát”, chọn cỡ Nhỏ / Vừa / Lớn → Thêm widget\nMàn hình khoá (iOS 16+): giữ màn hình khoá → Tuỳ chỉnh → Thêm tiện ích → HolySic\n\nNút trên widget (phát, chuyển bài, thích) mở HolySic và thực hiện ngay. Thanh tiến độ tự chạy trên iOS 16+, iOS 15 cập nhật mỗi ~10 giây. Widget lời bài hát đổi dòng đúng lúc theo lời đồng bộ (cả khi app chạy nền); chạm vào để mở lời trong trình phát.'
-                : '1. Touch and hold the Home Screen until the icons jiggle\n2. Tap + in the corner → search “HolySic”\n3. Swipe to “Now Playing” or “Lyrics”, pick Small / Medium / Large → Add Widget\nLock Screen (iOS 16+): hold the Lock Screen → Customize → Add Widgets → HolySic\n\nWidget buttons (play, skip, like) open HolySic and act right away. The progress bar runs live on iOS 16+, about every 10 s on iOS 15. The lyrics widget switches lines on time from synced lyrics (also while HolySic is in the background); tap it to open the lyrics in the player.'}
+                ? 'Không thấy HolySic trong danh sách widget? Mở HolySic ít nhất một lần sau khi cài, rồi khởi động lại iPhone — iOS chỉ nạp widget của app sideload sau đó.\n\n1. Giữ ngón tay trên màn hình chính đến khi biểu tượng rung\n2. Chạm + ở góc trên → tìm “HolySic”\n3. Vuốt để chọn widget “Đang phát” hoặc “Lời bài hát”, chọn cỡ Nhỏ / Vừa / Lớn → Thêm widget\nMàn hình khoá (iOS 16+): giữ màn hình khoá → Tuỳ chỉnh → Thêm tiện ích → HolySic\n\nNút trên widget (phát, chuyển bài, thích) mở HolySic và thực hiện ngay. Thanh tiến độ tự chạy trên iOS 16+, iOS 15 cập nhật mỗi ~10 giây. Widget lời bài hát đổi dòng đúng lúc theo lời đồng bộ (cả khi app chạy nền); chạm vào để mở lời trong trình phát.'
+                : 'Can’t find HolySic in the widget list? Open HolySic at least once after installing, then restart the iPhone — iOS only loads widgets of sideloaded apps after that.\n\n1. Touch and hold the Home Screen until the icons jiggle\n2. Tap + in the corner → search “HolySic”\n3. Swipe to “Now Playing” or “Lyrics”, pick Small / Medium / Large → Add Widget\nLock Screen (iOS 16+): hold the Lock Screen → Customize → Add Widgets → HolySic\n\nWidget buttons (play, skip, like) open HolySic and act right away. The progress bar runs live on iOS 16+, about every 10 s on iOS 15. The lyrics widget switches lines on time from synced lyrics (also while HolySic is in the background); tap it to open the lyrics in the player.'}
             </Text>
+            {status === 'noExtension' && (
+              <Text style={[styles.helpText, styles.fixText]}>
+                {vi
+                  ? 'Cách sửa:\n• SideStore / AltStore: cài lại IPA, khi được hỏi về “App Extensions” hãy chọn GIỮ (Keep App Extensions). Tài khoản Apple miễn phí chỉ có 3 App ID — gỡ bớt một app sideload khác nếu thiếu.\n• Sideloadly: tắt tuỳ chọn “Remove app extensions”.\n• TrollStore: giữ nguyên widget, không cần làm gì thêm.'
+                  : 'How to fix:\n• SideStore / AltStore: reinstall the IPA and choose KEEP when asked about “App Extensions”. Free Apple IDs get 3 App IDs — remove another sideloaded app if you run out.\n• Sideloadly: turn off “Remove app extensions”.\n• TrollStore: keeps the widget as is.'}
+              </Text>
+            )}
             {status === 'noGroup' && (
               <Text style={[styles.helpText, { marginTop: 8 }]}>
                 {vi
@@ -544,4 +603,11 @@ const styles = themedSheet(() => ({
     backgroundColor: UI.fg(0.05),
   },
   helpText: { color: UI.text2, fontSize: 12.5, lineHeight: 18 },
+  fixText: {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(248,113,113,0.08)',
+    color: UI.text,
+  },
 }));

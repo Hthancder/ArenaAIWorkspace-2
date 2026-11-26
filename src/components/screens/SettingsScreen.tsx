@@ -2,7 +2,7 @@
 // Preserves full attribution to realidkroo/Mochy-Music and all upstream open-source contributors.
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Linking,
   Pressable,
@@ -32,6 +32,7 @@ import { StreamFileCache } from '../../services/audio/streamFileCache';
 import { SourceMemory } from '../../services/providers/sourceMemory';
 import { HolySicMarkIcon } from '../HolySicIcons';
 import { MergedSettings } from '../merge/MergedSettings';
+import { WidgetCardAnchor } from '../widget/widgetAnchor';
 import { T as UI, themedSheet } from '../../theme/ui';
 
 export const SettingsScreen: React.FC = () => {
@@ -48,6 +49,8 @@ export const SettingsScreen: React.FC = () => {
     haptic,
     ambient,
   } = useHolySic();
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollY = useRef(0);
 
   const [newServerUrl, setNewServerUrl] = useState('');
   const [newServerKind, setNewServerKind] = useState<'streamer' | 'relay'>('relay');
@@ -67,8 +70,25 @@ export const SettingsScreen: React.FC = () => {
     updatePrefs({ moduleOrder: order });
   };
 
+  const jumpToWidget = () => {
+    const target = WidgetCardAnchor.get();
+    const sv = scrollRef.current;
+    if (!target || !sv) return;
+    haptic('selection');
+    target.measureInWindow((_x, y) => {
+      (sv as unknown as View).measureInWindow((_sx, sy) => {
+        sv.scrollTo({ y: Math.max(0, scrollY.current + (y - sy) - 8), animated: true });
+      });
+    });
+  };
+
   return (
     <ScrollView
+      ref={scrollRef}
+      onScroll={(e) => {
+        scrollY.current = e.nativeEvent.contentOffset.y;
+      }}
+      scrollEventThrottle={32}
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
@@ -123,6 +143,29 @@ export const SettingsScreen: React.FC = () => {
           <Text style={styles.quickToolSub}>Stats & Listener Card</Text>
         </Pressable>
       </View>
+
+      {/* Widget — easy to find: jumps to the widget card (preview, status, how to add) */}
+      <Pressable
+        onPress={jumpToWidget}
+        style={[styles.widgetRow, { borderColor: palette.accent + '33' }]}
+        accessibilityRole="button"
+        accessibilityLabel={vi ? 'Widget màn hình chính' : 'Home Screen widget'}
+      >
+        <View style={[styles.widgetIcon, { backgroundColor: palette.container }]}>
+          <Ionicons name="apps" size={18} color={palette.accent} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.quickToolTitle2}>
+            {vi ? 'Widget màn hình chính' : 'Home Screen widget'}
+          </Text>
+          <Text numberOfLines={1} style={styles.quickToolSub}>
+            {vi
+              ? 'Đang phát · Lời bài hát · màn hình khoá — xem trước & cách thêm'
+              : 'Now Playing · Lyrics · Lock Screen — preview & how to add'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={UI.text3} />
+      </Pressable>
 
       {/* Language Switch */}
       <Text style={[styles.sectionTitle, { fontFamily }]}>
@@ -811,6 +854,28 @@ const styles = themedSheet(() => ({
     paddingVertical: 6,
     borderRadius: 99,
     backgroundColor: UI.fg(0.1),
+  },
+  widgetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    backgroundColor: UI.fg(0.05),
+  },
+  widgetIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickToolTitle2: {
+    color: UI.text,
+    fontSize: 14.5,
+    fontWeight: '800',
   },
   quickRow: {
     flexDirection: 'row',

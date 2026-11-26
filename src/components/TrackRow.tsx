@@ -37,6 +37,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
     downloadingIds,
     palette,
     prefs,
+    haptic,
   } = useHolySic();
 
   const { width: winW } = useWindowDimensions();
@@ -73,6 +74,12 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   return (
     <Pressable
       onPress={handlePress}
+      // touch and hold → the song menu, with a haptic tap (like Music's context menu)
+      onLongPress={() => {
+        haptic('medium');
+        setActionTrack(track);
+      }}
+      delayLongPress={380}
       style={({ pressed }) => [
         styles.row,
         compact && styles.rowCompact,

@@ -38,6 +38,21 @@ merged in from Spotube, OpenSpot, Musike and Cog. All original notices are kept 
 - **Bit-perfect**: tắt mọi xử lý (EQ, chuẩn hoá, crossfade, tốc độ), âm lượng phần mềm 100 %, ưu tiên nguồn lossless, cho đầu ra chạy đúng tần số của bài (DAC USB) và hiển thị đường tín hiệu thật (nguồn → xử lý → âm lượng → đầu ra)
 - **Widget iOS**: *Đang phát* (nhỏ / vừa / lớn + màn hình khoá) và *Lời bài hát* — lời đồng bộ đổi dòng đúng lúc ngay trên màn hình chính & màn hình khoá
 
+### 📱 Native iOS
+- **Thanh trượt kiểu Apple Music** cho tiến độ & âm lượng — kéo (không cần bấm), phình to khi giữ, kéo quá mép vẫn tới max/0, rung nhẹ khi chạm 0 % / 100 %, VoiceOver vuốt lên/xuống để chỉnh / Apple-Music-style scrubbers: drag anywhere, grow while held, overshoot to hit max/0, haptic ticks at the ends
+- **Âm lượng hệ thống** (bản IPA): thanh âm lượng điều khiển đúng âm lượng iPhone, đồng bộ với nút cạnh máy, vẫn chỉnh được ở chế độ bit-perfect / the slider drives the real iPhone volume, in sync with the side buttons
+- **AirPlay** — nút chọn đầu ra (AirPods, loa Bluetooth, AirPlay, CarPlay) ngay trong trình phát + hiển thị đang phát ra đâu / native route picker + current output
+- **Cử chỉ / Gestures**: vuốt xuống để đóng trình phát (app hiện mờ phía sau), vuốt ảnh bìa ← → để đổi bài; mini player: vuốt ← bài sau, → bài trước, ↑ mở trình phát; nhấn giữ một bài để mở menu
+- **Quick Actions** — nhấn giữ biểu tượng app trên màn hình chính: *Tiếp tục nghe*, *Trộn bài đã thích*, *Mix It*, *Tìm kiếm*
+- **Haptics** ở mọi thao tác chính, điều khiển màn hình khoá / Dynamic Island
+
+#### 🧩 Không thấy widget? / Widget missing?
+**Cài đặt → Widget màn hình chính** sẽ cho biết chính xác tình trạng (đã liên kết · chưa đặt · thiếu extension · thiếu App Group).
+1. Mở app **ít nhất 1 lần**, rồi **khởi động lại iPhone** (iOS chỉ nạp widget mới sau khi app chạy).
+2. Nhấn giữ màn hình chính → **＋** (góc trên trái) → tìm **HolySic**.
+3. Nếu báo *thiếu extension*: khi cài bằng **Sideloadly** hãy **tắt** "Remove app extensions"; với **AltStore / SideStore** chọn **Keep App Extensions**. Tài khoản Apple miễn phí chỉ có 3 App ID — app + widget cần 2.
+4. iOS 15 chưa có widget màn hình khoá (cần iOS 16+); widget màn hình chính vẫn dùng bình thường.
+
 ### 🔍 Tìm kiếm đa nguồn / Multi-Source Search
 - **YouTube Music InnerTube** (iOS / visionOS client)
 - **Monochrome** — FLAC lossless 16/24-bit + custom relay servers

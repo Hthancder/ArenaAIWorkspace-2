@@ -13,7 +13,7 @@
 // No-ops on web and Expo Go.
 
 import { Platform } from 'react-native';
-import type { HolySicWidgetNative } from '../../../modules/holysic-widget';
+import type { HolySicWidgetNative, NativeWidgetStatus } from '../../../modules/holysic-widget';
 
 export const WIDGET_APP_GROUP = 'group.com.holysic.music';
 
@@ -85,6 +85,19 @@ export function widgetLinked(): boolean {
     return m.isAvailable(WIDGET_APP_GROUP);
   } catch {
     return false;
+  }
+}
+
+export type WidgetStatus = NativeWidgetStatus;
+
+/** What iOS says about the widget on this install (null on web / Expo Go / older builds) */
+export async function widgetStatus(): Promise<WidgetStatus | null> {
+  const m = mod();
+  if (!m || typeof m.status !== 'function') return null;
+  try {
+    return await m.status(WIDGET_APP_GROUP);
+  } catch {
+    return null;
   }
 }
 

@@ -14,7 +14,25 @@ import SwiftUI
 import UIKit
 import WidgetKit
 
-let holySicAppGroup = "group.com.holysic.music"
+/// The App Group both sides share. Sideloaders re-sign with your Apple ID and rename the group
+/// (AltStore / SideStore → "group.com.holysic.music.<TEAMID>", listed under ALTAppGroups in
+/// Info.plist), so look for the renamed one first — in the widget's own Info.plist and in the
+/// host app's — and keep the first one whose container really exists.
+let holySicAppGroup: String = {
+  let base = "group.com.holysic.music"
+  func altGroups(_ bundle: Bundle?) -> [String] {
+    (bundle?.object(forInfoDictionaryKey: "ALTAppGroups") as? [String]) ?? []
+  }
+  // …/HolySic.app/PlugIns/HolySicWidget.appex → …/HolySic.app
+  let hostURL = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
+  let candidates = (altGroups(Bundle.main) + altGroups(Bundle(url: hostURL)) + [base])
+    .filter { $0.hasPrefix(base) }
+  for group in candidates
+  where FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) != nil {
+    return group
+  }
+  return candidates.first ?? base
+}()
 
 // MARK: - Data
 

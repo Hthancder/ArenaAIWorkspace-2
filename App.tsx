@@ -30,6 +30,7 @@ import { MainTab } from './src/constants/preferences';
 import { resolveFontFamily } from './src/constants/theme';
 import { HolySicProvider, useHolySic } from './src/context/HolySicContext';
 import { useWidgetBridge } from './src/services/widget/useWidgetBridge';
+import { useQuickActions } from './src/services/shortcuts/useQuickActions';
 import {
   applyUiSchemeSilently,
   notifyUiScheme,
@@ -56,6 +57,7 @@ const HolySicShell: React.FC = () => {
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   // iOS home-screen / Lock Screen widget: publish now playing, handle its buttons
   useWidgetBridge();
+  useQuickActions();
 
   // Appearance (Dark / Light / Auto). On iOS the choice is also applied to the native window, so
   // system sheets, keyboards and pickers match; Auto follows the system (and switches at sunset).
