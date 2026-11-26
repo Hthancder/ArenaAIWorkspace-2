@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHolySic } from '../../context/HolySicContext';
 import { GlassSurface } from '../GlassSurface';
 import { AudioLabModal } from '../screens/AudioLabModal';
+import { SongInfoEditor, useSongEditorTarget } from '../local/SongInfoEditor';
 import { CollectionModal } from '../screens/CollectionScreen';
 import { TrackActionSheet } from '../TrackActionSheet';
 
@@ -29,7 +30,7 @@ export type LayerId =
   | 'recap'
   | 'welcome';
 
-type SheetId = 'collection' | 'audiolab' | 'action';
+type SheetId = 'collection' | 'audiolab' | 'action' | 'editor';
 
 let stack: LayerId[] = ['root'];
 const subs = new Set<() => void>();
@@ -93,11 +94,13 @@ const anchors: Record<SheetId, { layer: LayerId; open: boolean }> = {
   collection: { layer: 'root', open: false },
   audiolab: { layer: 'root', open: false },
   action: { layer: 'root', open: false },
+  editor: { layer: 'root', open: false },
 };
 const OWN_LAYER: Record<SheetId, LayerId | undefined> = {
   collection: 'collection',
   audiolab: 'audiolab',
   action: undefined,
+  editor: undefined,
 };
 
 function anchorFor(sheet: SheetId, visible: boolean): LayerId {
@@ -119,11 +122,14 @@ export const SheetSlot: React.FC<{ layer: LayerId }> = ({ layer }) => {
   const col = anchorFor('collection', !!collectionTarget) === layer && layer !== 'collection';
   const lab = anchorFor('audiolab', isAudioLabOpen) === layer && layer !== 'audiolab';
   const act = anchorFor('action', !!actionTrack) === layer;
+  const editing = useSongEditorTarget();
+  const ed = anchorFor('editor', !!editing) === layer;
   return (
     <>
       {col && <CollectionModal />}
       {lab && <AudioLabModal />}
       {act && <TrackActionSheet />}
+      {ed && <SongInfoEditor />}
       {top === layer && <ToastPill />}
     </>
   );

@@ -28,10 +28,12 @@ import {
   FolderNode,
   LocalFile,
   LocalLibrary,
+  localPathOf,
   LocalState,
 } from '../../services/local/localLibrary';
 import { Track } from '../../types/music';
 import { ArtworkImage } from '../ArtworkImage';
+import { openSongEditor } from './SongInfoEditor';
 
 export const useLocalLibrary = (): LocalState =>
   useSyncExternalStore(LocalLibrary.subscribe, LocalLibrary.getState, LocalLibrary.getState);
@@ -359,6 +361,25 @@ export const LocalLibraryScreen: React.FC = () => {
       },
     });
 
+  const runAutoFill = async (paths: string[]) => {
+    if (st.fetching) return;
+    showToast(
+      vi
+        ? 'Đang tìm thông tin & ảnh bìa trên Apple Music / Deezer…'
+        : 'Looking up details & covers on Apple Music / Deezer…'
+    );
+    const r = await LocalLibrary.autoFill(paths);
+    showToast(
+      !r.checked
+        ? vi
+          ? 'Các bài đã đủ thông tin & ảnh bìa'
+          : 'Every song already has details & a cover'
+        : vi
+          ? `Đã bổ sung ${r.matched}/${r.checked} bài${r.matched < r.checked ? ' — bài còn lại: ⋯ → Sửa thông tin để chọn tay' : ''}`
+          : `Filled ${r.matched}/${r.checked} songs${r.matched < r.checked ? ' — for the rest: ⋯ → Edit info' : ''}`
+    );
+  };
+
   const savePlaylist = (tracks: Track[], name: string) =>
     setOverlay({
       type: 'prompt',
@@ -404,6 +425,35 @@ export const LocalLibraryScreen: React.FC = () => {
                 : []),
             ]
           : []),
+        ...(scopeTracks.length
+          ? [
+              {
+                icon: 'sparkles-outline' as const,
+                label: vi
+                  ? 'Tự tìm thông tin & ảnh bìa còn thiếu'
+                  : 'Find missing details & covers',
+                onPress: () => runAutoFill(scopeTracks.map((t) => localPathOf(t))),
+              },
+            ]
+          : []),
+        {
+          icon: st.autoFetch ? 'toggle' : 'toggle-outline',
+          label: vi
+            ? `Tự tìm cho bài mới: ${st.autoFetch ? 'Bật' : 'Tắt'}`
+            : `Auto-find for new songs: ${st.autoFetch ? 'On' : 'Off'}`,
+          onPress: () => {
+            LocalLibrary.setAutoFetch(!st.autoFetch);
+            showToast(
+              !st.autoFetch
+                ? vi
+                  ? 'Bài mới sẽ tự có thông tin & ảnh bìa (khi tìm được chắc chắn)'
+                  : 'New songs get details & covers automatically (confident matches only)'
+                : vi
+                  ? 'Đã tắt tự tìm'
+                  : 'Auto-find off'
+            );
+          },
+        },
         {
           icon: 'checkmark-circle-outline',
           label: vi ? 'Chọn nhiều' : 'Select',
@@ -535,6 +585,11 @@ export const LocalLibraryScreen: React.FC = () => {
           icon: 'list-outline',
           label: vi ? 'Thêm vào hàng chờ' : 'Add to queue',
           onPress: () => addToQueue(f.track, false),
+        },
+        {
+          icon: 'sparkles-outline',
+          label: vi ? 'Sửa thông tin & ảnh bìa…' : 'Edit info & cover…',
+          onPress: () => openSongEditor(f.track),
         },
         {
           icon: 'arrow-redo-outline',
@@ -784,6 +839,23 @@ export const LocalLibraryScreen: React.FC = () => {
                     ? 'Đang quét thư mục…'
                     : 'Scanning…'}
               </Text>
+            </View>
+          )}
+          {st.fetching && (
+            <View style={styles.scanRow}>
+              <ActivityIndicator size="small" color={palette.accent} />
+              <Text style={styles.scanText} numberOfLines={1}>
+                {vi ? 'Đang tìm thông tin & ảnh bìa' : 'Finding details & covers'}{' '}
+                {st.fetching.done}/{st.fetching.total}
+                {st.fetching.matched ? ` · ${vi ? 'đã có' : 'found'} ${st.fetching.matched}` : ''}
+              </Text>
+              <Pressable
+                onPress={() => LocalLibrary.cancelAutoFill()}
+                hitSlop={8}
+                accessibilityLabel={vi ? 'Dừng tìm' : 'Stop'}
+              >
+                <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.6)" />
+              </Pressable>
             </View>
           )}
         </View>

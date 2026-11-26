@@ -15,6 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
 import { AppState, Linking, Platform } from 'react-native';
 import { Track } from '../../types/music';
+import { bestMatch, MetaCandidate } from './metadataLookup';
 import { ByteReader, decodeText, readTags, TagMeta } from './tagReader';
 
 export const AUDIO_EXT = /\.(mp3|m4a|aac|flac|wav|aif|aiff|caf|alac|mp4|m4b)$/i;
@@ -22,7 +23,27 @@ const COVER_NAME = /^(cover|folder|front|album|artwork|albumart)\.(jpe?g|png)$/i
 /** Internal app folders that live in Documents but are not the user's music */
 const INTERNAL_DIRS = new Set(['holysic-offline', 'holysic-local', '.Trash']);
 const META_KEY = '@holysic/local_meta_v1';
+const EDITS_KEY = '@holysic/local_edits_v1';
+const SETTINGS_KEY = '@holysic/local_settings_v1';
+
+/** "Sửa thông tin": the user's own (or fetched) details, kept in the app — files are untouched */
+export interface LocalEdit {
+  title?: string;
+  artist?: string;
+  album?: string;
+  albumArtist?: string;
+  year?: number;
+  genre?: string;
+  trackNo?: number;
+  /** cover image in the art cache */
+  art?: string;
+  /** where auto-fill found it ("Apple Music" / "Deezer") */
+  fetchedFrom?: string;
+  /** last automatic lookup (also when nothing matched, so it isn't retried every scan) */
+  lookedUpAt?: number;
+}
 const ART_DIR = 'holysic-art';
+const KEPT_ART_DIR = '.holysic-covers';
 export const LOCAL_ID_PREFIX = 'lf:';
 
 // ---------- types ----------
@@ -72,6 +93,10 @@ export interface LocalState {
   /** Library screen: null = closed, otherwise the folder path to show first */
   openAt: string | null;
   openNonce: number;
+  /** auto-fill progress (finding missing details & covers online) */
+  fetching: { done: number; total: number; matched: number } | null;
+  /** look up missing details & covers automatically after each scan */
+  autoFetch: boolean;
 }
 
 interface Entry {
@@ -97,6 +122,9 @@ interface Backend {
   coverUri(rel: string, e: Entry): string | undefined;
   /** copy an image (picker/cache URI) to a file in the library */
   writeFromUri(uri: string, toRel: string): Promise<void>;
+  /** download (http) or copy (file/blob) an image into the art cache */
+  saveArt(uri: string, name: string): Promise<void>;
+  removeArt?(name: string): void;
 }
 
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
@@ -138,6 +166,14 @@ function nativeBackend(): Backend {
     if (!d.exists) d.create({ intermediates: true, idempotent: true });
     return d;
   };
+  // covers the user chose / auto-fill found are not re-creatable from the files, so they live
+  // outside Caches (which iOS may purge) — in a hidden Documents folder the scanner skips
+  const keptDir = () => {
+    const d = new Directory(Paths.document, KEPT_ART_DIR);
+    if (!d.exists) d.create({ intermediates: true, idempotent: true });
+    return d;
+  };
+  const isKept = (name: string) => /^(ed|af)-/.test(name);
   return {
     kind: 'native',
     async list(rel) {
@@ -201,8 +237,18 @@ function nativeBackend(): Backend {
       new File(artDir(), name).write(data);
     },
     artUri(name) {
-      const f = new File(Paths.cache, ART_DIR, name);
+      const f = isKept(name)
+        ? new File(Paths.document, KEPT_ART_DIR, name)
+        : new File(Paths.cache, ART_DIR, name);
       return f.exists ? f.uri : undefined;
+    },
+    removeArt(name) {
+      try {
+        const f = new File(isKept(name) ? keptDir() : artDir(), name);
+        if (f.exists) f.delete();
+      } catch {
+        // ignore
+      }
     },
     coverUri(rel, e) {
       // a cache copy named after size+mtime: a replaced cover.jpg gets a new URI, so it shows at once
@@ -220,6 +266,14 @@ function nativeBackend(): Backend {
       const dst = fileFor(toRel);
       if (dst.exists) dst.delete();
       new File(uri).copy(dst);
+    },
+    async saveArt(uri, name) {
+      const dst = new File(isKept(name) ? keptDir() : artDir(), name);
+      if (/^https?:/i.test(uri)) await File.downloadFileAsync(uri, dst, { idempotent: true });
+      else {
+        if (dst.exists) dst.delete();
+        new File(uri).copy(dst);
+      }
     },
   };
 }
@@ -297,6 +351,12 @@ function webBackend(): Backend {
     artUri: (name) => art.get(name),
     coverUri(rel) {
       return fs.has(rel) ? this.uri(rel) : undefined;
+    },
+    async saveArt(uri, name) {
+      const blob = await (await fetch(uri)).blob();
+      const old = art.get(name);
+      if (old) URL.revokeObjectURL(old);
+      art.set(name, URL.createObjectURL(blob));
     },
     async writeFromUri(uri, toRel) {
       const blob = await (await fetch(uri)).blob();
@@ -384,6 +444,8 @@ const UNKNOWN_ARTIST = 'Không rõ nghệ sĩ';
 class LocalLibraryStore {
   private backend: Backend = Platform.OS === 'web' ? webBackend() : nativeBackend();
   private metaCache: Record<string, CachedMeta> = {};
+  private edits: Record<string, LocalEdit> = {};
+  private fetchRun = 0;
   private metaLoaded = false;
   private listeners = new Set<() => void>();
   private remapListeners = new Set<(map: Record<string, Track>) => void>();
@@ -404,6 +466,8 @@ class LocalLibraryStore {
     lastScanAt: 0,
     openAt: null,
     openNonce: 0,
+    fetching: null,
+    autoFetch: false,
   };
 
   subscribe = (cb: () => void) => {
@@ -492,11 +556,20 @@ class LocalLibraryStore {
     if (this.metaLoaded) return;
     this.metaLoaded = true;
     try {
-      const raw = await AsyncStorage.getItem(META_KEY);
+      const [raw, ed, st] = await Promise.all([
+        AsyncStorage.getItem(META_KEY),
+        AsyncStorage.getItem(EDITS_KEY),
+        AsyncStorage.getItem(SETTINGS_KEY),
+      ]);
       if (raw) this.metaCache = JSON.parse(raw) || {};
+      if (ed) this.edits = JSON.parse(ed) || {};
+      if (st) this.set({ autoFetch: !!JSON.parse(st)?.autoFetch });
     } catch {
       this.metaCache = {};
     }
+  }
+  private saveEdits() {
+    AsyncStorage.setItem(EDITS_KEY, JSON.stringify(this.edits)).catch(() => undefined);
   }
   private saveMeta() {
     AsyncStorage.setItem(META_KEY, JSON.stringify(this.metaCache)).catch(() => undefined);
@@ -665,6 +738,10 @@ class LocalLibraryStore {
       lastScanAt: Date.now(),
       progress: { done: todo.length, total: todo.length },
     });
+    if (this.state.autoFetch && !this.state.fetching) {
+      // background, one song at a time, only songs never looked up before
+      setTimeout(() => this.autoFill('', { onlyNew: true }), 1500);
+    }
   }
 
   private toLocalFile(rel: string, e: Entry, folderCover?: string): LocalFile {
@@ -673,16 +750,25 @@ class LocalLibraryStore {
     const guess = titleFromFileName(e.name);
     const dirParts = parts(dir);
     const ext = (e.name.match(/\.([^.]+)$/)?.[1] || '').toUpperCase();
-    const artist = meta.artist || guess.artist || meta.albumArtist || UNKNOWN_ARTIST;
-    const album = meta.album || dirParts[dirParts.length - 1] || undefined;
-    const art = meta.art ? this.backend.artUri(meta.art) : undefined;
+    const ed = this.edits[rel] || {};
+    const artist =
+      ed.artist ||
+      meta.artist ||
+      guess.artist ||
+      ed.albumArtist ||
+      meta.albumArtist ||
+      UNKNOWN_ARTIST;
+    const album = ed.album || meta.album || dirParts[dirParts.length - 1] || undefined;
+    const art =
+      (ed.art && this.backend.artUri(ed.art)) ||
+      (meta.art ? this.backend.artUri(meta.art) : undefined);
     const khz = meta.sampleRateHz
       ? ` · ${(meta.sampleRateHz / 1000).toFixed(1).replace(/\.0$/, '')} kHz`
       : '';
     const codec = meta.codec || ext;
     const track: Track = {
       id: LOCAL_ID_PREFIX + rel,
-      title: meta.title || guess.title,
+      title: ed.title || meta.title || guess.title,
       artist,
       artists: artist.split(/\s*(?:,|&|feat\.?|ft\.?|x)\s+/i).filter(Boolean),
       album,
@@ -690,13 +776,21 @@ class LocalLibraryStore {
       durationSec: meta.durationSec || 0,
       source: 'local',
       qualityBadge: `${codec}${khz} · ${Platform.OS === 'web' ? 'Local' : 'Trên máy'}`,
-      genre: meta.genre,
-      releaseYear: meta.year,
+      genre: ed.genre || meta.genre,
+      releaseYear: ed.year || meta.year,
       replayGainDb: meta.replayGainDb,
       replayPeak: meta.replayPeak,
     };
     if (!meta.trackNo && guess.trackNo) meta.trackNo = guess.trackNo;
-    return { path: rel, name: e.name, dir, size: e.size, mtime: e.mtime, meta, track };
+    const shown =
+      ed.trackNo || ed.albumArtist
+        ? {
+            ...meta,
+            trackNo: ed.trackNo || meta.trackNo,
+            albumArtist: ed.albumArtist || meta.albumArtist,
+          }
+        : meta;
+    return { path: rel, name: e.name, dir, size: e.size, mtime: e.mtime, meta: shown, track };
   }
 
   // ---- folder operations ----
@@ -781,6 +875,9 @@ class LocalLibraryStore {
         n++;
         const lrc = !isDir && this.lrcByBase.get(stripExt(rel).toLowerCase());
         if (lrc) this.backend.remove(lrc, false);
+        for (const k of Object.keys(this.edits))
+          if (k === rel || k.startsWith(rel + '/')) delete this.edits[k];
+        this.saveEdits();
       } catch {
         // already gone
       }
@@ -839,6 +936,179 @@ class LocalLibraryStore {
       }
     }
     return out;
+  }
+
+  // ---- "Sửa thông tin" (edits) & online auto-fill ----
+
+  getEdit(rel: string): LocalEdit | undefined {
+    return this.edits[rel];
+  }
+
+  /** The song's own embedded cover (ignoring edits) */
+  fileArtUri(rel: string): string | undefined {
+    const a = this.metaCache[rel]?.art;
+    return a ? this.backend.artUri(a) : undefined;
+  }
+
+  /** What the file itself says (tags / file name), to show under the edit fields */
+  fileDetails(rel: string): {
+    title: string;
+    artist?: string;
+    album?: string;
+    year?: number;
+    genre?: string;
+    trackNo?: number;
+  } {
+    const m = this.metaCache[rel] || ({} as CachedMeta);
+    const g = titleFromFileName(baseOf(rel));
+    return {
+      title: m.title || g.title,
+      artist: m.artist || g.artist,
+      album: m.album,
+      year: m.year,
+      genre: m.genre,
+      trackNo: m.trackNo || g.trackNo,
+    };
+  }
+
+  /**
+   * Save the user's details for a song (replaces the previous edit). `cover`: a picked image /
+   * downloaded cover URL to use, `null` to drop an edited cover, undefined to keep it. Fields left
+   * out fall back to the file's own tags.
+   */
+  async saveEdit(rel: string, edit: LocalEdit, cover?: string | null): Promise<void> {
+    const prev = this.edits[rel] || {};
+    const next: LocalEdit = { lookedUpAt: prev.lookedUpAt, art: prev.art, ...edit };
+    for (const k of Object.keys(next) as (keyof LocalEdit)[]) {
+      const v = next[k];
+      if (v === undefined || v === '' || (typeof v === 'number' && !Number.isFinite(v)))
+        delete next[k];
+    }
+    if (cover === null) {
+      if (next.art) this.backend.removeArt?.(next.art);
+      delete next.art;
+    } else if (cover) {
+      const name = `ed-${hash(rel + cover + Date.now())}.jpg`;
+      let src = cover;
+      if (!/^https?:/i.test(cover)) {
+        // a photo from the library can be huge: keep ≤1000 px like the downloaded covers
+        src = (await shrinkImage(cover, 1000).catch(() => undefined)) || cover;
+      }
+      await this.backend.saveArt(src, name);
+      if (prev.art && prev.art !== name) this.backend.removeArt?.(prev.art);
+      next.art = name;
+    }
+    if (Object.keys(next).length) this.edits[rel] = next;
+    else delete this.edits[rel];
+    this.saveEdits();
+    await this.scan();
+    this.emitRemap({ [LOCAL_ID_PREFIX + rel]: { id: LOCAL_ID_PREFIX + rel } as Track });
+  }
+
+  /** Back to exactly what the file's tags say */
+  async resetEdit(rel: string): Promise<void> {
+    const art = this.edits[rel]?.art;
+    if (art) this.backend.removeArt?.(art);
+    // remember it was looked at, so automatic fill doesn't put the details straight back
+    this.edits[rel] = { lookedUpAt: Date.now() };
+    this.saveEdits();
+    await this.scan();
+    this.emitRemap({ [LOCAL_ID_PREFIX + rel]: { id: LOCAL_ID_PREFIX + rel } as Track });
+  }
+
+  setAutoFetch(on: boolean) {
+    this.set({ autoFetch: on });
+    AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ autoFetch: on })).catch(() => undefined);
+    if (on && !this.state.fetching) this.autoFill('', { onlyNew: true });
+  }
+
+  /** Songs that are missing something worth looking up */
+  private needsLookup(f: LocalFile): boolean {
+    const ed = this.edits[f.path] || {};
+    const m = this.metaCache[f.path] || ({} as CachedMeta);
+    const hasArt = !!(ed.art || m.art);
+    const hasArtist = !!(ed.artist || m.artist);
+    const hasAlbum = !!(ed.album || m.album);
+    return !hasArt || !hasArtist || !hasAlbum;
+  }
+
+  /**
+   * Find missing details & covers online for every song under `dir` (or the given paths).
+   * Only fills what is missing, never overwrites the file's own tags or the user's edits, and only
+   * applies confident matches. Returns how many songs were updated.
+   */
+  async autoFill(
+    dir: string | string[],
+    opts: { onlyNew?: boolean } = {}
+  ): Promise<{ checked: number; matched: number }> {
+    if (this.state.fetching) return { checked: 0, matched: 0 };
+    const run = ++this.fetchRun;
+    const prefix = typeof dir === 'string' && dir ? dir + '/' : '';
+    const pool = Array.isArray(dir)
+      ? this.state.files.filter((f) => dir.includes(f.path))
+      : this.state.files.filter((f) => !prefix || f.path.startsWith(prefix));
+    const todo = pool.filter(
+      (f) => this.needsLookup(f) && !(opts.onlyNew && this.edits[f.path]?.lookedUpAt)
+    );
+    if (!todo.length) return { checked: 0, matched: 0 };
+    let matched = 0;
+    this.set({ fetching: { done: 0, total: todo.length, matched: 0 } });
+    try {
+      for (let i = 0; i < todo.length; i++) {
+        if (run !== this.fetchRun) break;
+        const f = todo[i];
+        const details = this.fileDetails(f.path);
+        let hit: MetaCandidate | null = null;
+        try {
+          hit = await bestMatch({
+            title: details.title,
+            artist: details.artist,
+            album: details.album,
+            durationSec: f.track.durationSec || undefined,
+          });
+        } catch {
+          hit = null;
+        }
+        const ed: LocalEdit = { ...(this.edits[f.path] || {}), lookedUpAt: Date.now() };
+        const m = this.metaCache[f.path] || ({} as CachedMeta);
+        if (hit) {
+          // fill only the gaps
+          if (!m.title && !ed.title) ed.title = hit.title;
+          if (!m.artist && !ed.artist) ed.artist = hit.artist;
+          if (!m.album && !ed.album && hit.album) ed.album = hit.album;
+          if (!m.year && !ed.year && hit.year) ed.year = hit.year;
+          if (!m.genre && !ed.genre && hit.genre) ed.genre = hit.genre;
+          if (!m.trackNo && !ed.trackNo && hit.trackNo) ed.trackNo = hit.trackNo;
+          if (!m.art && !ed.art && hit.coverUrl) {
+            const name = `af-${hash(f.path + hit.coverUrl)}.jpg`;
+            try {
+              await this.backend.saveArt(hit.coverUrl, name);
+              ed.art = name;
+            } catch {
+              // cover download failed: keep the text details
+            }
+          }
+          ed.fetchedFrom = hit.source;
+          matched++;
+        }
+        this.edits[f.path] = ed;
+        this.set({ fetching: { done: i + 1, total: todo.length, matched } });
+      }
+    } finally {
+      this.saveEdits();
+      this.set({ fetching: null });
+    }
+    if (matched) {
+      await this.scan();
+      const remap: Record<string, Track> = {};
+      todo.forEach((f) => (remap[f.track.id] = { id: f.track.id } as Track));
+      this.emitRemap(remap);
+    }
+    return { checked: todo.length, matched };
+  }
+
+  cancelAutoFill() {
+    this.fetchRun++;
   }
 
   // ---- lyrics ----
@@ -945,7 +1215,15 @@ class LocalLibraryStore {
   }
 
   private applyRenames(pairs: [string, string][], remap: Record<string, Track>) {
+    let editsMoved = false;
     for (const [from, to] of pairs) {
+      for (const k of Object.keys(this.edits)) {
+        if (k === from || k.startsWith(from + '/')) {
+          this.edits[to + k.slice(from.length)] = this.edits[k];
+          delete this.edits[k];
+          editsMoved = true;
+        }
+      }
       for (const k of Object.keys(this.metaCache)) {
         if (k === from || k.startsWith(from + '/')) {
           const nk = to + k.slice(from.length);
@@ -955,6 +1233,7 @@ class LocalLibraryStore {
         }
       }
     }
+    if (editsMoved) this.saveEdits();
   }
 
   private emitRemap(remap: Record<string, Track>) {

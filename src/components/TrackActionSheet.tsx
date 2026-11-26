@@ -17,6 +17,7 @@ import { HOLYSIC_COLORS } from '../constants/theme';
 import { useHolySic } from '../context/HolySicContext';
 import { GlassSurface } from './GlassSurface';
 import { isLocalTrack, LocalLibrary, localDirOf } from '../services/local/localLibrary';
+import { openSongEditor } from './local/SongInfoEditor';
 
 export const TrackActionSheet: React.FC = () => {
   const {
@@ -210,6 +211,18 @@ export const TrackActionSheet: React.FC = () => {
                     {vi ? 'Thêm vào Playlist…' : 'Add to Playlist…'}
                   </Text>
                 </Pressable>
+
+                {isLocalTrack(sheetTrack) && (
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => closeThen(() => openSongEditor(sheetTrack))}
+                  >
+                    <Ionicons name="create-outline" size={21} color="#A78BFA" />
+                    <Text style={styles.menuLabel}>
+                      {vi ? 'Sửa thông tin & ảnh bìa…' : 'Edit info & cover…'}
+                    </Text>
+                  </Pressable>
+                )}
 
                 {isLocalTrack(sheetTrack) ? (
                   <Pressable
