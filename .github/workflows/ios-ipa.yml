@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - 'arena/af5aae1b-arenaaiworkspace-2'
+    paths-ignore:
+      - 'scripts/probe-sources.mjs'
+      - '.github/workflows/probe-sources.yml'
     tags:
       - 'v*'
 

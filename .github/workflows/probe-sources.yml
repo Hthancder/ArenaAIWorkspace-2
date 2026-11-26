@@ -1,0 +1,22 @@
+name: Probe music sources (YouTube / JioSaavn / Monochrome)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'arena/af5aae1b-arenaaiworkspace-2'
+    paths:
+      - 'scripts/probe-sources.mjs'
+      - '.github/workflows/probe-sources.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Probe sources
+        run: node --openssl-legacy-provider scripts/probe-sources.mjs
