@@ -1,6 +1,8 @@
 Pod::Spec.new do |s|
-  s.name           = 'HolySicWidget'
+  s.name           = 'HolySicWidgetBridge'
   s.version        = '1.0.0'
+  # Pod name must differ from the WidgetKit extension target (HolySicWidget): Xcode builds the
+  # extension first and its HolySicWidget.swiftmodule would shadow this pod in ExpoModulesProvider.
   s.summary        = 'HolySic: share now playing with the WidgetKit extension'
   s.description    = 'Writes the now-playing snapshot into the HolySic App Group and reloads widget timelines.'
   s.author         = 'HolySic'
