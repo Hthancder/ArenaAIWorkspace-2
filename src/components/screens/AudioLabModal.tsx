@@ -74,7 +74,12 @@ export const AudioLabModal: React.FC = () => {
       >
         <View style={styles.header}>
           <View style={{ flex: 1, minWidth: 0, marginRight: 10 }}>
-            <Text style={[styles.title, { fontFamily }]} numberOfLines={1}>
+            <Text
+              style={[styles.title, { fontFamily }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+            >
               HolySic Audio Lab
             </Text>
             <Text style={styles.sub} numberOfLines={1}>
@@ -189,13 +194,22 @@ export const AudioLabModal: React.FC = () => {
                 </Pressable>
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {/* all 10 bands share the card width; only scrolls if a phone is narrower than 10×25pt */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ flexGrow: 1 }}
+              >
                 <View style={styles.eqRow}>
                   {audioLab.bands.map((band, idx) => {
                     const pct = ((band.gainDb + 12) / 24) * 100;
                     return (
                       <View key={band.freqHz} style={styles.bandCol}>
-                        <Pressable onPress={() => adjustBand(idx, 1.5)} style={styles.stepMiniBtn}>
+                        <Pressable
+                          hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+                          onPress={() => adjustBand(idx, 1.5)}
+                          style={styles.stepMiniBtn}
+                        >
                           <Ionicons name="add" size={14} color={UI.text} />
                         </Pressable>
 
@@ -211,7 +225,11 @@ export const AudioLabModal: React.FC = () => {
                           />
                         </View>
 
-                        <Pressable onPress={() => adjustBand(idx, -1.5)} style={styles.stepMiniBtn}>
+                        <Pressable
+                          hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+                          onPress={() => adjustBand(idx, -1.5)}
+                          style={styles.stepMiniBtn}
+                        >
                           <Ionicons name="remove" size={14} color={UI.text} />
                         </Pressable>
 
@@ -447,18 +465,21 @@ const styles = themedSheet(() => ({
     marginTop: 3,
   },
   eqRow: {
+    flex: 1,
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'space-between',
     paddingVertical: 6,
   },
   bandCol: {
+    flex: 1,
     alignItems: 'center',
-    width: 34,
+    minWidth: 25,
+    maxWidth: 44,
   },
   stepMiniBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: UI.fg(0.09),
     alignItems: 'center',
     justifyContent: 'center',

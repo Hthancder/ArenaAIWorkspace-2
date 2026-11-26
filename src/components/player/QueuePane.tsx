@@ -66,7 +66,9 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
       <View style={styles.tools}>
         <Pressable onPress={saveQueue} style={styles.tool}>
           <Ionicons name="bookmark-outline" size={14} color="#FFF" />
-          <Text style={styles.toolText}>{vi ? 'Lưu thành playlist' : 'Save as playlist'}</Text>
+          <Text numberOfLines={1} style={styles.toolText}>
+            {vi ? 'Lưu playlist' : 'Save playlist'}
+          </Text>
         </Pressable>
         <Pressable
           onPress={clearUpcoming}
@@ -74,8 +76,8 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
           style={[styles.tool, upcoming === 0 && { opacity: 0.4 }]}
         >
           <Ionicons name="trash-outline" size={14} color="#F87171" />
-          <Text style={[styles.toolText, { color: '#F87171' }]}>
-            {vi ? 'Xoá các bài sau' : 'Clear upcoming'}
+          <Text numberOfLines={1} style={[styles.toolText, { color: '#F87171' }]}>
+            {vi ? 'Xoá bài sau' : 'Clear upcoming'}
           </Text>
         </Pressable>
       </View>
@@ -163,6 +165,7 @@ const styles = StyleSheet.create({
   sub: { color: HOLYSIC_COLORS.textMuted, fontSize: 12, marginTop: 2 },
   tools: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   tool: {
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -171,7 +174,7 @@ const styles = StyleSheet.create({
     borderRadius: 99,
     backgroundColor: 'rgba(255,255,255,0.07)',
   },
-  toolText: { color: '#FFF', fontSize: 12.5, fontWeight: '700' },
+  toolText: { flexShrink: 1, color: '#FFF', fontSize: 12.5, fontWeight: '700' },
   row: {
     height: ROW_H,
     flexDirection: 'row',

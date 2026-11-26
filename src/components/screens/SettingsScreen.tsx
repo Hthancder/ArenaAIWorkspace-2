@@ -72,6 +72,9 @@ export const SettingsScreen: React.FC = () => {
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      automaticallyAdjustKeyboardInsets
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
     >
       {/* Hero Brand Banner */}
       <View style={[styles.brandBanner, { borderColor: palette.accent + '35' }]}>
@@ -92,7 +95,7 @@ export const SettingsScreen: React.FC = () => {
             >
               <Ionicons name="logo-github" size={14} color={palette.onAccent} />
               <Text style={{ color: palette.onAccent, fontSize: 12, fontWeight: '800' }}>
-                Mochy GitHub
+                {vi ? 'Mã nguồn gốc' : 'Upstream'}
               </Text>
             </Pressable>
             <Pressable
@@ -100,9 +103,7 @@ export const SettingsScreen: React.FC = () => {
               style={styles.miniLinkPillGhost}
             >
               <Ionicons name="chatbubbles-outline" size={14} color={UI.text} />
-              <Text style={{ color: UI.text, fontSize: 12, fontWeight: '700' }}>
-                Mochy&apos;s Bar
-              </Text>
+              <Text style={{ color: UI.text, fontSize: 12, fontWeight: '700' }}>Discord</Text>
             </Pressable>
           </View>
         </View>
@@ -790,6 +791,7 @@ const styles = themedSheet(() => ({
   },
   bannerLinksRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginTop: 10,
   },

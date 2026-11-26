@@ -217,6 +217,9 @@ export const CollectionModal: React.FC = () => {
         <ScrollView
           contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
           showsVerticalScrollIndicator={false}
+          automaticallyAdjustKeyboardInsets
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           <LinearGradient
             colors={[headerPalette.gradient[0], UI.surface('#0A0A0F')]}

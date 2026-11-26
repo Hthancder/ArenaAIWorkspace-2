@@ -3,6 +3,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -90,304 +91,310 @@ export const TrackActionSheet: React.FC = () => {
       onRequestClose={close}
       onDismiss={runPending}
     >
-      <Pressable style={styles.backdrop} onPress={close}>
-        <Pressable style={styles.sheetOuter} onPress={(e) => e.stopPropagation?.()}>
-          <GlassSurface intensity={75} tintColor={UI.shade(18, 18, 26, 0.9)} style={styles.sheet}>
-            <View style={styles.handle} />
+      {/* lifts the sheet above the keyboard when naming a new playlist */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <Pressable style={styles.backdrop} onPress={close}>
+          <Pressable style={styles.sheetOuter} onPress={(e) => e.stopPropagation?.()}>
+            <GlassSurface intensity={75} tintColor={UI.shade(18, 18, 26, 0.9)} style={styles.sheet}>
+              <View style={styles.handle} />
 
-            {/* Header */}
-            <View style={styles.header}>
-              <ArtworkImage
-                source={{ uri: sheetTrack.artworkUrl }}
-                fallbackSeed={sheetTrack.title}
-                style={styles.art}
-              />
-              <View style={{ flex: 1 }}>
-                <Text numberOfLines={1} style={styles.title}>
-                  {sheetTrack.title}
-                </Text>
-                <Text numberOfLines={1} style={styles.artist}>
-                  {sheetTrack.artist}
-                  {sheetTrack.album ? ` · ${sheetTrack.album}` : ''}
-                </Text>
-                <Text style={[styles.badge, { color: palette.accent }]}>
-                  {sheetTrack.qualityBadge || sheetTrack.source.toUpperCase()}
-                </Text>
-              </View>
-            </View>
-
-            {pickingPlaylist ? (
-              <View style={styles.playlistPicker}>
-                <View style={styles.newPlRow}>
-                  <TextInput
-                    value={newPlaylistName}
-                    onChangeText={setNewPlaylistName}
-                    placeholder={vi ? 'Tên playlist mới…' : 'New playlist name…'}
-                    placeholderTextColor={UI.text3}
-                    style={styles.input}
-                  />
-                  <Pressable
-                    onPress={() => {
-                      if (!newPlaylistName.trim()) return;
-                      const created = createPlaylist(newPlaylistName);
-                      addTrackToPlaylist(created.id, sheetTrack);
-                      close();
-                    }}
-                    style={[styles.createBtn, { backgroundColor: palette.accent }]}
-                  >
-                    <Text style={{ color: palette.onAccent, fontWeight: '700', fontSize: 13 }}>
-                      {vi ? 'Tạo & Lưu' : 'Create'}
-                    </Text>
-                  </Pressable>
+              {/* Header */}
+              <View style={styles.header}>
+                <ArtworkImage
+                  source={{ uri: sheetTrack.artworkUrl }}
+                  fallbackSeed={sheetTrack.title}
+                  style={styles.art}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text numberOfLines={1} style={styles.title}>
+                    {sheetTrack.title}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.artist}>
+                    {sheetTrack.artist}
+                    {sheetTrack.album ? ` · ${sheetTrack.album}` : ''}
+                  </Text>
+                  <Text style={[styles.badge, { color: palette.accent }]}>
+                    {sheetTrack.qualityBadge || sheetTrack.source.toUpperCase()}
+                  </Text>
                 </View>
+              </View>
 
-                <ScrollView style={{ maxHeight: 220 }}>
-                  {playlists.map((pl) => (
+              {pickingPlaylist ? (
+                <View style={styles.playlistPicker}>
+                  <View style={styles.newPlRow}>
+                    <TextInput
+                      value={newPlaylistName}
+                      onChangeText={setNewPlaylistName}
+                      placeholder={vi ? 'Tên playlist mới…' : 'New playlist name…'}
+                      placeholderTextColor={UI.text3}
+                      style={styles.input}
+                    />
                     <Pressable
-                      key={pl.id}
                       onPress={() => {
-                        addTrackToPlaylist(pl.id, sheetTrack);
+                        if (!newPlaylistName.trim()) return;
+                        const created = createPlaylist(newPlaylistName);
+                        addTrackToPlaylist(created.id, sheetTrack);
                         close();
                       }}
-                      style={styles.menuItem}
+                      style={[styles.createBtn, { backgroundColor: palette.accent }]}
                     >
-                      <Ionicons name="musical-notes" size={20} color={palette.accent} />
-                      <Text style={styles.menuLabel}>
-                        {pl.name} ({pl.tracks.length})
+                      <Text style={{ color: palette.onAccent, fontWeight: '700', fontSize: 13 }}>
+                        {vi ? 'Tạo & Lưu' : 'Create'}
                       </Text>
                     </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : (
-              <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
-                <Pressable
-                  style={styles.menuItem}
-                  onPress={() => {
-                    addToQueue(sheetTrack, true);
-                    close();
-                  }}
-                >
-                  <Ionicons name="play-forward-outline" size={21} color={UI.text} />
-                  <Text style={styles.menuLabel}>
-                    {vi ? 'Phát kế tiếp (Play Next)' : 'Play Next'}
-                  </Text>
-                </Pressable>
+                  </View>
 
-                <Pressable
-                  style={styles.menuItem}
-                  onPress={() => {
-                    addToQueue(sheetTrack, false);
-                    close();
-                  }}
-                >
-                  <Ionicons name="list-outline" size={21} color={UI.text} />
-                  <Text style={styles.menuLabel}>
-                    {vi ? 'Thêm vào cuối hàng chờ' : 'Add to Queue'}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.menuItem}
-                  onPress={() => {
-                    toggleLike(sheetTrack);
-                    close();
-                  }}
-                >
-                  <Ionicons
-                    name={liked ? 'heart-dislike-outline' : 'heart-outline'}
-                    size={21}
-                    color={liked ? HOLYSIC_COLORS.roseLike : UI.fg(1)}
-                  />
-                  <Text style={styles.menuLabel}>
-                    {liked
-                      ? vi
-                        ? 'Bỏ khỏi Bài hát đã thích'
-                        : 'Remove from Liked Songs'
-                      : vi
-                        ? 'Thêm vào Bài hát đã thích'
-                        : 'Save to Liked Songs'}
-                  </Text>
-                </Pressable>
-
-                <Pressable style={styles.menuItem} onPress={() => setPickingPlaylist(true)}>
-                  <Ionicons name="add-circle-outline" size={21} color={UI.text} />
-                  <Text style={styles.menuLabel}>
-                    {vi ? 'Thêm vào Playlist…' : 'Add to Playlist…'}
-                  </Text>
-                </Pressable>
-
-                {isLocalTrack(sheetTrack) && (
-                  <Pressable
-                    style={styles.menuItem}
-                    onPress={() => closeThen(() => openSongEditor(sheetTrack))}
-                  >
-                    <Ionicons name="create-outline" size={21} color="#A78BFA" />
-                    <Text style={styles.menuLabel}>
-                      {vi ? 'Sửa thông tin & ảnh bìa…' : 'Edit info & cover…'}
-                    </Text>
-                  </Pressable>
-                )}
-
-                {isLocalTrack(sheetTrack) ? (
+                  <ScrollView style={{ maxHeight: 220 }}>
+                    {playlists.map((pl) => (
+                      <Pressable
+                        key={pl.id}
+                        onPress={() => {
+                          addTrackToPlaylist(pl.id, sheetTrack);
+                          close();
+                        }}
+                        style={styles.menuItem}
+                      >
+                        <Ionicons name="musical-notes" size={20} color={palette.accent} />
+                        <Text style={styles.menuLabel}>
+                          {pl.name} ({pl.tracks.length})
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : (
+                <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
                   <Pressable
                     style={styles.menuItem}
                     onPress={() => {
-                      const dir = localDirOf(sheetTrack);
-                      closeThen(() => {
-                        setIsPlayerOpen(false);
-                        LocalLibrary.open(dir);
-                      });
+                      addToQueue(sheetTrack, true);
+                      close();
                     }}
                   >
-                    <Ionicons name="folder-open-outline" size={21} color="#F472B6" />
+                    <Ionicons name="play-forward-outline" size={21} color={UI.text} />
                     <Text style={styles.menuLabel}>
-                      {vi
-                        ? `Hiện trong thư mục: ${localDirOf(sheetTrack) || 'HolySic'}`
-                        : `Show in folder: ${localDirOf(sheetTrack) || 'HolySic'}`}
+                      {vi ? 'Phát kế tiếp (Play Next)' : 'Play Next'}
                     </Text>
                   </Pressable>
-                ) : (
+
                   <Pressable
                     style={styles.menuItem}
                     onPress={() => {
-                      if (isOffline) {
-                        removeDownload(sheetTrack.id);
-                      } else {
-                        downloadTrack(sheetTrack);
-                      }
+                      addToQueue(sheetTrack, false);
+                      close();
+                    }}
+                  >
+                    <Ionicons name="list-outline" size={21} color={UI.text} />
+                    <Text style={styles.menuLabel}>
+                      {vi ? 'Thêm vào cuối hàng chờ' : 'Add to Queue'}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      toggleLike(sheetTrack);
                       close();
                     }}
                   >
                     <Ionicons
-                      name={isOffline ? 'trash-outline' : 'arrow-down-circle-outline'}
+                      name={liked ? 'heart-dislike-outline' : 'heart-outline'}
                       size={21}
-                      color={isOffline ? '#F87171' : HOLYSIC_COLORS.flacEmerald}
+                      color={liked ? HOLYSIC_COLORS.roseLike : UI.fg(1)}
                     />
                     <Text style={styles.menuLabel}>
-                      {isOffline
+                      {liked
                         ? vi
-                          ? 'Xoá bản tải ngoại tuyến'
-                          : 'Remove Offline Download'
+                          ? 'Bỏ khỏi Bài hát đã thích'
+                          : 'Remove from Liked Songs'
                         : vi
-                          ? 'Tải xuống nghe ngoại tuyến (Offline)'
-                          : 'Download for Offline Playback'}
+                          ? 'Thêm vào Bài hát đã thích'
+                          : 'Save to Liked Songs'}
                     </Text>
                   </Pressable>
-                )}
 
-                <Pressable
-                  style={styles.menuItem}
-                  onPress={() => {
-                    const targetArtist = sheetTrack.artist;
-                    const targetId = sheetTrack.artistId || sheetTrack.artist;
-                    // opens on top of whatever is showing (player included); closing it returns there
-                    closeThen(() =>
-                      openCollection({ kind: 'artist', id: targetId, name: targetArtist })
-                    );
-                  }}
-                >
-                  <Ionicons name="person-outline" size={21} color={UI.text} />
-                  <Text style={styles.menuLabel}>
-                    {vi
-                      ? `Xem nghệ sĩ: ${sheetTrack.artist}`
-                      : `Go to Artist: ${sheetTrack.artist}`}
-                  </Text>
-                </Pressable>
+                  <Pressable style={styles.menuItem} onPress={() => setPickingPlaylist(true)}>
+                    <Ionicons name="add-circle-outline" size={21} color={UI.text} />
+                    <Text style={styles.menuLabel}>
+                      {vi ? 'Thêm vào Playlist…' : 'Add to Playlist…'}
+                    </Text>
+                  </Pressable>
 
-                {sheetTrack.albumId && (
+                  {isLocalTrack(sheetTrack) && (
+                    <Pressable
+                      style={styles.menuItem}
+                      onPress={() => closeThen(() => openSongEditor(sheetTrack))}
+                    >
+                      <Ionicons name="create-outline" size={21} color="#A78BFA" />
+                      <Text style={styles.menuLabel}>
+                        {vi ? 'Sửa thông tin & ảnh bìa…' : 'Edit info & cover…'}
+                      </Text>
+                    </Pressable>
+                  )}
+
+                  {isLocalTrack(sheetTrack) ? (
+                    <Pressable
+                      style={styles.menuItem}
+                      onPress={() => {
+                        const dir = localDirOf(sheetTrack);
+                        closeThen(() => {
+                          setIsPlayerOpen(false);
+                          LocalLibrary.open(dir);
+                        });
+                      }}
+                    >
+                      <Ionicons name="folder-open-outline" size={21} color="#F472B6" />
+                      <Text style={styles.menuLabel}>
+                        {vi
+                          ? `Hiện trong thư mục: ${localDirOf(sheetTrack) || 'HolySic'}`
+                          : `Show in folder: ${localDirOf(sheetTrack) || 'HolySic'}`}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      style={styles.menuItem}
+                      onPress={() => {
+                        if (isOffline) {
+                          removeDownload(sheetTrack.id);
+                        } else {
+                          downloadTrack(sheetTrack);
+                        }
+                        close();
+                      }}
+                    >
+                      <Ionicons
+                        name={isOffline ? 'trash-outline' : 'arrow-down-circle-outline'}
+                        size={21}
+                        color={isOffline ? '#F87171' : HOLYSIC_COLORS.flacEmerald}
+                      />
+                      <Text style={styles.menuLabel}>
+                        {isOffline
+                          ? vi
+                            ? 'Xoá bản tải ngoại tuyến'
+                            : 'Remove Offline Download'
+                          : vi
+                            ? 'Tải xuống nghe ngoại tuyến (Offline)'
+                            : 'Download for Offline Playback'}
+                      </Text>
+                    </Pressable>
+                  )}
+
                   <Pressable
                     style={styles.menuItem}
                     onPress={() => {
-                      const albumId = sheetTrack.albumId!;
-                      closeThen(() => openCollection({ kind: 'album', id: albumId }));
+                      const targetArtist = sheetTrack.artist;
+                      const targetId = sheetTrack.artistId || sheetTrack.artist;
+                      // opens on top of whatever is showing (player included); closing it returns there
+                      closeThen(() =>
+                        openCollection({ kind: 'artist', id: targetId, name: targetArtist })
+                      );
                     }}
                   >
-                    <Ionicons name="disc-outline" size={21} color={UI.text} />
+                    <Ionicons name="person-outline" size={21} color={UI.text} />
                     <Text style={styles.menuLabel}>
                       {vi
-                        ? `Xem Album: ${sheetTrack.album || ''}`
-                        : `Go to Album: ${sheetTrack.album || ''}`}
+                        ? `Xem nghệ sĩ: ${sheetTrack.artist}`
+                        : `Go to Artist: ${sheetTrack.artist}`}
                     </Text>
                   </Pressable>
-                )}
 
-                {/* Share (OpenSpot) — the iOS share sheet also offers Copy */}
-                <Pressable
-                  style={styles.menuItem}
-                  onPress={() => {
-                    const tr = sheetTrack;
-                    closeThen(() => shareTrack(tr));
-                  }}
-                >
-                  <Ionicons name="share-outline" size={20} color={UI.text} />
-                  <Text style={styles.menuLabel}>{vi ? 'Chia sẻ bài hát' : 'Share song'}</Text>
-                </Pressable>
+                  {sheetTrack.albumId && (
+                    <Pressable
+                      style={styles.menuItem}
+                      onPress={() => {
+                        const albumId = sheetTrack.albumId!;
+                        closeThen(() => openCollection({ kind: 'album', id: albumId }));
+                      }}
+                    >
+                      <Ionicons name="disc-outline" size={21} color={UI.text} />
+                      <Text style={styles.menuLabel}>
+                        {vi
+                          ? `Xem Album: ${sheetTrack.album || ''}`
+                          : `Go to Album: ${sheetTrack.album || ''}`}
+                      </Text>
+                    </Pressable>
+                  )}
 
-                {/* Save the downloaded file to the Files app with a readable name (Spotube) */}
-                {isOffline && Platform.OS !== 'web' && (
+                  {/* Share (OpenSpot) — the iOS share sheet also offers Copy */}
                   <Pressable
                     style={styles.menuItem}
                     onPress={() => {
-                      const id = sheetTrack.id;
-                      closeThen(() => exportDownload(id));
+                      const tr = sheetTrack;
+                      closeThen(() => shareTrack(tr));
                     }}
                   >
-                    <Ionicons name="folder-open-outline" size={20} color={UI.text} />
+                    <Ionicons name="share-outline" size={20} color={UI.text} />
+                    <Text style={styles.menuLabel}>{vi ? 'Chia sẻ bài hát' : 'Share song'}</Text>
+                  </Pressable>
+
+                  {/* Save the downloaded file to the Files app with a readable name (Spotube) */}
+                  {isOffline && Platform.OS !== 'web' && (
+                    <Pressable
+                      style={styles.menuItem}
+                      onPress={() => {
+                        const id = sheetTrack.id;
+                        closeThen(() => exportDownload(id));
+                      }}
+                    >
+                      <Ionicons name="folder-open-outline" size={20} color={UI.text} />
+                      <Text style={styles.menuLabel}>
+                        {vi ? 'Lưu tệp vào ứng dụng Tệp' : 'Save file to Files'}
+                      </Text>
+                    </Pressable>
+                  )}
+
+                  {/* Song radio (Musike autoplay radio seeded from one song) */}
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      const seed = `${sheetTrack.artist} ${sheetTrack.genre || ''}`.trim();
+                      closeThen(() => startInstantMix(seed));
+                    }}
+                  >
+                    <Ionicons name="radio-outline" size={21} color={UI.text} />
                     <Text style={styles.menuLabel}>
-                      {vi ? 'Lưu tệp vào ứng dụng Tệp' : 'Save file to Files'}
+                      {vi ? 'Radio từ bài này' : 'Start song radio'}
                     </Text>
                   </Pressable>
-                )}
 
-                {/* Song radio (Musike autoplay radio seeded from one song) */}
-                <Pressable
-                  style={styles.menuItem}
-                  onPress={() => {
-                    const seed = `${sheetTrack.artist} ${sheetTrack.genre || ''}`.trim();
-                    closeThen(() => startInstantMix(seed));
-                  }}
-                >
-                  <Ionicons name="radio-outline" size={21} color={UI.text} />
-                  <Text style={styles.menuLabel}>
-                    {vi ? 'Radio từ bài này' : 'Start song radio'}
-                  </Text>
-                </Pressable>
+                  {/* Blacklist (Spotube) */}
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      blockTrack(sheetTrack);
+                      close();
+                    }}
+                  >
+                    <Ionicons name="remove-circle-outline" size={21} color="#F87171" />
+                    <Text style={styles.menuLabel}>{vi ? 'Chặn bài này' : 'Block this song'}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      blockArtist(sheetTrack.artist);
+                      close();
+                    }}
+                  >
+                    <Ionicons name="ban-outline" size={21} color="#F87171" />
+                    <Text style={styles.menuLabel}>
+                      {vi
+                        ? `Chặn nghệ sĩ ${sheetTrack.artist.split(',')[0]}`
+                        : `Block ${sheetTrack.artist.split(',')[0]}`}
+                    </Text>
+                  </Pressable>
+                </ScrollView>
+              )}
 
-                {/* Blacklist (Spotube) */}
-                <Pressable
-                  style={styles.menuItem}
-                  onPress={() => {
-                    blockTrack(sheetTrack);
-                    close();
-                  }}
-                >
-                  <Ionicons name="remove-circle-outline" size={21} color="#F87171" />
-                  <Text style={styles.menuLabel}>{vi ? 'Chặn bài này' : 'Block this song'}</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.menuItem}
-                  onPress={() => {
-                    blockArtist(sheetTrack.artist);
-                    close();
-                  }}
-                >
-                  <Ionicons name="ban-outline" size={21} color="#F87171" />
-                  <Text style={styles.menuLabel}>
-                    {vi
-                      ? `Chặn nghệ sĩ ${sheetTrack.artist.split(',')[0]}`
-                      : `Block ${sheetTrack.artist.split(',')[0]}`}
-                  </Text>
-                </Pressable>
-              </ScrollView>
-            )}
-
-            <Pressable style={styles.cancelBtn} onPress={close}>
-              <Text style={styles.cancelText}>{vi ? 'Đóng' : 'Close'}</Text>
-            </Pressable>
-          </GlassSurface>
+              <Pressable style={styles.cancelBtn} onPress={close}>
+                <Text style={styles.cancelText}>{vi ? 'Đóng' : 'Close'}</Text>
+              </Pressable>
+            </GlassSurface>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };

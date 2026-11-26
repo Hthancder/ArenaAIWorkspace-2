@@ -3,7 +3,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
@@ -163,6 +171,9 @@ export const HomeScreen: React.FC = () => {
 
   // Chunk Quick Picks into columns of 3 for HolySic's horizontal swipe grid
   const activePicks = moodTracks && moodTracks.length > 0 ? moodTracks : quickPicks;
+  const { width: winW } = useWindowDimensions();
+  // a quick-pick column fills the screen minus a peek of the next one, so rows never overflow
+  const pickColW = Math.min(360, Math.max(250, winW - 52));
   const pickColumns: Track[][] = [];
   for (let i = 0; i < Math.min(activePicks.length, 12); i += 3) {
     pickColumns.push(activePicks.slice(i, i + 3));
@@ -194,9 +205,11 @@ export const HomeScreen: React.FC = () => {
           >
             <HolySicMarkIcon size={24} color={UI.text} filled />
           </LinearGradient>
-          <View>
-            <Text style={[styles.greetingSub, { fontFamily }]}>{greeting}</Text>
-            <Text style={[styles.brandTitle, { fontFamily }]}>
+          <View style={{ flexShrink: 1 }}>
+            <Text numberOfLines={1} style={[styles.greetingSub, { fontFamily }]}>
+              {greeting}
+            </Text>
+            <Text numberOfLines={1} style={[styles.brandTitle, { fontFamily }]}>
               Holy<Text style={{ color: palette.accent }}>Sic</Text>
             </Text>
           </View>
@@ -337,9 +350,12 @@ export const HomeScreen: React.FC = () => {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.quickGridScroll}
+            snapToInterval={pickColW + 10}
+            snapToAlignment="start"
+            decelerationRate="fast"
           >
             {pickColumns.map((col, colIdx) => (
-              <View key={colIdx} style={styles.quickColumn}>
+              <View key={colIdx} style={[styles.quickColumn, { width: pickColW }]}>
                 {col.map((song) => (
                   <TrackRow key={song.id} track={song} queueContext={activePicks} compact />
                 ))}
@@ -858,6 +874,8 @@ const styles = themedSheet(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 11,
+    flexShrink: 1,
+    marginRight: 8,
   },
   logoBadge: {
     width: 42,

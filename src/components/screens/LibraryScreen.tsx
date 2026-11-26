@@ -4,12 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
@@ -46,12 +49,16 @@ export const LibraryScreen: React.FC = () => {
   const local = useLocalLibrary();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const offlineList = Object.values(downloads);
+  // 4" phones: header pills go icon-only so the title never wraps
+  const narrow = useWindowDimensions().width < 360;
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.pageTitle, { fontFamily }]}>{t(prefs.language, 'library')}</Text>
+        <Text numberOfLines={1} style={[styles.pageTitle, { fontFamily }]}>
+          {t(prefs.language, 'library')}
+        </Text>
         <View style={styles.headerRight}>
           <Pressable
             onPress={() => LocalLibrary.open()}
@@ -60,72 +67,128 @@ export const LibraryScreen: React.FC = () => {
           >
             <Ionicons name="folder-open-outline" size={16} color={UI.text} />
           </Pressable>
-          <Pressable onPress={() => openImport('link')} style={styles.actionPill}>
+          <Pressable
+            onPress={() => openImport('link')}
+            style={styles.actionPill}
+            accessibilityLabel={vi ? 'Nhập playlist' : 'Import playlist'}
+          >
             <Ionicons name="cloud-upload-outline" size={16} color={UI.text} />
-            <Text style={styles.actionPillText}>{vi ? 'Nhập' : 'Import'}</Text>
+            {!narrow && <Text style={styles.actionPillText}>{vi ? 'Nhập' : 'Import'}</Text>}
           </Pressable>
           <Pressable
             onPress={() => setShowCreateModal(true)}
             style={[styles.actionPill, { backgroundColor: palette.accent }]}
+            accessibilityLabel={vi ? 'Tạo playlist mới' : 'New playlist'}
           >
             <Ionicons name="add" size={18} color={palette.onAccent} />
-            <Text style={[styles.actionPillText, { color: palette.onAccent }]}>
-              {vi ? 'Tạo mới' : 'New'}
-            </Text>
+            {!narrow && (
+              <Text style={[styles.actionPillText, { color: palette.onAccent }]}>
+                {vi ? 'Tạo mới' : 'New'}
+              </Text>
+            )}
           </Pressable>
         </View>
       </View>
 
       {/* Top Shelf Cards */}
-      <View style={styles.shelfRow}>
+      <View style={[styles.shelfRow, narrow && styles.shelfRowNarrow]}>
         <Pressable
           onPress={() => LocalLibrary.open()}
-          style={[styles.shelfCard, { backgroundColor: 'rgba(244, 114, 182, 0.14)' }]}
+          style={[
+            styles.shelfCard,
+            narrow && styles.shelfCardNarrow,
+            { backgroundColor: 'rgba(244, 114, 182, 0.14)' },
+          ]}
           accessibilityLabel={vi ? 'Mở Nhạc trên máy' : 'Open Local Files'}
         >
           <Ionicons name="phone-portrait" size={22} color="#F472B6" />
-          <Text style={styles.shelfCount}>{local.ready ? local.files.length : '–'}</Text>
-          <Text numberOfLines={1} style={styles.shelfLabel}>
+          <Text style={[styles.shelfCount, narrow && styles.shelfCountNarrow]}>
+            {local.ready ? local.files.length : '–'}
+          </Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+            style={styles.shelfLabel}
+          >
             {vi ? 'Trên máy' : 'Local'}
           </Text>
         </Pressable>
 
         <Pressable
           onPress={() => openCollection({ kind: 'liked' })}
-          style={[styles.shelfCard, { backgroundColor: 'rgba(255, 77, 121, 0.14)' }]}
+          style={[
+            styles.shelfCard,
+            narrow && styles.shelfCardNarrow,
+            { backgroundColor: 'rgba(255, 77, 121, 0.14)' },
+          ]}
         >
           <Ionicons name="heart" size={22} color={HOLYSIC_COLORS.roseLike} />
-          <Text style={styles.shelfCount}>{likedTracks.length}</Text>
-          <Text numberOfLines={1} style={styles.shelfLabel}>
+          <Text style={[styles.shelfCount, narrow && styles.shelfCountNarrow]}>
+            {likedTracks.length}
+          </Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+            style={styles.shelfLabel}
+          >
             {vi ? 'Đã thích' : 'Liked'}
           </Text>
         </Pressable>
 
         <Pressable
           onPress={() => openCollection({ kind: 'offline' })}
-          style={[styles.shelfCard, { backgroundColor: 'rgba(52, 211, 153, 0.14)' }]}
+          style={[
+            styles.shelfCard,
+            narrow && styles.shelfCardNarrow,
+            { backgroundColor: 'rgba(52, 211, 153, 0.14)' },
+          ]}
         >
           <Ionicons name="arrow-down-circle" size={22} color={HOLYSIC_COLORS.flacEmerald} />
-          <Text style={styles.shelfCount}>{offlineList.length}</Text>
-          <Text numberOfLines={1} style={styles.shelfLabel}>
+          <Text style={[styles.shelfCount, narrow && styles.shelfCountNarrow]}>
+            {offlineList.length}
+          </Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+            style={styles.shelfLabel}
+          >
             Offline
           </Text>
         </Pressable>
 
         <Pressable
           onPress={() => setIsRecapOpen(true)}
-          style={[styles.shelfCard, { backgroundColor: palette.container }]}
+          style={[
+            styles.shelfCard,
+            narrow && styles.shelfCardNarrow,
+            { backgroundColor: palette.container },
+          ]}
         >
           <Ionicons name="sparkles" size={22} color={palette.accent} />
-          <Text style={styles.shelfCount}>{history.length}</Text>
-          <Text numberOfLines={1} style={styles.shelfLabel}>
+          <Text style={[styles.shelfCount, narrow && styles.shelfCountNarrow]}>
+            {history.length}
+          </Text>
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+            style={styles.shelfLabel}
+          >
             Recap ID
           </Text>
         </Pressable>
       </View>
 
       {/* Filter Tabs */}
-      <View style={styles.tabsRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0 }}
+        contentContainerStyle={styles.tabsRow}
+      >
         {(
           [
             { id: 'playlists', label: t(prefs.language, 'playlists') },
@@ -155,7 +218,7 @@ export const LibraryScreen: React.FC = () => {
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
 
       <ScrollView
         style={{ flex: 1 }}
@@ -253,44 +316,51 @@ export const LibraryScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowCreateModal(false)}>
-          <Pressable style={styles.modalBox} onPress={(e) => e.stopPropagation?.()}>
-            <Text style={styles.modalTitle}>{t(prefs.language, 'createPlaylist')}</Text>
-            <TextInput
-              value={plName}
-              onChangeText={setPlName}
-              placeholder={vi ? 'Tên danh sách phát…' : 'Playlist title…'}
-              placeholderTextColor={UI.text3}
-              style={styles.modalInput}
-            />
-            <TextInput
-              value={plDesc}
-              onChangeText={setPlDesc}
-              placeholder={vi ? 'Mô tả ngắn (tuỳ chọn)…' : 'Optional description…'}
-              placeholderTextColor={UI.text3}
-              style={styles.modalInput}
-            />
-            <View style={styles.modalActions}>
-              <Pressable onPress={() => setShowCreateModal(false)} style={styles.cancelModalBtn}>
-                <Text style={{ color: UI.text, fontWeight: '600' }}>{vi ? 'Huỷ' : 'Cancel'}</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  if (!plName.trim()) return;
-                  createPlaylist(plName, plDesc);
-                  setPlName('');
-                  setPlDesc('');
-                  setShowCreateModal(false);
-                }}
-                style={[styles.confirmModalBtn, { backgroundColor: palette.accent }]}
-              >
-                <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
-                  {vi ? 'Tạo ngay' : 'Create'}
-                </Text>
-              </Pressable>
-            </View>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <Pressable style={styles.modalBackdrop} onPress={() => setShowCreateModal(false)}>
+            <Pressable style={styles.modalBox} onPress={(e) => e.stopPropagation?.()}>
+              <Text style={styles.modalTitle}>{t(prefs.language, 'createPlaylist')}</Text>
+              <TextInput
+                value={plName}
+                onChangeText={setPlName}
+                placeholder={vi ? 'Tên danh sách phát…' : 'Playlist title…'}
+                autoFocus
+                returnKeyType="next"
+                placeholderTextColor={UI.text3}
+                style={styles.modalInput}
+              />
+              <TextInput
+                value={plDesc}
+                onChangeText={setPlDesc}
+                placeholder={vi ? 'Mô tả ngắn (tuỳ chọn)…' : 'Optional description…'}
+                placeholderTextColor={UI.text3}
+                style={styles.modalInput}
+              />
+              <View style={styles.modalActions}>
+                <Pressable onPress={() => setShowCreateModal(false)} style={styles.cancelModalBtn}>
+                  <Text style={{ color: UI.text, fontWeight: '600' }}>{vi ? 'Huỷ' : 'Cancel'}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    if (!plName.trim()) return;
+                    createPlaylist(plName, plDesc);
+                    setPlName('');
+                    setPlDesc('');
+                    setShowCreateModal(false);
+                  }}
+                  style={[styles.confirmModalBtn, { backgroundColor: palette.accent }]}
+                >
+                  <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
+                    {vi ? 'Tạo ngay' : 'Create'}
+                  </Text>
+                </Pressable>
+              </View>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -309,6 +379,8 @@ const styles = themedSheet(() => ({
     paddingBottom: 12,
   },
   pageTitle: {
+    flexShrink: 1,
+    marginRight: 10,
     color: UI.text,
     fontSize: 24,
     fontWeight: '800',
@@ -316,6 +388,7 @@ const styles = themedSheet(() => ({
   headerRight: {
     flexDirection: 'row',
     gap: 8,
+    flexShrink: 0,
   },
   actionPill: {
     flexDirection: 'row',
@@ -333,17 +406,29 @@ const styles = themedSheet(() => ({
   },
   shelfRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     paddingHorizontal: 16,
     marginBottom: 14,
   },
   shelfCard: {
     flex: 1,
     borderRadius: 18,
-    padding: 13,
+    paddingVertical: 13,
+    paddingHorizontal: 11,
     borderWidth: 1,
     borderColor: UI.fg(0.08),
   },
+  // 4" phones: 2×2 grid of horizontal tiles ("♥ 12 Đã thích") instead of four cramped columns
+  shelfRowNarrow: { flexWrap: 'wrap' },
+  shelfCardNarrow: {
+    flexBasis: '46%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+  },
+  shelfCountNarrow: { marginTop: 0, fontSize: 17 },
+  shelfLabelNarrow: { marginTop: 0, flexShrink: 1 },
   shelfCount: {
     color: UI.text,
     fontSize: 21,

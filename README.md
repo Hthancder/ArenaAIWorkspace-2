@@ -61,6 +61,7 @@ merged in from Spotube, OpenSpot, Musike and Cog. All original notices are kept 
 ### 🎨 Tùy biến / Customize
 - Player Style, Background, Pure Black OLED, Blur toggle, Font roles, animation, MiniLyricsTicker
 - Song ngữ **VI / EN**
+- **Mọi cỡ iPhone / Every iPhone size** — từ iPhone SE 4" (320 pt) tới Pro Max: ảnh bìa & các kiểu player tự co cho vừa, nút điều khiển không xuống dòng, bàn phím không che ô nhập / art & player styles scale to fit, controls never wrap, keyboard never covers inputs
 
 ---
 

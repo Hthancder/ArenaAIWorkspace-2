@@ -272,6 +272,7 @@ export const SearchScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         {query.trim().length > 0 ? (
           <>

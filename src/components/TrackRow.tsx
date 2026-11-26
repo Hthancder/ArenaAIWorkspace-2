@@ -2,7 +2,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { ArtworkImage } from './ArtworkImage';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../constants/theme';
 import { useHolySic } from '../context/HolySicContext';
@@ -39,6 +39,9 @@ export const TrackRow: React.FC<TrackRowProps> = ({
     prefs,
   } = useHolySic();
 
+  const { width: winW } = useWindowDimensions();
+  // 4" phones: drop the secondary bits (quality pill, duration in grids) so the title gets room
+  const narrow = winW < 360;
   const active = currentTrack?.id === track.id;
   const liked = isLiked(track.id);
   const isOffline = Boolean(downloads[track.id]);
@@ -141,7 +144,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         </View>
       </View>
 
-      {track.qualityBadge && !compact && (
+      {track.qualityBadge && !compact && !narrow && (
         <View
           style={[
             styles.qualityPill,
@@ -157,15 +160,17 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         </View>
       )}
 
-      <Text
-        style={[
-          styles.duration,
-          { fontFamily },
-          track.isLive && { color: '#F87171', fontWeight: '900' },
-        ]}
-      >
-        {track.isLive ? 'LIVE' : formatTimeSec(track.durationSec)}
-      </Text>
+      {!(narrow && compact && !track.isLive) && (
+        <Text
+          style={[
+            styles.duration,
+            { fontFamily },
+            track.isLive && { color: '#F87171', fontWeight: '900' },
+          ]}
+        >
+          {track.isLive ? 'LIVE' : formatTimeSec(track.durationSec)}
+        </Text>
+      )}
 
       <Pressable
         hitSlop={8}

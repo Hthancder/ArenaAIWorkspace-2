@@ -3,6 +3,7 @@
 import { SignalPathList } from '../audio/SignalPathList';
 import { useSignalPath } from '../audio/useSignalPath';
 import { PlayerPaneBus } from '../../services/ui/playerPaneBus';
+import { FitStage } from './FitStage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
@@ -14,6 +15,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
@@ -87,6 +89,11 @@ export const FullPlayerModal: React.FC = () => {
   const rw = useHoldSeek(seekBy, -1);
 
   const [pane, setPane] = useState<SubPane>('artwork');
+  const { width: winW, height: winH } = useWindowDimensions();
+  // narrow phones (SE / mini / 375pt): stack the deck icon over its label so nothing wraps
+  const compactDeck = winW < 400;
+  // 4" screens: while lyrics/queue/sleep are open, drop the volume row to give the pane room
+  const roomyPane = winH < 640 && pane !== 'artwork';
   // widget "lyrics" deep link → open on the lyrics pane
   useEffect(
     () =>
@@ -190,7 +197,7 @@ export const FullPlayerModal: React.FC = () => {
             </Text>
           </Pressable>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <Pressable
               hitSlop={8}
               onPress={() => setPane((p) => (p === 'styles' ? 'artwork' : 'styles'))}
@@ -224,54 +231,57 @@ export const FullPlayerModal: React.FC = () => {
             <QueuePane onDone={() => setPane('artwork')} />
           ) : pane === 'sleep' ? (
             <View style={styles.overlayCard}>
-              <Text style={[styles.paneTitle, { fontFamily, marginBottom: 6 }]}>
-                {vi ? 'Hẹn giờ tắt nhạc (Sleep Timer)' : 'Sleep Timer'}
-              </Text>
-              <Text style={styles.subHelper}>
-                {sleepEndOfTrack
-                  ? vi
-                    ? 'Đang bật: Tự dừng khi hết bài hiện tại'
-                    : 'Active: Stops after current song'
-                  : sleepRemainingSec !== null
+              {/* scrolls on short screens (4" SE) instead of spilling over the title */}
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={[styles.paneTitle, { fontFamily, marginBottom: 6 }]}>
+                  {vi ? 'Hẹn giờ tắt nhạc' : 'Sleep Timer'}
+                </Text>
+                <Text style={styles.subHelper}>
+                  {sleepEndOfTrack
                     ? vi
-                      ? `Còn lại: ${formatTimeSec(sleepRemainingSec)}`
-                      : `Remaining: ${formatTimeSec(sleepRemainingSec)}`
-                    : vi
-                      ? 'Chọn thời gian để HolySic tự động dừng phát nhạc'
-                      : 'Choose when HolySic gently pauses playback'}
-              </Text>
-              <View style={styles.sleepGrid}>
-                {[5, 15, 30, 45, 60].map((mins) => (
+                      ? 'Đang bật: Tự dừng khi hết bài hiện tại'
+                      : 'Active: Stops after current song'
+                    : sleepRemainingSec !== null
+                      ? vi
+                        ? `Còn lại: ${formatTimeSec(sleepRemainingSec)}`
+                        : `Remaining: ${formatTimeSec(sleepRemainingSec)}`
+                      : vi
+                        ? 'Chọn thời gian để HolySic tự động dừng phát nhạc'
+                        : 'Choose when HolySic gently pauses playback'}
+                </Text>
+                <View style={styles.sleepGrid}>
+                  {[5, 15, 30, 45, 60].map((mins) => (
+                    <Pressable
+                      key={mins}
+                      onPress={() => {
+                        setSleepTimer(mins);
+                        setPane('artwork');
+                      }}
+                      style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
+                    >
+                      <Text style={styles.sleepOptionText}>
+                        {mins} {vi ? 'phút' : 'min'}
+                      </Text>
+                    </Pressable>
+                  ))}
                   <Pressable
-                    key={mins}
                     onPress={() => {
-                      setSleepTimer(mins);
+                      setSleepTimer('end_of_track');
                       setPane('artwork');
                     }}
                     style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
                   >
-                    <Text style={styles.sleepOptionText}>
-                      {mins} {vi ? 'phút' : 'min'}
+                    <Text style={styles.sleepOptionText}>{vi ? 'Hết bài này' : 'End of Song'}</Text>
+                  </Pressable>
+                </View>
+                {(sleepRemainingSec !== null || sleepEndOfTrack) && (
+                  <Pressable onPress={() => setSleepTimer(null)} style={styles.turnOffSleepBtn}>
+                    <Text style={{ color: '#F87171', fontWeight: '700' }}>
+                      {vi ? 'Tắt hẹn giờ' : 'Turn Off Timer'}
                     </Text>
                   </Pressable>
-                ))}
-                <Pressable
-                  onPress={() => {
-                    setSleepTimer('end_of_track');
-                    setPane('artwork');
-                  }}
-                  style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
-                >
-                  <Text style={styles.sleepOptionText}>{vi ? 'Hết bài này' : 'End of Song'}</Text>
-                </Pressable>
-              </View>
-              {(sleepRemainingSec !== null || sleepEndOfTrack) && (
-                <Pressable onPress={() => setSleepTimer(null)} style={styles.turnOffSleepBtn}>
-                  <Text style={{ color: '#F87171', fontWeight: '700' }}>
-                    {vi ? 'Tắt hẹn giờ' : 'Turn Off Timer'}
-                  </Text>
-                </Pressable>
-              )}
+                )}
+              </ScrollView>
             </View>
           ) : pane === 'diagnostics' ? (
             <View style={styles.overlayCard}>
@@ -388,57 +398,63 @@ export const FullPlayerModal: React.FC = () => {
               </ScrollView>
             </View>
           ) : prefs.playerStyle === 'IPOD' ? (
-            <IpodClassicView />
+            <FitStage>
+              <IpodClassicView />
+            </FitStage>
           ) : prefs.playerStyle === 'BEDSIDE' ? (
             <BedsideClockView />
           ) : prefs.playerStyle === 'TURNTABLE' ? (
-            <CoverGlow
-              colors={ambientColors}
-              level={ambientOn ? ambient.level * 0.8 : 0}
-              energy={energy}
-              size={300}
-            >
-              <TurntableVinylStage />
-            </CoverGlow>
-          ) : (
-            /* Flagship & Poster Cover Stage — wrapped in the ambient glow */
-            <View style={styles.flagshipCoverCenter}>
+            <FitStage>
               <CoverGlow
                 colors={ambientColors}
-                level={ambientOn ? ambient.level : 0}
+                level={ambientOn ? ambient.level * 0.8 : 0}
                 energy={energy}
-                size={prefs.playerStyle === 'POSTER' ? 270 : 300}
+                size={300}
               >
-                <View
-                  style={[
-                    styles.coverShadowWrap,
-                    prefs.playerStyle === 'POSTER' && styles.posterCoverWrap,
-                    !isPlaying && { transform: [{ scale: 0.94 }] },
-                  ]}
-                >
-                  <ArtworkImage
-                    source={{ uri: currentTrack.artworkUrl }}
-                    fallbackSeed={currentTrack.title}
-                    style={styles.coverImage}
-                  />
-                </View>
+                <TurntableVinylStage />
               </CoverGlow>
-              {/* Poster: a real 32-band spectrum of what's playing (FFT of the actual PCM) */}
-              {prefs.playerStyle === 'POSTER' && (
-                <View style={styles.posterVisualizer}>
-                  <SpectrumBars
-                    isPlaying={isPlaying}
-                    color={palette.accent}
-                    colorHigh={ambientColors.corners[1]}
-                    height={64}
-                    bars={32}
-                    peaks
-                    showStatus
-                    language={prefs.language}
-                  />
-                </View>
-              )}
-            </View>
+            </FitStage>
+          ) : (
+            /* Flagship & Poster Cover Stage — wrapped in the ambient glow */
+            <FitStage>
+              <View style={styles.flagshipCoverCenter}>
+                <CoverGlow
+                  colors={ambientColors}
+                  level={ambientOn ? ambient.level : 0}
+                  energy={energy}
+                  size={prefs.playerStyle === 'POSTER' ? 270 : 300}
+                >
+                  <View
+                    style={[
+                      styles.coverShadowWrap,
+                      prefs.playerStyle === 'POSTER' && styles.posterCoverWrap,
+                      !isPlaying && { transform: [{ scale: 0.94 }] },
+                    ]}
+                  >
+                    <ArtworkImage
+                      source={{ uri: currentTrack.artworkUrl }}
+                      fallbackSeed={currentTrack.title}
+                      style={styles.coverImage}
+                    />
+                  </View>
+                </CoverGlow>
+                {/* Poster: a real 32-band spectrum of what's playing (FFT of the actual PCM) */}
+                {prefs.playerStyle === 'POSTER' && (
+                  <View style={styles.posterVisualizer}>
+                    <SpectrumBars
+                      isPlaying={isPlaying}
+                      color={palette.accent}
+                      colorHigh={ambientColors.corners[1]}
+                      height={64}
+                      bars={32}
+                      peaks
+                      showStatus
+                      language={prefs.language}
+                    />
+                  </View>
+                )}
+              </View>
+            </FitStage>
           )}
         </View>
 
@@ -591,7 +607,7 @@ export const FullPlayerModal: React.FC = () => {
             </View>
 
             {/* Volume Bar (bit-perfect: software volume locked at 100 %) */}
-            {prefs.bitPerfect ? (
+            {roomyPane ? null : prefs.bitPerfect ? (
               <Pressable
                 onPress={() => setPane('diagnostics')}
                 style={styles.volumeRow}
@@ -631,38 +647,65 @@ export const FullPlayerModal: React.FC = () => {
         <View style={styles.bottomDeck}>
           <Pressable
             onPress={() => setPane((p) => (p === 'lyrics' ? 'artwork' : 'lyrics'))}
-            style={[styles.deckPill, pane === 'lyrics' && { backgroundColor: palette.container }]}
+            style={[
+              styles.deckPill,
+              compactDeck && styles.deckPillCompact,
+              pane === 'lyrics' && { backgroundColor: palette.container },
+            ]}
           >
             <Ionicons
               name="chatbubble-ellipses-outline"
               size={18}
               color={pane === 'lyrics' ? palette.accent : '#FFFFFF'}
             />
-            <Text style={[styles.deckLabel, pane === 'lyrics' && { color: palette.accent }]}>
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              style={[styles.deckLabel, pane === 'lyrics' && { color: palette.accent }]}
+            >
               {vi ? 'Lời nhạc' : 'Lyrics'}
             </Text>
           </Pressable>
 
           <Pressable
             onPress={() => setPane((p) => (p === 'queue' ? 'artwork' : 'queue'))}
-            style={[styles.deckPill, pane === 'queue' && { backgroundColor: palette.container }]}
+            style={[
+              styles.deckPill,
+              compactDeck && styles.deckPillCompact,
+              pane === 'queue' && { backgroundColor: palette.container },
+            ]}
           >
             <Ionicons name="list" size={18} color={pane === 'queue' ? palette.accent : '#FFFFFF'} />
-            <Text style={[styles.deckLabel, pane === 'queue' && { color: palette.accent }]}>
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              style={[styles.deckLabel, pane === 'queue' && { color: palette.accent }]}
+            >
               {vi ? 'Hàng chờ' : 'Queue'}
             </Text>
           </Pressable>
 
           <Pressable
             onPress={() => setIsAudioLabOpen(true)}
-            style={[styles.deckPill, audioLab.enabled && { backgroundColor: palette.container }]}
+            style={[
+              styles.deckPill,
+              compactDeck && styles.deckPillCompact,
+              audioLab.enabled && { backgroundColor: palette.container },
+            ]}
           >
             <Ionicons
               name="options-outline"
               size={18}
               color={audioLab.enabled ? palette.accent : '#FFFFFF'}
             />
-            <Text style={[styles.deckLabel, audioLab.enabled && { color: palette.accent }]}>
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              style={[styles.deckLabel, audioLab.enabled && { color: palette.accent }]}
+            >
               Audio Lab
             </Text>
           </Pressable>
@@ -671,6 +714,7 @@ export const FullPlayerModal: React.FC = () => {
             onPress={() => setPane((p) => (p === 'sleep' ? 'artwork' : 'sleep'))}
             style={[
               styles.deckPill,
+              compactDeck && styles.deckPillCompact,
               (sleepRemainingSec !== null || sleepEndOfTrack || pane === 'sleep') && {
                 backgroundColor: palette.container,
               },
@@ -681,7 +725,12 @@ export const FullPlayerModal: React.FC = () => {
               size={17}
               color={sleepRemainingSec !== null || sleepEndOfTrack ? palette.accent : '#FFFFFF'}
             />
-            <Text style={styles.deckLabel}>
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              style={styles.deckLabel}
+            >
               {sleepRemainingSec !== null
                 ? formatTimeSec(sleepRemainingSec)
                 : sleepEndOfTrack
@@ -737,8 +786,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     backgroundColor: 'rgba(0,0,0,0.28)',
     maxWidth: 210,
+    flexShrink: 1,
+    marginHorizontal: 8,
   },
   qualityBadgeLabel: {
+    flexShrink: 1,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -811,12 +863,15 @@ const styles = StyleSheet.create({
   sleepGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 18,
+    gap: 8,
+    marginTop: 14,
   },
   sleepOption: {
+    flexGrow: 1,
+    minWidth: '28%',
+    alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 4,
     borderRadius: 14,
     borderWidth: 1,
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -1018,6 +1073,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 15,
     backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  deckPillCompact: {
+    flexDirection: 'column',
+    paddingHorizontal: 4,
+    gap: 3,
+    paddingVertical: 8,
+    minHeight: 50,
   },
   deckLabel: {
     color: '#FFFFFF',
