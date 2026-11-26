@@ -87,6 +87,7 @@ import { resolvePlayableStream } from '../services/providers/streamResolver';
 import { createStreamCandidateQueue } from '../services/providers/streamResolver';
 import { AudioOutput, sourceFacts } from '../services/audio/audioOutput';
 import { DEFAULT_AUDIO_LAB, StorageService } from '../services/storage/storageService';
+import { PlaybackClock, usePositionStep } from '../services/audio/playbackClock';
 import {
   AlbumSummary,
   ArtistSummary,
@@ -212,7 +213,15 @@ interface HolySicContextValue extends HolySicExtras {
   /** Real colours sampled from the current cover (null until read / unreadable) */
   artColors: ArtColors | null;
   /** Ambient light state: strength 0..1 (0 = off), breathing on/off, spill behind mini player */
-  ambient: { level: number; breathing: boolean; spill: boolean; reduced: boolean };
+  ambient: {
+    level: number;
+    breathing: boolean;
+    spill: boolean;
+    /** iOS Low Power Mode — the light is dimmed and steady to save GPU */
+    lowPower: boolean;
+    /** Accessibility › Reduce Motion — no zoom / scale, opacity-only breathing */
+    reduceMotion: boolean;
+  };
 
   // Discovery Feeds & Search
   quickPicks: Track[];
@@ -234,7 +243,6 @@ interface HolySicContextValue extends HolySicExtras {
   resolvedStream: ResolvedStream | null;
   isPlaying: boolean;
   isBuffering: boolean;
-  positionSec: number;
   durationSec: number;
   volume: number;
   queue: Track[];
@@ -356,7 +364,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [resolvedStream, setResolvedStream] = useState<ResolvedStream | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
-  const [positionSec, setPositionSec] = useState(0);
+  // the position lives in PlaybackClock (not React state): see services/audio/playbackClock.ts
+  const setPositionSec = PlaybackClock.set;
   const [durationSec, setDurationSec] = useState(OFFLINE_SHOWCASE_TRACKS[0].durationSec);
   const [volume, setVolumeState] = useState(0.9);
   const [queue, setQueue] = useState<Track[]>(OFFLINE_SHOWCASE_TRACKS);
@@ -505,7 +514,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [currentTrack?.artworkUrl]);
 
-  // Low Power Mode & Reduce Motion tone the ambient light down automatically
+  // Low Power Mode dims the ambient light; Reduce Motion only removes zooming. Each flag is read
+  // strictly (=== true) so an unknown / undefined answer never claims battery saver is on.
   const [lowPower, setLowPower] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   useEffect(() => {
@@ -513,19 +523,21 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     let rm: { remove: () => void } | null = null;
     if (Platform.OS !== 'web') {
       Battery.isLowPowerModeEnabledAsync()
-        .then(setLowPower)
+        .then((on) => setLowPower(on === true))
         .catch(() => undefined);
       try {
-        sub = Battery.addLowPowerModeListener((e) => setLowPower(!!e.lowPowerMode));
+        sub = Battery.addLowPowerModeListener((e) => setLowPower(e?.lowPowerMode === true));
       } catch {
         sub = null;
       }
     }
     AccessibilityInfo.isReduceMotionEnabled()
-      .then(setReduceMotion)
+      .then((on) => setReduceMotion(on === true))
       .catch(() => undefined);
     try {
-      rm = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion) as any;
+      rm = AccessibilityInfo.addEventListener('reduceMotionChanged', (on: boolean) =>
+        setReduceMotion(on === true)
+      ) as any;
     } catch {
       rm = null;
     }
@@ -536,12 +548,12 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
   const ambient = useMemo(() => {
     const base = { off: 0, low: 0.5, medium: 0.8, high: 1 }[prefs.ambientLight] ?? 0.8;
-    const reduced = lowPower || reduceMotion;
     return {
       level: lowPower ? Math.min(base, 0.45) : base,
-      breathing: prefs.ambientBreathing && !reduced && base > 0,
+      breathing: prefs.ambientBreathing && !lowPower && base > 0,
       spill: prefs.ambientSpill && base > 0,
-      reduced,
+      lowPower,
+      reduceMotion,
     };
   }, [prefs.ambientLight, prefs.ambientBreathing, prefs.ambientSpill, lowPower, reduceMotion]);
 
@@ -729,19 +741,25 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [currentTrack]);
 
   const lyricsOffsetSec = currentTrack ? (prefs.lyricsOffsets?.[currentTrack.id] ?? 0) / 1000 : 0;
-  const activeLyricIndex = useMemo(() => {
-    if (!lyrics || lyrics.lines.length === 0) return -1;
-    const pos = positionSec - lyricsOffsetSec;
-    let active = -1;
-    for (let i = 0; i < lyrics.lines.length; i++) {
-      if (pos + 0.15 >= lyrics.lines[i].startSec) {
-        active = i;
-      } else {
-        break;
+  // the active line only changes a few times a minute: follow the clock, re-render on change
+  const [activeLyricIndex, setActiveLyricIndex] = useState(-1);
+  useEffect(() => {
+    const compute = () => {
+      if (!lyrics || lyrics.lines.length === 0) return -1;
+      const pos = PlaybackClock.get() - lyricsOffsetSec;
+      let active = -1;
+      for (let i = 0; i < lyrics.lines.length; i++) {
+        if (pos + 0.15 >= lyrics.lines[i].startSec) active = i;
+        else break;
       }
-    }
-    return active;
-  }, [lyrics, positionSec, lyricsOffsetSec]);
+      return active;
+    };
+    setActiveLyricIndex(compute());
+    return PlaybackClock.subscribe(() => {
+      const next = compute();
+      setActiveLyricIndex((prev) => (prev === next ? prev : next));
+    });
+  }, [lyrics, lyricsOffsetSec]);
 
   // Spotube's "skip non-music segments": only when the audio is the YouTube video itself
   useEffect(() => {
@@ -1047,7 +1065,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const playPrevious = useCallback(() => {
     triggerHaptic('light');
-    if (positionSec > 3.5 && !currentTrackRef.current?.isLive) {
+    if (PlaybackClock.get() > 3.5 && !currentTrackRef.current?.isLive) {
       audioEngine.seekTo(0);
       setPositionSec(0);
       return;
@@ -1057,7 +1075,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const prevIdx = queueIndexRef.current > 0 ? queueIndexRef.current - 1 : q.length - 1;
     setQueueIndex(prevIdx);
     internalStartTrack(q[prevIdx]);
-  }, [internalStartTrack, positionSec]);
+  }, [internalStartTrack]);
 
   // Subscribe to AudioEngine playback updates & Lock Screen remote commands
   useEffect(() => {
@@ -1199,6 +1217,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Persist the playback session for "resume queue" (throttled)
   const lastSessionSaveRef = useRef(0);
+  const sessionBucket = usePositionStep(10);
   useEffect(() => {
     if (!hydratedRef.current || !prefs.resumeQueue) return;
     const now = Date.now();
@@ -1207,21 +1226,13 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     StorageService.saveSession({
       queue,
       index: queueIndex,
-      positionSec,
+      positionSec: PlaybackClock.get(),
       shuffle,
       repeat: repeatMode,
       savedAt: now,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    queue,
-    queueIndex,
-    isPlaying,
-    Math.floor(positionSec / 10),
-    shuffle,
-    repeatMode,
-    prefs.resumeQueue,
-  ]);
+  }, [queue, queueIndex, isPlaying, sessionBucket, shuffle, repeatMode, prefs.resumeQueue]);
 
   // Sleep Timer countdown
   useEffect(() => {
@@ -2209,13 +2220,10 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const seekBy = useCallback((deltaSec: number) => {
-    const target = Math.max(0, positionSecRef.current + deltaSec);
-    positionSecRef.current = target;
+    const target = Math.max(0, PlaybackClock.get() + deltaSec);
     setPositionSec(target);
     audioEngine.seekTo(target);
   }, []);
-  const positionSecRef = useRef(positionSec);
-  positionSecRef.current = positionSec;
 
   // Bit-perfect: engine bypass + output sample rate follows the song (back to normal when off)
   useEffect(() => {
@@ -2464,7 +2472,6 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       resolvedStream,
       isPlaying,
       isBuffering,
-      positionSec,
       durationSec,
       volume,
       queue,
@@ -2550,7 +2557,6 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       resolvedStream,
       isPlaying,
       isBuffering,
-      positionSec,
       durationSec,
       volume,
       queue,

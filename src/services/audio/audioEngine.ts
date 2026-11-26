@@ -3,6 +3,8 @@
 // - Web: HTML5 Audio + WebAudio 10-Band Parametric EQ, Bass Boost, Reverb & 8D Spatial Panning + MediaSession Lock Screen API
 
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
+import { HolySicDSP } from '../../../modules/holysic-dsp';
+import { autoPreampDb, bassDbOf, EQ_FREQS, EQ_Q } from './eqCurve';
 import { Platform } from 'react-native';
 import { AudioLabSettings, Track } from '../../types/music';
 import { CROSSFADE_CURVES, CrossfadeCurve, CurveFns, curveOf } from './crossfadeCurves';
@@ -75,6 +77,7 @@ class HolySicAudioEngine {
   private audioCtx: AudioContext | null = null;
   private eqFilters: BiquadFilterNode[] = [];
   private bassNode: BiquadFilterNode | null = null;
+  private preampNode: GainNode | null = null;
   private pannerNode: StereoPannerNode | null = null;
   private dryGain: GainNode | null = null;
   private wetGain: GainNode | null = null;
@@ -87,6 +90,68 @@ class HolySicAudioEngine {
   private initializedMode = false;
   private loadSeq = 0;
   private nativeSub: { remove: () => void } | null = null;
+
+  /** Where Audio Lab's EQ / bass / reverb / width / 8D really run */
+  dspBackend(): 'native' | 'web' | 'none' {
+    if (Platform.OS === 'web') return 'web';
+    return HolySicDSP ? 'native' : 'none';
+  }
+
+  // ───── native DSP (modules/holysic-dsp) ─────
+  private dspSubs: { remove(): void }[] = [];
+  private dspTap: { state: 'idle' | 'attached' | 'unsupported'; reason?: 'hls' | 'tap' } = {
+    state: 'idle',
+  };
+  private dspTapListeners = new Set<(s: typeof this.dspTap) => void>();
+
+  /** Whether the processing tap is on the current song (HLS streams can't be processed) */
+  subscribeDspTap(cb: (s: { state: string; reason?: string }) => void): () => void {
+    this.dspTapListeners.add(cb);
+    cb(this.dspTap);
+    return () => {
+      this.dspTapListeners.delete(cb);
+    };
+  }
+
+  private setDspTap(s: typeof this.dspTap): void {
+    this.dspTap = s;
+    this.dspTapListeners.forEach((l) => l(s));
+  }
+
+  private ensureNativeDsp(): void {
+    if (!HolySicDSP || this.dspSubs.length) return;
+    try {
+      this.dspSubs.push(
+        HolySicDSP.addListener('onSpectrum', (e) => {
+          if (!e?.bands?.length) return; // paused: the bars fall on their own
+          const now = Date.now();
+          this.lastSampleAt = now;
+          if (e.sampleRate > 0) this.sampleRate = e.sampleRate;
+          if (now - this.lastSpectrumAt < 10) return;
+          this.lastSpectrumAt = now;
+          this.emitSpectrum(e.bands);
+        }),
+        HolySicDSP.addListener('onTapState', (e) => {
+          this.setDspTap({ state: e.state, reason: e.reason });
+          if (e.state === 'unsupported' && this.spectrumListeners.size > 0)
+            this.setSpectrumStatus({ state: 'unsupported', reason: e.reason || 'tap' });
+        })
+      );
+    } catch {
+      this.dspSubs = [];
+    }
+  }
+
+  private dspAttach(p: AudioPlayer, primary: boolean): void {
+    if (!HolySicDSP) return;
+    this.ensureNativeDsp();
+    HolySicDSP.attach(p, primary).catch(() => undefined);
+  }
+
+  private dspDetach(p: AudioPlayer): void {
+    if (!HolySicDSP) return;
+    HolySicDSP.detach(p).catch(() => undefined);
+  }
 
   async ensureInitialized(): Promise<void> {
     if (this.initializedMode) return;
@@ -307,6 +372,17 @@ class HolySicAudioEngine {
 
   private updateSampling(): void {
     const want = this.spectrumListeners.size > 0;
+    if (Platform.OS !== 'web' && HolySicDSP) {
+      // native FFT on the processed audio — only 32 numbers per frame reach JS
+      this.ensureNativeDsp();
+      HolySicDSP.setSpectrumEnabled(want);
+      if (want && this.spectrumStatus.state !== 'live') {
+        if (this.dspTap.state === 'unsupported')
+          this.setSpectrumStatus({ state: 'unsupported', reason: this.dspTap.reason || 'tap' });
+        else this.setSpectrumStatus({ state: 'waiting' });
+      }
+      return;
+    }
     if (Platform.OS !== 'web') {
       const p = this.nativePlayer;
       if (!p) return;
@@ -457,6 +533,7 @@ class HolySicAudioEngine {
       } catch {
         // ignore
       }
+      this.dspDetach(old);
       try {
         old.remove();
       } catch {
@@ -494,6 +571,8 @@ class HolySicAudioEngine {
         preferredForwardBufferDuration: 10,
       });
       this.nativePlayer = player;
+      this.setDspTap({ state: 'idle' });
+      this.dspAttach(player, true);
 
       this.nativeSub = player.addListener('playbackStatusUpdate', (st) => {
         if (seq !== this.loadSeq || this.nativePlayer !== player) return;
@@ -600,6 +679,11 @@ class HolySicAudioEngine {
       const source = ctx.createMediaElementSource(el);
       this.dspAttachedElements.add(el);
 
+      // Automatic pre-amp (headroom for EQ boosts, same value as the native DSP)
+      const preamp = ctx.createGain();
+      preamp.gain.value = 1;
+      this.preampNode = preamp;
+
       // Bass shelf
       const bass = ctx.createBiquadFilter();
       bass.type = 'lowshelf';
@@ -608,12 +692,12 @@ class HolySicAudioEngine {
       this.bassNode = bass;
 
       // 10-band EQ
-      const freqs = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+      const freqs = EQ_FREQS;
       this.eqFilters = freqs.map((f, idx) => {
         const node = ctx.createBiquadFilter();
         node.type = idx === 0 ? 'lowshelf' : idx === freqs.length - 1 ? 'highshelf' : 'peaking';
         node.frequency.value = f;
-        node.Q.value = 1.2;
+        node.Q.value = EQ_Q;
         node.gain.value = 0;
         return node;
       });
@@ -640,6 +724,8 @@ class HolySicAudioEngine {
 
       // Chain: source -> bass -> eq[0..9] -> panner -> dry/wet -> destination
       let prev: AudioNode = source;
+      prev.connect(preamp);
+      prev = preamp;
       prev.connect(bass);
       prev = bass;
       for (const fNode of this.eqFilters) {
@@ -971,6 +1057,7 @@ class HolySicAudioEngine {
       try {
         if (h.kind === 'native') {
           h.p.pause();
+          this.dspDetach(h.p);
           h.p.remove();
         } else {
           h.el.pause();
@@ -1067,7 +1154,26 @@ class HolySicAudioEngine {
         this.nativePlayer.shouldCorrectPitch = lab.preservePitch;
         this.nativePlayer.setPlaybackRate(rate, 'high');
       }
+      if (HolySicDSP) {
+        try {
+          HolySicDSP.setParams({
+            enabled: lab.enabled,
+            preampDb: autoPreampDb(lab),
+            bands: lab.bands.map((b) => b.gainDb),
+            bassDb: bassDbOf(lab.bassBoost),
+            reverb: lab.reverbMix / 100,
+            width: (lab.stereoWidth ?? 100) / 100,
+            eightD: lab.eightDEnabled,
+            eightDPeriod: lab.eightDSpeedSec || 8,
+          });
+        } catch {
+          // older build without the DSP module
+        }
+      }
       return;
+    }
+    if (this.preampNode) {
+      this.preampNode.gain.value = Math.pow(10, autoPreampDb(lab) / 20);
     }
 
     if (this.webAudio) {
@@ -1076,7 +1182,7 @@ class HolySicAudioEngine {
     }
 
     if (this.bassNode) {
-      this.bassNode.gain.value = lab.enabled ? (lab.bassBoost / 100) * 10 : 0;
+      this.bassNode.gain.value = lab.enabled ? bassDbOf(lab.bassBoost) : 0;
     }
 
     if (this.eqFilters.length === 10) {

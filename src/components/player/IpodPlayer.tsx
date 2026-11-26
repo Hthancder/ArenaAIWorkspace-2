@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { IpodTheme } from '../../constants/preferences';
 import { useHolySic } from '../../context/HolySicContext';
+import { usePositionSec } from '../../services/audio/playbackClock';
 import { useHoldSeek } from '../../hooks/useHoldSeek';
 import { formatTimeSec } from '../HolySicIcons';
 
@@ -58,7 +59,6 @@ export const IpodClassicView: React.FC = () => {
   const {
     currentTrack,
     isPlaying,
-    positionSec,
     durationSec,
     togglePlay,
     playNext,
@@ -72,6 +72,7 @@ export const IpodClassicView: React.FC = () => {
     haptic,
     seekBy,
   } = useHolySic();
+  const positionSec = usePositionSec();
   const ff = useHoldSeek(seekBy, 1);
   const rw = useHoldSeek(seekBy, -1);
 

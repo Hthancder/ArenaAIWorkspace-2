@@ -4,9 +4,11 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { useHolySic } from '../../context/HolySicContext';
+import { usePositionSec } from '../../services/audio/playbackClock';
 
 export const TurntableVinylStage: React.FC = () => {
-  const { currentTrack, isPlaying, positionSec, durationSec, darkPalette: palette } = useHolySic();
+  const { currentTrack, isPlaying, durationSec, darkPalette: palette } = useHolySic();
+  const positionSec = usePositionSec();
   const spinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {

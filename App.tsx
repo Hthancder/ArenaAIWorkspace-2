@@ -38,6 +38,13 @@ import { MainTab } from './src/constants/preferences';
 import { resolveFontFamily } from './src/constants/theme';
 import { HolySicProvider, useHolySic } from './src/context/HolySicContext';
 import { useWidgetBridge } from './src/services/widget/useWidgetBridge';
+
+/** iOS home-screen widget: publish now playing, handle its buttons. Its own component so the
+ *  position it follows never re-renders the app shell. */
+const WidgetBridge: React.FC = () => {
+  useWidgetBridge();
+  return null;
+};
 import { useQuickActions } from './src/services/shortcuts/useQuickActions';
 import {
   applyUiSchemeSilently,
@@ -60,8 +67,6 @@ const HolySicShell: React.FC = () => {
     closeCharts,
   } = useHolySic();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
-  // iOS home-screen / Lock Screen widget: publish now playing, handle its buttons
-  useWidgetBridge();
   useQuickActions();
 
   // Appearance (Dark / Light / Auto). On iOS the choice is also applied to the native window, so
@@ -212,6 +217,7 @@ export default function App() {
     <SafeAreaProvider>
       <HolySicProvider>
         <HolySicShell />
+        <WidgetBridge />
       </HolySicProvider>
     </SafeAreaProvider>
   );

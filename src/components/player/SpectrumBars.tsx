@@ -1,10 +1,14 @@
 // Real spectrum visualizer (Cog idea). Draws ONLY real audio: 32 log bands from the audio engine's
-// FFT of the PCM that is actually playing (iOS tap / web AnalyserNode). Bars rise fast and fall
-// slowly like a hardware meter, with peak caps that hold and drop. When a stream can't be read
-// (HLS on iOS, cross-origin audio on the web) it says so instead of animating fake bars.
+// FFT of the PCM that is actually playing (native vDSP FFT on iOS / web AnalyserNode). Bars rise
+// fast and fall slowly like a hardware meter, with peak caps that hold and drop. When a stream
+// can't be read (HLS on iOS, cross-origin audio on the web) it says so instead of faking bars.
+//
+// Smoothness: the bars never re-render React. Each bar is a native-driven Animated value moved
+// with setValue (applied on the UI thread), as a translateY inside a clipped column, so a frame
+// costs 32 tiny native updates instead of a 32-view React render.
 
-import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import { audioEngine, SpectrumStatus } from '../../services/audio/audioEngine';
 
 interface Props {
@@ -74,113 +78,174 @@ export const statusText = (s: SpectrumStatus, vi: boolean): string | null => {
     : "iOS couldn't open an audio tap for this stream.";
 };
 
-export const SpectrumBars: React.FC<Props> = ({
-  isPlaying,
-  color,
-  colorHigh,
-  height = 36,
-  bars = 12,
-  peaks = false,
-  showStatus = false,
-  language = 'vi',
-}) => {
-  const [levels, setLevels] = useState<number[]>(() => new Array(bars).fill(0));
-  const [status, setStatus] = useState<SpectrumStatus>({ state: 'idle' });
-  const smooth = useRef<number[]>(new Array(bars).fill(0));
-  const peakVal = useRef<number[]>(new Array(bars).fill(0));
-  const peakHold = useRef<number[]>(new Array(bars).fill(0));
+export const SpectrumBars: React.FC<Props> = React.memo(
+  ({
+    isPlaying,
+    color,
+    colorHigh,
+    height = 36,
+    bars = 12,
+    peaks = false,
+    showStatus = false,
+    language = 'vi',
+  }) => {
+    const [status, setStatus] = useState<SpectrumStatus>({ state: 'idle' });
+    const vals = useMemo(
+      () => Array.from({ length: bars }, () => new Animated.Value(0)),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [bars]
+    );
+    const peakVals = useMemo(
+      () => Array.from({ length: bars }, () => new Animated.Value(0)),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [bars]
+    );
+    const smooth = useRef<number[]>(new Array(bars).fill(0));
+    const peakVal = useRef<number[]>(new Array(bars).fill(0));
+    const peakHold = useRef<number[]>(new Array(bars).fill(0));
 
-  useEffect(() => {
-    smooth.current = new Array(bars).fill(0);
-    peakVal.current = new Array(bars).fill(0);
-    peakHold.current = new Array(bars).fill(0);
-    const unsubS = audioEngine.subscribeSpectrumStatus(setStatus);
-    const unsub = audioEngine.subscribeSpectrum((raw) => {
-      const b = resample(raw, bars);
-      const now = Date.now();
-      smooth.current = b.map((v, i) => {
-        const prev = smooth.current[i] || 0;
-        // fast attack, slow release — like a hardware meter
-        return v > prev ? prev + (v - prev) * 0.65 : prev + (v - prev) * 0.2;
-      });
-      if (peaks) {
-        smooth.current.forEach((v, i) => {
-          if (v >= peakVal.current[i]) {
-            peakVal.current[i] = v;
-            peakHold.current[i] = now + 450;
-          } else if (now > peakHold.current[i]) {
-            peakVal.current[i] = Math.max(v, peakVal.current[i] - 0.025);
-          }
-        });
+    // move the values to the native driver once, so every later setValue runs on the UI thread
+    useEffect(() => {
+      const kick = [...vals, ...peakVals].map((v) =>
+        Animated.timing(v, { toValue: 0, duration: 1, useNativeDriver: true })
+      );
+      Animated.parallel(kick).start();
+    }, [vals, peakVals]);
+
+    const push = () => {
+      const s = smooth.current;
+      for (let i = 0; i < bars; i++) {
+        vals[i].setValue(s[i]);
+        if (peaks) peakVals[i].setValue(peakVal.current[i]);
       }
-      setLevels([...smooth.current]);
-    });
-    return () => {
-      unsub();
-      unsubS();
     };
-  }, [bars, peaks]);
 
-  // When paused or the stream can't be read, let the real bars fall to rest
-  useEffect(() => {
-    if (isPlaying && status.state === 'live') return;
-    const t = setInterval(() => {
-      let any = false;
-      smooth.current = smooth.current.map((v) => {
-        const n = v * 0.8;
-        if (n > 0.01) any = true;
-        return n > 0.01 ? n : 0;
+    useEffect(() => {
+      smooth.current = new Array(bars).fill(0);
+      peakVal.current = new Array(bars).fill(0);
+      peakHold.current = new Array(bars).fill(0);
+      const unsubS = audioEngine.subscribeSpectrumStatus(setStatus);
+      const unsub = audioEngine.subscribeSpectrum((raw) => {
+        const b = resample(raw, bars);
+        const now = Date.now();
+        const s = smooth.current;
+        for (let i = 0; i < bars; i++) {
+          const prev = s[i] || 0;
+          const v = b[i];
+          // fast attack, slow release — like a hardware meter
+          s[i] = v > prev ? prev + (v - prev) * 0.7 : prev + (v - prev) * 0.18;
+          if (peaks) {
+            if (s[i] >= peakVal.current[i]) {
+              peakVal.current[i] = s[i];
+              peakHold.current[i] = now + 450;
+            } else if (now > peakHold.current[i]) {
+              peakVal.current[i] = Math.max(s[i], peakVal.current[i] - 0.022);
+            }
+          }
+        }
+        push();
       });
-      peakVal.current = peakVal.current.map((v) => Math.max(0, v - 0.04));
-      setLevels([...smooth.current]);
-      if (!any) clearInterval(t);
-    }, 50);
-    return () => clearInterval(t);
-  }, [isPlaying, status.state]);
+      return () => {
+        unsub();
+        unsubS();
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [bars, peaks, vals, peakVals]);
 
-  const note = showStatus ? statusText(status, language === 'vi') : null;
-  const gap = bars > 20 ? 3 : 4;
-  return (
-    <View>
-      <View style={[styles.row, { height: height + 6, gap }]}>
-        {levels.map((v, idx) => {
-          const c = colorHigh ? mix(color, colorHigh, idx / Math.max(1, bars - 1)) : color;
-          const h = 3 + v * height;
-          return (
-            <View key={idx} style={[styles.col, { height: height + 6 }]}>
-              {peaks && peakVal.current[idx] > 0.03 && (
-                <View
-                  style={[
-                    styles.peak,
-                    { bottom: 3 + peakVal.current[idx] * height + 2, backgroundColor: c },
-                  ]}
-                />
-              )}
-              <View
+    // When paused or the stream can't be read, let the real bars fall to rest
+    useEffect(() => {
+      if (isPlaying && status.state === 'live') return;
+      const t = setInterval(() => {
+        let any = false;
+        const s = smooth.current;
+        for (let i = 0; i < bars; i++) {
+          s[i] = s[i] * 0.8 > 0.01 ? s[i] * 0.8 : 0;
+          if (s[i] > 0) any = true;
+          peakVal.current[i] = Math.max(0, peakVal.current[i] - 0.04);
+          if (peakVal.current[i] > 0) any = true;
+        }
+        push();
+        if (!any) clearInterval(t);
+      }, 33);
+      return () => clearInterval(t);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isPlaying, status.state, bars]);
+
+    const note = showStatus ? statusText(status, language === 'vi') : null;
+    const gap = bars > 20 ? 3 : 4;
+    const colH = height + 6;
+    const colors = useMemo(
+      () =>
+        Array.from({ length: bars }, (_, idx) =>
+          colorHigh ? mix(color, colorHigh, idx / Math.max(1, bars - 1)) : color
+        ),
+      [bars, color, colorHigh]
+    );
+    const live = status.state === 'live';
+    return (
+      <View>
+        <View style={[styles.row, { height: colH, gap }]}>
+          {colors.map((c, idx) => (
+            <View key={idx} style={[styles.col, { height: colH }]}>
+              {/* a full-height bar slid down: 0 → 3 pt visible, 1 → full height */}
+              <Animated.View
                 style={[
                   styles.bar,
                   {
-                    height: h,
+                    height: colH,
                     backgroundColor: c,
-                    opacity: status.state === 'live' ? 0.95 : 0.35,
+                    opacity: live ? 0.95 : 0.35,
                     borderRadius: bars > 20 ? 2 : 3,
+                    transform: [
+                      {
+                        translateY: vals[idx].interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [colH - 3, colH - 3 - height],
+                          extrapolate: 'clamp',
+                        }),
+                      },
+                    ],
                   },
                 ]}
               />
+              {peaks && (
+                <Animated.View
+                  style={[
+                    styles.peak,
+                    {
+                      backgroundColor: c,
+                      opacity: peakVals[idx].interpolate({
+                        inputRange: [0, 0.03, 0.06],
+                        outputRange: [0, 0, 0.9],
+                        extrapolate: 'clamp',
+                      }),
+                      transform: [
+                        {
+                          translateY: peakVals[idx].interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-5, -5 - height],
+                            extrapolate: 'clamp',
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              )}
             </View>
-          );
-        })}
+          ))}
+        </View>
+        {note && <Text style={styles.note}>{note}</Text>}
       </View>
-      {note && <Text style={styles.note}>{note}</Text>}
-    </View>
-  );
-};
+    );
+  }
+);
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center' },
-  col: { flex: 1, justifyContent: 'flex-end', maxWidth: 10 },
-  bar: { width: '100%' },
-  peak: { position: 'absolute', left: 0, right: 0, height: 2, borderRadius: 1, opacity: 0.9 },
+  col: { flex: 1, maxWidth: 10, overflow: 'hidden' },
+  bar: { position: 'absolute', left: 0, right: 0, top: 0 },
+  peak: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, borderRadius: 1 },
   note: {
     color: 'rgba(255,255,255,0.62)',
     fontSize: 11.5,

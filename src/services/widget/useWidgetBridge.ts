@@ -1,5 +1,6 @@
 // Keeps the iOS widget in sync with playback and handles its buttons (holysic://widget/…).
 
+import { usePositionStep } from '../audio/playbackClock';
 import { useEffect, useRef } from 'react';
 import { Linking, Platform } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
@@ -32,7 +33,6 @@ export function useWidgetBridge() {
   const {
     currentTrack,
     isPlaying,
-    positionSec,
     durationSec,
     queue,
     queueIndex,
@@ -49,6 +49,8 @@ export function useWidgetBridge() {
     lyricsOffsetSec,
     setIsPlayerOpen,
   } = useHolySic();
+  // coarse on purpose: the widget extrapolates the time itself, only drift > 3 s matters
+  const positionSec = usePositionStep(2);
 
   const enabled = Platform.OS === 'ios' && widgetSupported();
   const last = useRef<{ key: string; pos: number; at: number; playing: boolean } | null>(null);

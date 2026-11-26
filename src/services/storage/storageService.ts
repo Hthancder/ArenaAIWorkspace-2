@@ -47,6 +47,7 @@ export const DEFAULT_AUDIO_LAB: AudioLabSettings = {
   eightDSpeedSec: 8,
   playbackRate: 1.0,
   preservePitch: true,
+  stereoWidth: 100,
 };
 
 async function readJson<T>(key: string, fallback: T): Promise<T> {

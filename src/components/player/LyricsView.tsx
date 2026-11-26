@@ -7,13 +7,13 @@ import { t } from '../../constants/i18n';
 import { LyricsPosition } from '../../constants/preferences';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
+import { usePositionSec } from '../../services/audio/playbackClock';
 
 export const LyricsView: React.FC = () => {
   const {
     lyrics,
     isLoadingLyrics,
     activeLyricIndex,
-    positionSec,
     seekTo,
     darkPalette: palette,
     prefs,
@@ -22,6 +22,7 @@ export const LyricsView: React.FC = () => {
     lyricsOffsetSec,
     nudgeLyricsOffset,
   } = useHolySic();
+  const positionSec = usePositionSec();
   const vi = prefs.language === 'vi';
 
   const scrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);

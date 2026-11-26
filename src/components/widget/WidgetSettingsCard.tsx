@@ -1,6 +1,7 @@
 // Settings › Widget: a live preview of the home-screen widget (same layout as the SwiftUI medium
 // widget), whether this install can feed it, and how to add it.
 
+import { usePositionStep } from '../../services/audio/playbackClock';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,7 +40,6 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
     prefs,
     currentTrack,
     isPlaying,
-    positionSec,
     durationSec,
     palette,
     darkPalette,
@@ -144,7 +144,6 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
   const bottom = shade(artColors?.dark, 0.6, '#06050B');
   const accent = darkPalette.accent;
   const dur = currentTrack?.isLive ? 0 : durationSec || currentTrack?.durationSec || 0;
-  const pct = dur > 0 ? Math.min(1, Math.max(0, positionSec / dur)) : 0;
   const liked = currentTrack ? isLiked(currentTrack.id) : false;
   const badge = currentTrack?.qualityBadge?.split(' · ').slice(0, 2).join(' · ');
 
@@ -302,14 +301,7 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
                   </View>
                 )}
               </View>
-              <View style={[styles.track, { marginTop: 0 }]}>
-                <View
-                  style={[
-                    styles.trackFill,
-                    { width: `${Math.max(3, pct * 100)}%`, backgroundColor: accent },
-                  ]}
-                />
-              </View>
+              <PreviewProgress dur={dur} accent={accent} barOnly />
             </View>
           </View>
         ) : (
@@ -372,20 +364,7 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
                 <Text style={styles.wArtist} numberOfLines={1}>
                   {currentTrack?.artist || 'HolySic'}
                 </Text>
-                <View style={styles.track}>
-                  <View
-                    style={[
-                      styles.trackFill,
-                      { width: `${Math.max(3, pct * 100)}%`, backgroundColor: accent },
-                    ]}
-                  />
-                </View>
-                {dur > 0 && (
-                  <View style={styles.times}>
-                    <Text style={styles.time}>{clock(positionSec)}</Text>
-                    <Text style={styles.time}>{clock(dur)}</Text>
-                  </View>
-                )}
+                <PreviewProgress dur={dur} accent={accent} />
                 <View style={styles.controls}>
                   <Tap onPress={playPrevious} hitSlop={8} accessibilityLabel="Widget previous">
                     <Ionicons name="play-back" size={17} color="#FFFFFF" />
@@ -504,6 +483,34 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
           </View>
         )}
       </View>
+    </>
+  );
+};
+
+/** The preview's progress line — the only part that follows the playback clock. */
+const PreviewProgress: React.FC<{ dur: number; accent: string; barOnly?: boolean }> = ({
+  dur,
+  accent,
+  barOnly,
+}) => {
+  const positionSec = usePositionStep(1);
+  const pct = dur > 0 ? Math.min(1, Math.max(0, positionSec / dur)) : 0;
+  return (
+    <>
+      <View style={[styles.track, barOnly && { marginTop: 0 }]}>
+        <View
+          style={[
+            styles.trackFill,
+            { width: `${Math.max(3, pct * 100)}%`, backgroundColor: accent },
+          ]}
+        />
+      </View>
+      {dur > 0 && !barOnly && (
+        <View style={styles.times}>
+          <Text style={styles.time}>{clock(positionSec)}</Text>
+          <Text style={styles.time}>{clock(dur)}</Text>
+        </View>
+      )}
     </>
   );
 };

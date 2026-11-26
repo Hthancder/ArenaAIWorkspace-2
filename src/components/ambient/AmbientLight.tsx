@@ -31,52 +31,65 @@ const useIds = (n: number) =>
  */
 export function useAmbientEnergy(active: boolean, breathing: boolean, isPlaying: boolean) {
   const energy = useRef(new Animated.Value(0.35)).current;
+  // Everything here runs on the native driver: JS only picks a target ~30×/s from the real
+  // spectrum, the UI thread does the easing at full frame rate.
+  useEffect(() => {
+    Animated.timing(energy, { toValue: 0.35, duration: 1, useNativeDriver: true }).start();
+  }, [energy]);
   useEffect(() => {
     if (!active) return;
-    if (!breathing) {
-      Animated.timing(energy, {
-        toValue: isPlaying ? 0.5 : 0.28,
-        duration: 700,
-        useNativeDriver: false,
-      }).start();
+    const to = (v: number, ms: number, easing = Easing.out(Easing.quad)) =>
+      Animated.timing(energy, { toValue: v, duration: ms, easing, useNativeDriver: true });
+    if (!breathing || !isPlaying) {
+      to(isPlaying ? 0.5 : 0.24, 700, Easing.inOut(Easing.quad)).start();
       return;
     }
-    let target = 0.35;
-    let lastReal = 0;
     let level = 0.35;
+    let lastReal = 0;
+    let lastPush = 0;
+    let calm: Animated.CompositeAnimation | null = null;
+    const startCalm = () => {
+      if (calm) return;
+      // no readable audio (e.g. HLS): a slow, calm breath — never a fake beat
+      calm = Animated.loop(
+        Animated.sequence([
+          to(0.61, 2100, Easing.inOut(Easing.sin)),
+          to(0.29, 2100, Easing.inOut(Easing.sin)),
+        ])
+      );
+      calm.start();
+    };
+    const stopCalm = () => {
+      calm?.stop();
+      calm = null;
+    };
     const unsub = audioEngine.subscribeSpectrum((b) => {
-      lastReal = Date.now();
+      const now = Date.now();
+      lastReal = now;
+      if (now - lastPush < 33) return;
+      lastPush = now;
+      stopCalm();
       // 32 real bands: the lowest ~20% (≈40–150 Hz) is the kick & bass line
       const nb = Math.max(1, Math.round(b.length * 0.2));
       let bass = 0;
       for (let i = 0; i < nb; i++) bass += b[i];
       bass /= nb;
-      const all = b.reduce((a, c) => a + c, 0) / (b.length || 1);
-      target = Math.min(1, bass * 0.85 + all * 0.35);
-    });
-    const t0 = Date.now();
-    let last = 0;
-    let raf = 0;
-    const tick = (ts: number) => {
-      raf = requestAnimationFrame(tick);
-      if (ts - last < 33) return; // ~30 fps is plenty for light
-      last = ts;
-      const now = Date.now();
-      let tgt: number;
-      if (!isPlaying) tgt = 0.22;
-      else if (now - lastReal < 1200) tgt = target;
-      else {
-        const t = (now - t0) / 1000;
-        // no readable audio (e.g. HLS): a slow, calm breath — never a fake beat
-        tgt = 0.45 + 0.16 * Math.sin((t * 2 * Math.PI) / 4.2);
-      }
+      let all = 0;
+      for (let i = 0; i < b.length; i++) all += b[i];
+      all /= b.length || 1;
+      const target = Math.min(1, bass * 0.85 + all * 0.35);
       // fast attack, slow release, like a light reacting to a kick drum
-      level += (tgt - level) * (tgt > level ? 0.4 : 0.07);
-      energy.setValue(level);
-    };
-    raf = requestAnimationFrame(tick);
+      if (target > level) to(target, 90).start();
+      else to(target, 520, Easing.out(Easing.cubic)).start();
+      level = target;
+    });
+    const watch = setInterval(() => {
+      if (Date.now() - lastReal > 1200) startCalm();
+    }, 600);
+    if (Date.now() - lastReal > 1200) startCalm();
     return () => {
-      cancelAnimationFrame(raf);
+      clearInterval(watch);
+      stopCalm();
       unsub();
     };
   }, [active, breathing, isPlaying, energy]);
@@ -122,38 +135,36 @@ const canShowImage = (uri: string) =>
 // ---------------------------------------------------------------- colour lobes
 
 /** Soft radial lobes in the cover's corner colours — the shape of YouTube's glow. */
-const Lobes: React.FC<{ colors: AmbientColors; strength: number; spread?: number }> = ({
-  colors,
-  strength,
-  spread = 1,
-}) => {
-  const ids = useIds(5);
-  const [tl, tr, bl, br] = colors.corners;
-  const lobe = (id: string, c: string, o: number) => (
-    <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%" fx="50%" fy="50%">
-      <Stop offset="0" stopColor={c} stopOpacity={Math.min(1, o * strength)} />
-      <Stop offset="0.45" stopColor={c} stopOpacity={Math.min(1, o * strength * 0.45)} />
-      <Stop offset="1" stopColor={c} stopOpacity={0} />
-    </RadialGradient>
-  );
-  const r = 34 * spread;
-  return (
-    <Svg width="100%" height="100%" viewBox="-25 -25 150 150" preserveAspectRatio="none">
-      <Defs>
-        {lobe(ids[0], colors.primary, 0.75)}
-        {lobe(ids[1], tl, 0.9)}
-        {lobe(ids[2], tr, 0.9)}
-        {lobe(ids[3], bl, 0.9)}
-        {lobe(ids[4], br, 0.9)}
-      </Defs>
-      <Ellipse cx="50" cy="50" rx={r * 1.25} ry={r * 1.25} fill={`url(#${ids[0]})`} />
-      <Ellipse cx="30" cy="30" rx={r} ry={r} fill={`url(#${ids[1]})`} />
-      <Ellipse cx="70" cy="30" rx={r} ry={r} fill={`url(#${ids[2]})`} />
-      <Ellipse cx="30" cy="70" rx={r} ry={r} fill={`url(#${ids[3]})`} />
-      <Ellipse cx="70" cy="70" rx={r} ry={r} fill={`url(#${ids[4]})`} />
-    </Svg>
-  );
-};
+const Lobes: React.FC<{ colors: AmbientColors; strength: number; spread?: number }> = React.memo(
+  ({ colors, strength, spread = 1 }) => {
+    const ids = useIds(5);
+    const [tl, tr, bl, br] = colors.corners;
+    const lobe = (id: string, c: string, o: number) => (
+      <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%" fx="50%" fy="50%">
+        <Stop offset="0" stopColor={c} stopOpacity={Math.min(1, o * strength)} />
+        <Stop offset="0.45" stopColor={c} stopOpacity={Math.min(1, o * strength * 0.45)} />
+        <Stop offset="1" stopColor={c} stopOpacity={0} />
+      </RadialGradient>
+    );
+    const r = 34 * spread;
+    return (
+      <Svg width="100%" height="100%" viewBox="-25 -25 150 150" preserveAspectRatio="none">
+        <Defs>
+          {lobe(ids[0], colors.primary, 0.75)}
+          {lobe(ids[1], tl, 0.9)}
+          {lobe(ids[2], tr, 0.9)}
+          {lobe(ids[3], bl, 0.9)}
+          {lobe(ids[4], br, 0.9)}
+        </Defs>
+        <Ellipse cx="50" cy="50" rx={r * 1.25} ry={r * 1.25} fill={`url(#${ids[0]})`} />
+        <Ellipse cx="30" cy="30" rx={r} ry={r} fill={`url(#${ids[1]})`} />
+        <Ellipse cx="70" cy="30" rx={r} ry={r} fill={`url(#${ids[2]})`} />
+        <Ellipse cx="30" cy="70" rx={r} ry={r} fill={`url(#${ids[3]})`} />
+        <Ellipse cx="70" cy="70" rx={r} ry={r} fill={`url(#${ids[4]})`} />
+      </Svg>
+    );
+  }
+);
 
 // ---------------------------------------------------------------- full-screen backdrop
 
@@ -163,14 +174,16 @@ export const AmbientBackdrop: React.FC<{
   colors: AmbientColors;
   level: number;
   energy: Animated.Value;
-}> = ({ artworkUrl, colors, level, energy }) => {
+  /** Reduce Motion: breathe with opacity only, never zoom */
+  still?: boolean;
+}> = React.memo(({ artworkUrl, colors, level, energy, still }) => {
   const uri = normalizeArtworkUrl(artworkUrl);
   const layers = useCrossfade(`${uri}|${colors.primary}|${colors.corners.join()}`, {
     uri,
     colors,
   });
   const breathe = energy.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] });
-  const scale = energy.interpolate({ inputRange: [0, 1], outputRange: [1, 1.07] });
+  const scale = still ? 1 : energy.interpolate({ inputRange: [0, 1], outputRange: [1, 1.07] });
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {layers.map((l) => (
@@ -206,7 +219,7 @@ export const AmbientBackdrop: React.FC<{
       />
     </View>
   );
-};
+});
 
 // ---------------------------------------------------------------- glow around the cover
 
@@ -218,11 +231,12 @@ export const CoverGlow: React.FC<{
   size: number;
   children: React.ReactNode;
   style?: ViewStyle;
-}> = ({ colors, level, energy, size, children, style }) => {
+  still?: boolean;
+}> = ({ colors, level, energy, size, children, style, still }) => {
   const layers = useCrossfade(`${colors.primary}|${colors.corners.join()}`, colors);
   const pad = size * 0.55;
   const opacity = energy.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] });
-  const scale = energy.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.1] });
+  const scale = still ? 1 : energy.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.1] });
   return (
     <View style={style}>
       {level > 0 && (

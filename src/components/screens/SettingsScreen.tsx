@@ -427,11 +427,18 @@ export const SettingsScreen: React.FC = () => {
             trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
           />
         </View>
-        {ambient.reduced && prefs.ambientLight !== 'off' && (
+        {ambient.lowPower && prefs.ambientLight !== 'off' && (
           <Text style={{ color: HOLYSIC_COLORS.aacAmber, fontSize: 12, marginBottom: 4 }}>
             {vi
-              ? '⚡ Đang bật Tiết kiệm pin / Giảm chuyển động: ánh sáng được dịu bớt và không nhịp.'
-              : '⚡ Low Power Mode / Reduce Motion is on: the light is toned down and steady.'}
+              ? '⚡ iPhone đang bật Chế độ nguồn điện thấp: ánh sáng tự dịu bớt và đứng yên để tiết kiệm pin.'
+              : '⚡ Low Power Mode is on: the light is dimmed and steady to save battery.'}
+          </Text>
+        )}
+        {ambient.reduceMotion && !ambient.lowPower && prefs.ambientLight !== 'off' && (
+          <Text style={{ color: UI.text2, fontSize: 12, marginBottom: 4 }}>
+            {vi
+              ? 'Trợ năng › Giảm chuyển động đang bật: ánh sáng vẫn nhịp theo nhạc nhưng không phóng to/thu nhỏ.'
+              : 'Accessibility › Reduce Motion is on: the light still pulses but never zooms.'}
           </Text>
         )}
 

@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#341A66"/>
+      <stop offset="0.55" stop-color="#170B30"/>
+      <stop offset="1" stop-color="#07050D"/>
+    </linearGradient>
+    <radialGradient id="bloom" cx="0.5" cy="0.27" r="0.62">
+      <stop offset="0" stop-color="#9A6BE0" stop-opacity="0.55"/>
+      <stop offset="0.45" stop-color="#5B2FA0" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#2A1452" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vig" cx="0.5" cy="0.45" r="0.75">
+      <stop offset="0.6" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.45"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0.2" y1="0" x2="0.65" y2="1">
+      <stop offset="0" stop-color="#FFF6D6"/>
+      <stop offset="0.28" stop-color="#FCE29A"/>
+      <stop offset="0.62" stop-color="#F2B843"/>
+      <stop offset="1" stop-color="#B9761A"/>
+    </linearGradient>
+    <linearGradient id="halo" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#E9A93A"/>
+      <stop offset="0.38" stop-color="#FFF4CF"/>
+      <stop offset="0.62" stop-color="#FDE68A"/>
+      <stop offset="1" stop-color="#D48F22"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" stitchTiles="stitch"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.9 0"/>
+    </filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="26"/></filter>
+    <filter id="glow" x="-40%" y="-80%" width="180%" height="260%"><feGaussianBlur stdDeviation="18"/></filter>
+    <clipPath id="front"><rect x="0" y="262" width="1024" height="400"/></clipPath>
+
+    <!-- calligraphic eighth note: tilted head, tapering stem, flowing flag -->
+    <path id="note" d="
+      M 536 262
+      C 548 330 622 356 674 420
+      C 718 474 712 552 668 610
+      C 659 622 643 615 650 600
+      C 676 550 668 496 636 462
+      C 606 430 568 420 538 418
+      L 538 694
+      C 540 760 486 806 414 812
+      C 346 818 304 786 302 744
+      C 300 690 356 640 430 630
+      C 462 626 488 632 506 642
+      L 506 268
+      C 506 252 532 248 534 262 Z"/>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <rect width="1024" height="1024" fill="url(#bloom)"/>
+  <!-- halo glow + back half of the ring (behind the stem) -->
+  <g transform="rotate(-9 520 262)">
+    <ellipse cx="520" cy="262" rx="182" ry="46" fill="none" stroke="#FDE68A" stroke-opacity="0.45" stroke-width="34" filter="url(#glow)"/>
+    <ellipse cx="520" cy="262" rx="182" ry="46" fill="none" stroke="url(#halo)" stroke-width="22" opacity="0.92"/>
+  </g>
+
+  <!-- the note -->
+  <use href="#note" fill="#05030A" opacity="0.55" transform="translate(10 26)" filter="url(#soft)"/>
+  <use href="#note" fill="url(#gold)"/>
+  <use href="#note" fill="url(#sheen)" opacity="0.6"/>
+  <path d="M 512 300 L 512 640" stroke="#FFF8E1" stroke-opacity="0.35" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 330 708 C 346 668 386 648 424 644" fill="none" stroke="#FFF8E1" stroke-opacity="0.5" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- front half of the ring passes in front of the stem -->
+  <g transform="rotate(-9 520 262)" clip-path="url(#front)">
+    <ellipse cx="520" cy="262" rx="182" ry="46" fill="none" stroke="url(#halo)" stroke-width="22"/>
+    <ellipse cx="520" cy="266" rx="182" ry="46" fill="none" stroke="#FFFBEA" stroke-opacity="0.5" stroke-width="4"/>
+  </g>
+
+  <rect width="1024" height="1024" fill="url(#vig)"/>
+  <rect width="1024" height="1024" filter="url(#grain)" opacity="0.05"/>
+</svg>

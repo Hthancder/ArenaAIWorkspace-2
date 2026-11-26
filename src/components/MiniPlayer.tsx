@@ -1,5 +1,6 @@
 // Floating Glass MiniPlayer with HolySic's MiniLyricsTicker & Artwork Tonal Progress
 
+import { usePositionSec } from '../services/audio/playbackClock';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef } from 'react';
 import {
@@ -25,7 +26,6 @@ export const MiniPlayer: React.FC = () => {
     currentTrack,
     isPlaying,
     isBuffering,
-    positionSec,
     durationSec,
     togglePlay,
     playNext,
@@ -116,11 +116,6 @@ export const MiniPlayer: React.FC = () => {
   // OpenSpot-style floating capsule vs. HolySic card
   const capsule = prefs.miniPlayerStyle === 'capsule';
 
-  const progress = currentTrack?.isLive
-    ? 1
-    : durationSec > 0
-      ? Math.min(1, Math.max(0, positionSec / durationSec))
-      : 0;
   const liked = isLiked(currentTrack.id);
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
@@ -171,12 +166,11 @@ export const MiniPlayer: React.FC = () => {
           ]}
         >
           {capsule && (
-            <View
-              pointerEvents="none"
-              style={[
-                styles.capsuleFill,
-                { width: `${progress * 100}%`, backgroundColor: palette.accent + '22' },
-              ]}
+            <MiniProgress
+              live={!!currentTrack.isLive}
+              durationSec={durationSec}
+              style={styles.capsuleFill}
+              color={palette.accent + '22'}
             />
           )}
           <View style={[styles.row, capsule && { paddingVertical: 7 }]}>
@@ -257,16 +251,37 @@ export const MiniPlayer: React.FC = () => {
 
           {/* Bottom hairline progress bar */}
           <View style={[styles.progressTrack, capsule && { display: 'none' }]}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${progress * 100}%`, backgroundColor: palette.accent },
-              ]}
+            <MiniProgress
+              live={!!currentTrack.isLive}
+              durationSec={durationSec}
+              style={styles.progressFill}
+              color={palette.accent}
             />
           </View>
         </GlassSurface>
       </Tap>
     </Animated.View>
+  );
+};
+
+/** Progress fill: follows the playback clock without re-rendering the whole mini player. */
+const MiniProgress: React.FC<{
+  live: boolean;
+  durationSec: number;
+  color: string;
+  style: object;
+}> = ({ live, durationSec, color, style }) => {
+  const positionSec = usePositionSec();
+  const progress = live
+    ? 1
+    : durationSec > 0
+      ? Math.min(1, Math.max(0, positionSec / durationSec))
+      : 0;
+  return (
+    <View
+      pointerEvents="none"
+      style={[style, { width: `${progress * 100}%`, backgroundColor: color }]}
+    />
   );
 };
 

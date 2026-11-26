@@ -3,6 +3,7 @@
 import { SignalPathList } from '../audio/SignalPathList';
 import { useSignalPath } from '../audio/useSignalPath';
 import { PlayerPaneBus } from '../../services/ui/playerPaneBus';
+import { usePositionSec } from '../../services/audio/playbackClock';
 import { FitStage } from './FitStage';
 import { ScrubBar } from './ScrubBar';
 import { AudioOutput, useAudioOutput } from '../../services/audio/audioOutput';
@@ -54,7 +55,6 @@ export const FullPlayerModal: React.FC = () => {
     resolvedStream,
     isPlaying,
     isBuffering,
-    positionSec,
     durationSec,
     volume,
     togglePlay,
@@ -109,8 +109,6 @@ export const FullPlayerModal: React.FC = () => {
       }),
     []
   );
-  // seek bar: while dragging, the timestamps preview the target and the seek happens on release
-  const [seekPreview, setSeekPreview] = useState<number | null>(null);
   const output = useAudioOutput();
   // IPA builds: the volume slider drives the real iPhone volume (synced with the side buttons)
   const systemVol = output.systemVolume;
@@ -171,6 +169,16 @@ export const FullPlayerModal: React.FC = () => {
   ).current;
   // ── swipe the cover left / right to change song ──
   const coverX = useRef(new Animated.Value(0)).current;
+  // the cover settles back a little on pause and springs forward on play (Apple Music)
+  const coverScale = useRef(new Animated.Value(isPlaying ? 1 : 0.94)).current;
+  useEffect(() => {
+    Animated.spring(coverScale, {
+      toValue: isPlaying ? 1 : 0.94,
+      useNativeDriver: true,
+      speed: 10,
+      bounciness: isPlaying ? 7 : 2,
+    }).start();
+  }, [isPlaying, coverScale]);
   const coverPan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) =>
@@ -204,8 +212,6 @@ export const FullPlayerModal: React.FC = () => {
   const vi = prefs.language === 'vi';
   const liked = isLiked(currentTrack.id);
   const fontFamily = resolveFontFamily(prefs.fontStyle);
-  const progress = durationSec > 0 ? Math.min(1, Math.max(0, positionSec / durationSec)) : 0;
-  const shownPos = seekPreview ?? positionSec;
 
   const ambientBackdrop =
     ambientOn && prefs.playerBackground === 'AMBIENT' && prefs.playerStyle !== 'IPOD';
@@ -279,6 +285,7 @@ export const FullPlayerModal: React.FC = () => {
               colors={ambientColors}
               level={ambient.level}
               energy={energy}
+              still={ambient.reduceMotion}
             />
           )}
           {/* Top Bar — also the grab area for swipe-down-to-close */}
@@ -528,6 +535,7 @@ export const FullPlayerModal: React.FC = () => {
                   colors={ambientColors}
                   level={ambientOn ? ambient.level * 0.8 : 0}
                   energy={energy}
+                  still={ambient.reduceMotion}
                   size={300}
                 >
                   <TurntableVinylStage />
@@ -541,6 +549,7 @@ export const FullPlayerModal: React.FC = () => {
                     colors={ambientColors}
                     level={ambientOn ? ambient.level : 0}
                     energy={energy}
+                    still={ambient.reduceMotion}
                     size={prefs.playerStyle === 'POSTER' ? 270 : 300}
                   >
                     {/* swipe the cover ← next · → previous */}
@@ -561,7 +570,7 @@ export const FullPlayerModal: React.FC = () => {
                                 outputRange: ['-6deg', '0deg', '6deg'],
                               }),
                             },
-                            { scale: isPlaying ? 1 : 0.94 },
+                            { scale: coverScale },
                           ],
                         },
                       ]}
@@ -625,61 +634,19 @@ export const FullPlayerModal: React.FC = () => {
                 </Tap>
               </View>
 
-              {/* Live radio: no timeline, just an on-air bar */}
-              {currentTrack.isLive ? (
-                <View style={styles.seekSection}>
-                  <View style={[styles.seekTrack, { backgroundColor: 'rgba(239,68,68,0.25)' }]}>
-                    <View
-                      style={[styles.seekFill, { width: '100%', backgroundColor: '#EF4444' }]}
-                    />
-                  </View>
-                  <View style={styles.timestampRow}>
-                    <Text style={[styles.timestampText, { color: '#FCA5A5', fontWeight: '900' }]}>
-                      ● LIVE · {formatTimeSec(positionSec)}
-                    </Text>
-                    <Text style={styles.timestampText}>{currentTrack.genre || 'Radio'}</Text>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.seekSection}>
-                  <ScrubBar
-                    value={progress}
-                    thumb
-                    thickness={5}
-                    color={palette.accent}
-                    trackColor="rgba(255,255,255,0.22)"
-                    disabled={durationSec <= 0}
-                    onChange={(r) => setSeekPreview(r * durationSec)}
-                    onCommit={(r) => {
-                      if (durationSec > 0) seekTo(r * durationSec);
-                      // keep the preview a beat so the bar doesn't flash back before the seek lands
-                      setTimeout(() => setSeekPreview(null), 250);
-                    }}
-                    haptic={() => haptic('selection')}
-                    step={durationSec > 0 ? Math.min(1, 10 / durationSec) : 0.05}
-                    accessibilityLabel={vi ? 'Tiến độ bài hát' : 'Song position'}
-                    accessibilityValueText={`${formatTimeSec(shownPos)} / ${formatTimeSec(durationSec)}`}
-                    style={{ marginVertical: -10 }}
-                  />
-
-                  <View style={styles.timestampRow}>
-                    <Text
-                      style={[styles.timestampText, seekPreview != null && { color: '#FFFFFF' }]}
-                    >
-                      {formatTimeSec(shownPos)}
-                    </Text>
-                    <Tap
-                      onPress={() => updatePrefs({ showRemainingTime: !prefs.showRemainingTime })}
-                    >
-                      <Text style={styles.timestampText}>
-                        {prefs.showRemainingTime
-                          ? `-${formatTimeSec(Math.max(0, durationSec - shownPos))}`
-                          : formatTimeSec(durationSec)}
-                      </Text>
-                    </Tap>
-                  </View>
-                </View>
-              )}
+              <SeekSection
+                live={!!currentTrack.isLive}
+                genre={currentTrack.genre}
+                durationSec={durationSec}
+                color={palette.accent}
+                vi={vi}
+                showRemaining={!!prefs.showRemainingTime}
+                onToggleRemaining={() =>
+                  updatePrefs({ showRemainingTime: !prefs.showRemainingTime })
+                }
+                seekTo={seekTo}
+                onHaptic={() => haptic('selection')}
+              />
 
               {/* Primary Transport Row */}
               <View style={styles.transportRow}>
@@ -938,6 +905,83 @@ export const FullPlayerModal: React.FC = () => {
     </Modal>
   );
 };
+
+/**
+ * Seek bar + timestamps. The only part of the player that follows the playback clock, so the
+ * position ticking 4×/s re-renders this strip instead of the whole player (cover, glow, SVG).
+ */
+const SeekSection: React.FC<{
+  live: boolean;
+  genre?: string;
+  durationSec: number;
+  color: string;
+  vi: boolean;
+  showRemaining: boolean;
+  onToggleRemaining: () => void;
+  seekTo: (sec: number) => void;
+  onHaptic: () => void;
+}> = React.memo(
+  ({ live, genre, durationSec, color, vi, showRemaining, onToggleRemaining, seekTo, onHaptic }) => {
+    const positionSec = usePositionSec();
+    // while dragging, the timestamps preview the target and the seek happens on release
+    const [seekPreview, setSeekPreview] = useState<number | null>(null);
+    const progress =
+      seekPreview != null && durationSec > 0
+        ? Math.min(1, Math.max(0, seekPreview / durationSec))
+        : durationSec > 0
+          ? Math.min(1, Math.max(0, positionSec / durationSec))
+          : 0;
+    const shownPos = seekPreview ?? positionSec;
+    return live ? (
+      <View style={styles.seekSection}>
+        <View style={[styles.seekTrack, { backgroundColor: 'rgba(239,68,68,0.25)' }]}>
+          <View style={[styles.seekFill, { width: '100%', backgroundColor: '#EF4444' }]} />
+        </View>
+        <View style={styles.timestampRow}>
+          <Text style={[styles.timestampText, { color: '#FCA5A5', fontWeight: '900' }]}>
+            ● LIVE · {formatTimeSec(positionSec)}
+          </Text>
+          <Text style={styles.timestampText}>{genre || 'Radio'}</Text>
+        </View>
+      </View>
+    ) : (
+      <View style={styles.seekSection}>
+        <ScrubBar
+          value={progress}
+          thumb
+          thickness={5}
+          color={color}
+          trackColor="rgba(255,255,255,0.22)"
+          disabled={durationSec <= 0}
+          onChange={(r) => setSeekPreview(r * durationSec)}
+          onCommit={(r) => {
+            if (durationSec > 0) seekTo(r * durationSec);
+            // keep the preview a beat so the bar doesn't flash back before the seek lands
+            setTimeout(() => setSeekPreview(null), 250);
+          }}
+          haptic={onHaptic}
+          step={durationSec > 0 ? Math.min(1, 10 / durationSec) : 0.05}
+          accessibilityLabel={vi ? 'Tiến độ bài hát' : 'Song position'}
+          accessibilityValueText={`${formatTimeSec(shownPos)} / ${formatTimeSec(durationSec)}`}
+          style={{ marginVertical: -10 }}
+        />
+
+        <View style={styles.timestampRow}>
+          <Text style={[styles.timestampText, seekPreview != null && { color: '#FFFFFF' }]}>
+            {formatTimeSec(shownPos)}
+          </Text>
+          <Tap onPress={onToggleRemaining}>
+            <Text style={styles.timestampText}>
+              {showRemaining
+                ? `-${formatTimeSec(Math.max(0, durationSec - shownPos))}`
+                : formatTimeSec(durationSec)}
+            </Text>
+          </Tap>
+        </View>
+      </View>
+    );
+  }
+);
 
 const styles = StyleSheet.create({
   root: {

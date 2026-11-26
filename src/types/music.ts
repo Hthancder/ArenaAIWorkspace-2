@@ -164,6 +164,8 @@ export interface AudioLabSettings {
   eightDSpeedSec: number; // 4..16s rotation
   playbackRate: number; // 0.75..1.5
   preservePitch: boolean;
+  /** stereo width 0..200 (100 = untouched) — native iOS DSP */
+  stereoWidth?: number;
 }
 
 export interface ModuleServerConfig {
