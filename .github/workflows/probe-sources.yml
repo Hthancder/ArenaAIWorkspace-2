@@ -19,9 +19,6 @@ jobs:
         with:
           node-version: '22'
       - name: Probe sources
-        env:
-          SKIP_YT: '1'
-          SKIP_SAAVN: '1'
         run: |
           node --openssl-legacy-provider scripts/probe-sources.mjs 2>&1 | tee probe.txt
           # surface the report as annotations (readable through the check-runs API)

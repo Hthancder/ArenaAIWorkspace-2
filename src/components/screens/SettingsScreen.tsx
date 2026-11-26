@@ -24,6 +24,8 @@ import {
 } from '../../constants/preferences';
 import { MOCHY_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useMochy } from '../../context/MochyContext';
+import { StreamFileCache } from '../../services/audio/streamFileCache';
+import { SourceMemory } from '../../services/providers/sourceMemory';
 import { MochyMarkIcon } from '../MochyIcons';
 
 export const SettingsScreen: React.FC = () => {
@@ -43,6 +45,7 @@ export const SettingsScreen: React.FC = () => {
   const [newServerUrl, setNewServerUrl] = useState('');
   const [newServerKind, setNewServerKind] = useState<'streamer' | 'relay'>('relay');
   const [verifying, setVerifying] = useState(false);
+  const [memoryCount, setMemoryCount] = useState(() => SourceMemory.stats().tracks);
 
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -340,7 +343,7 @@ export const SettingsScreen: React.FC = () => {
             monochrome: 'Monochrome · Lossless FLAC (16/24-bit)',
             jiosaavn: `JioSaavn · Full AAC (${prefs.preferredJioSaavnQuality} kbps)`,
             innertube: 'YouTube Music InnerTube (iOS / visionOS)',
-            itunes: 'Apple CDN · Fast Global AAC',
+            itunes: vi ? 'Apple · Preview 30s (chỉ khi cho phép)' : 'Apple · 30s preview (only if allowed)',
           };
           return (
             <View key={modId} style={styles.moduleRow}>
@@ -366,6 +369,75 @@ export const SettingsScreen: React.FC = () => {
             </View>
           );
         })}
+
+        {/* Playback source behaviour */}
+        <View style={[styles.switchRow, { marginTop: 10 }]}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.rowTitle}>
+              {vi ? 'Nhớ nguồn phát được' : 'Remember working sources'}
+            </Text>
+            <Text style={styles.rowDesc}>
+              {vi
+                ? `Bài đã phát được sẽ dùng lại đúng nguồn đó lần sau, nguồn hay lỗi bị xếp xuống cuối (${memoryCount} bài đã nhớ)`
+                : `Replays use the source that worked last time; failing modules are tried last (${memoryCount} remembered)`}
+            </Text>
+          </View>
+          <Switch
+            value={prefs.rememberSources}
+            onValueChange={(v) => updatePrefs({ rememberSources: v })}
+            trackColor={{ false: '#2A2A36', true: palette.accent }}
+          />
+        </View>
+
+        <View style={styles.switchRow}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.rowTitle}>
+              {vi ? 'Ưu tiên phát ngay' : 'Prefer instant start'}
+            </Text>
+            <Text style={styles.rowDesc}>
+              {vi
+                ? 'Trên iPhone, FLAC Monochrome phải tải về 1 lần (~30 MB) mới phát được, nên chỉ dùng khi nguồn phát ngay (YouTube / JioSaavn) không có. Tắt nếu luôn muốn lossless.'
+                : 'On iPhone, Monochrome FLAC needs a one-time ~30 MB download, so it is used after instant sources. Turn off to always prefer lossless.'}
+            </Text>
+          </View>
+          <Switch
+            value={prefs.preferInstantStart}
+            onValueChange={(v) => updatePrefs({ preferInstantStart: v })}
+            trackColor={{ false: '#2A2A36', true: palette.accent }}
+          />
+        </View>
+
+        <View style={styles.switchRow}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.rowTitle}>
+              {vi ? 'Cho phép bản preview 30 giây' : 'Allow 30-second previews'}
+            </Text>
+            <Text style={styles.rowDesc}>
+              {vi
+                ? 'Tắt (mặc định): chỉ phát bản đầy đủ, không bao giờ phát đoạn preview Apple 30s. Bật: dùng preview khi mọi nguồn đầy đủ đều lỗi.'
+                : 'Off (default): full-length tracks only. On: fall back to Apple 30s previews when every full source fails.'}
+            </Text>
+          </View>
+          <Switch
+            value={prefs.allowPreviewFallback}
+            onValueChange={(v) => updatePrefs({ allowPreviewFallback: v })}
+            trackColor={{ false: '#2A2A36', true: palette.accent }}
+          />
+        </View>
+
+        <Pressable
+          onPress={() => {
+            haptic('selection');
+            SourceMemory.clear();
+            StreamFileCache.clear();
+            setMemoryCount(0);
+          }}
+          style={{ marginTop: 6, alignSelf: 'flex-start' }}
+        >
+          <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>
+            {vi ? 'Xoá bộ nhớ nguồn & cache FLAC' : 'Clear source memory & FLAC cache'}
+          </Text>
+        </Pressable>
 
         {/* JioSaavn Bitrate Choice */}
         <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>

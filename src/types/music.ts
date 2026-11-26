@@ -41,6 +41,10 @@ export interface ResolvedStream {
   headers?: Record<string, string>;
   isPreview?: boolean;
   isOffline?: boolean;
+  /** Key for the on-device stream file cache (Monochrome FLAC on iOS) */
+  cacheKey?: string;
+  /** Candidate came from Source Memory (played successfully before) */
+  fromMemory?: boolean;
   diagnostics: DiagnosticStep[];
 }
 

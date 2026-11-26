@@ -7,10 +7,17 @@ import { DiagnosticStep, Track } from '../../types/music';
 import { decryptJioSaavnUrl } from '../des';
 import { CatalogCandidate, coreTitle, rankCandidates, TrackQueryInput } from '../trackMatcher';
 
-const SAAVN_CORS_MIRRORS = [
-  'https://saavn.sumit.co/api/search/songs',
-  'https://jiosaavn-api-privatecvc2.vercel.app/search/songs',
-];
+// jiosaavn-api-privatecvc2.vercel.app answered 402 in the CI probe (scripts/probe-sources.mjs) — removed
+const SAAVN_CORS_MIRRORS = ['https://saavn.sumit.co/api/search/songs'];
+
+// JioSaavnModule.kt: browser UA + explicit cookie so uncensored versions show up next to clean ones
+const SAAVN_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
+const SAAVN_API_HEADERS: Record<string, string> = {
+  Accept: 'application/json',
+  'User-Agent': SAAVN_UA,
+  Cookie: 'explicit_content=1',
+};
 
 function unescapeHtml(text: string): string {
   return text
@@ -23,7 +30,11 @@ function unescapeHtml(text: string): string {
     .trim();
 }
 
-async function fetchTimeout(url: string, init: RequestInit = {}, timeoutMs = 4200): Promise<Response> {
+async function fetchTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 4200
+): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -64,103 +75,122 @@ export async function searchJioSaavnTracks(
   if (!query.trim()) return [];
   const encoded = encodeURIComponent(query.trim());
 
-  // 1. Try CORS-enabled Saavn API mirrors (work seamlessly on both Web Preview & iOS)
-  for (const mirror of SAAVN_CORS_MIRRORS) {
-    try {
-      const sep = mirror.includes('?') ? '&' : '?';
-      const res = await fetchTimeout(`${mirror}${sep}query=${encoded}&limit=${limit}`, {}, 4000);
-      if (!res.ok) continue;
-      const body = await res.json();
-      const rawResults: any[] = body?.data?.results || body?.results || [];
-      if (rawResults.length === 0) continue;
+  const viaMirrors = async (): Promise<Track[]> => {
+    // 1. Try CORS-enabled Saavn API mirrors (work seamlessly on both Web Preview & iOS)
+    for (const mirror of SAAVN_CORS_MIRRORS) {
+      try {
+        const sep = mirror.includes('?') ? '&' : '?';
+        const res = await fetchTimeout(`${mirror}${sep}query=${encoded}&limit=${limit}`, {}, 4000);
+        if (!res.ok) continue;
+        const body = await res.json();
+        const rawResults: any[] = body?.data?.results || body?.results || [];
+        if (rawResults.length === 0) continue;
 
-      const tracks: Track[] = [];
-      for (const item of rawResults) {
-        const title = unescapeHtml(String(item?.name || item?.title || ''));
-        const artistList: string[] = Array.isArray(item?.artists?.primary)
-          ? item.artists.primary.map((a: any) => unescapeHtml(String(a?.name || '')))
-          : String(item?.primaryArtists || '')
-              .split(',')
-              .map((s) => unescapeHtml(s))
-              .filter(Boolean);
-        const artist = artistList.join(', ') || 'Unknown Artist';
-        const images: any[] = Array.isArray(item?.image) ? item.image : [];
-        const bestImg = images[images.length - 1]?.url || images[images.length - 1]?.link || '';
-        const downloads: { quality: string; url: string }[] = (
-          item?.downloadUrl || []
-        ).map((d: any) => ({
-          quality: String(d?.quality || ''),
-          url: String(d?.url || d?.link || ''),
-        }));
-        const picked = selectRenditionUrl(downloads, preferredQuality);
-        if (!title || !picked?.url) continue;
-
-        tracks.push({
-          id: `saavn-${item.id}`,
-          title,
-          artist,
-          artists: artistList,
-          album: item?.album?.name ? unescapeHtml(String(item.album.name)) : undefined,
-          artworkUrl: bestImg,
-          durationSec: Number(item?.duration) || 200,
-          explicit: Boolean(item?.explicitContent),
-          streamUrl: picked.url,
-          source: 'jiosaavn',
-          qualityBadge: `AAC ${picked.kbps} kbps`,
-          releaseYear: item?.year ? Number(item.year) : undefined,
-        });
-      }
-      if (tracks.length > 0) return tracks;
-    } catch {
-      // try next mirror
-    }
-  }
-
-  // 2. Direct JioSaavn API with DES-ECB ("38346591") decryption on Native iOS
-  if (Platform.OS !== 'web') {
-    try {
-      const api = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=android&p=1&n=${limit}&q=${encoded}`;
-      const res = await fetchTimeout(api, {
-        headers: { Accept: 'application/json' },
-      });
-      if (res.ok) {
-        const root = await res.json();
-        const results: any[] = root?.results || [];
         const tracks: Track[] = [];
-        for (const song of results) {
-          const more = song?.more_info;
-          const encrypted = more?.encrypted_media_url;
-          if (!encrypted) continue;
-          const decrypted = decryptJioSaavnUrl(encrypted);
-          if (!decrypted) continue;
-          const targetQ: JioSaavnQuality =
-            preferredQuality === '320' && String(more?.['320kbps']) !== 'true'
-              ? '160'
-              : preferredQuality;
-          const streamUrl = adjustDirectRendition(decrypted, targetQ);
-          const primaryArtists: string[] = (more?.artistMap?.primary_artists || []).map((a: any) =>
-            unescapeHtml(String(a?.name || ''))
+        for (const item of rawResults) {
+          const title = unescapeHtml(String(item?.name || item?.title || ''));
+          const artistList: string[] = Array.isArray(item?.artists?.primary)
+            ? item.artists.primary.map((a: any) => unescapeHtml(String(a?.name || '')))
+            : String(item?.primaryArtists || '')
+                .split(',')
+                .map((s) => unescapeHtml(s))
+                .filter(Boolean);
+          const artist = artistList.join(', ') || 'Unknown Artist';
+          const images: any[] = Array.isArray(item?.image) ? item.image : [];
+          const bestImg = images[images.length - 1]?.url || images[images.length - 1]?.link || '';
+          const downloads: { quality: string; url: string }[] = (item?.downloadUrl || []).map(
+            (d: any) => ({
+              quality: String(d?.quality || ''),
+              url: String(d?.url || d?.link || ''),
+            })
           );
+          const picked = selectRenditionUrl(downloads, preferredQuality);
+          if (!title || !picked?.url) continue;
+
           tracks.push({
-            id: `saavn-${song.id}`,
-            title: unescapeHtml(String(song.title || '')),
-            artist: primaryArtists.join(', ') || 'Unknown Artist',
-            artists: primaryArtists,
-            album: more?.album ? unescapeHtml(String(more.album)) : undefined,
-            artworkUrl: String(song?.image || '').replace(/150x150/g, '500x500'),
-            durationSec: Number(more?.duration) || 200,
-            streamUrl,
+            id: `saavn-${item.id}`,
+            title,
+            artist,
+            artists: artistList,
+            album: item?.album?.name ? unescapeHtml(String(item.album.name)) : undefined,
+            artworkUrl: bestImg,
+            durationSec: Number(item?.duration) || 200,
+            explicit: Boolean(item?.explicitContent),
+            streamUrl: picked.url,
             source: 'jiosaavn',
-            qualityBadge: `AAC ${targetQ} kbps`,
+            qualityBadge: `AAC ${picked.kbps} kbps`,
+            releaseYear: item?.year ? Number(item.year) : undefined,
           });
         }
-        return tracks;
+        if (tracks.length > 0) return tracks;
+      } catch {
+        // try next mirror
       }
+    }
+
+    return [];
+  };
+
+  // 2. Direct JioSaavn API with DES-ECB ("38346591") decryption on Native iOS
+  const viaDirectApi = async (): Promise<Track[]> => {
+    if (Platform.OS !== 'web') {
+      try {
+        const api = `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=android&p=1&n=${limit}&q=${encoded}`;
+        const res = await fetchTimeout(api, {
+          headers: SAAVN_API_HEADERS,
+        });
+        if (res.ok) {
+          const root = await res.json();
+          const results: any[] = root?.results || [];
+          const tracks: Track[] = [];
+          for (const song of results) {
+            const more = song?.more_info;
+            const encrypted = more?.encrypted_media_url;
+            if (!encrypted) continue;
+            const decrypted = decryptJioSaavnUrl(encrypted);
+            if (!decrypted) continue;
+            const targetQ: JioSaavnQuality =
+              preferredQuality === '320' && String(more?.['320kbps']) !== 'true'
+                ? '160'
+                : preferredQuality;
+            const streamUrl = adjustDirectRendition(decrypted, targetQ);
+            const primaryArtists: string[] = (more?.artistMap?.primary_artists || []).map(
+              (a: any) => unescapeHtml(String(a?.name || ''))
+            );
+            tracks.push({
+              id: `saavn-${song.id}`,
+              title: unescapeHtml(String(song.title || '')),
+              artist: primaryArtists.join(', ') || 'Unknown Artist',
+              artists: primaryArtists,
+              album: more?.album ? unescapeHtml(String(more.album)) : undefined,
+              artworkUrl: String(song?.image || '').replace(/150x150/g, '500x500'),
+              durationSec: Number(more?.duration) || 200,
+              streamUrl,
+              source: 'jiosaavn',
+              qualityBadge: `AAC ${targetQ} kbps`,
+            });
+          }
+          return tracks;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return [];
+  };
+
+  // Native iOS: the official API answers in ~350 ms (probe) and needs no third-party mirror;
+  // the browser preview can only use the CORS mirror.
+  const strategies = Platform.OS === 'web' ? [viaMirrors] : [viaDirectApi, viaMirrors];
+  for (const run of strategies) {
+    try {
+      const found = await run();
+      if (found.length > 0) return found;
     } catch {
-      // ignore
+      // next strategy
     }
   }
-
   return [];
 }
 

@@ -48,6 +48,12 @@ export interface MochyPreferences {
   autoPlaySimilar: boolean;
   preferredJioSaavnQuality: JioSaavnQuality;
   moduleOrder: ('monochrome' | 'jiosaavn' | 'innertube' | 'itunes')[];
+  /** Fall back to Apple's 30-second preview when no full-length source plays (off = never) */
+  allowPreviewFallback: boolean;
+  /** Remember the source that played each song and try it first next time */
+  rememberSources: boolean;
+  /** iOS: prefer sources that start instantly; Monochrome FLAC (needs a one-time download) goes after them */
+  preferInstantStart: boolean;
   enabledModules: {
     monochrome: boolean;
     jiosaavn: boolean;
@@ -73,6 +79,9 @@ export const DEFAULT_PREFERENCES: MochyPreferences = {
   autoPlaySimilar: true,
   preferredJioSaavnQuality: '320',
   moduleOrder: ['monochrome', 'jiosaavn', 'innertube', 'itunes'],
+  allowPreviewFallback: false,
+  rememberSources: true,
+  preferInstantStart: true,
   enabledModules: {
     monochrome: true,
     jiosaavn: true,

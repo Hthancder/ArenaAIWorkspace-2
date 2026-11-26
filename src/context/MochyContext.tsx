@@ -20,6 +20,7 @@ import {
 import { ArtworkPalette, buildArtworkPalette } from '../constants/theme';
 import { AUTO_EQ_PRESETS, OFFLINE_SHOWCASE_TRACKS } from '../data/curatedCatalog';
 import { audioEngine } from '../services/audio/audioEngine';
+import { StreamFileCache } from '../services/audio/streamFileCache';
 import { fetchLyricsForTrack } from '../services/lyrics/lyricsService';
 import { searchInnerTubeTracks } from '../services/providers/innertubeProvider';
 import {
@@ -34,6 +35,7 @@ import {
   searchMonochromeCatalog,
   verifyMonochromeServer,
 } from '../services/providers/monochromeProvider';
+import { SourceMemory } from '../services/providers/sourceMemory';
 import { createStreamCandidateQueue } from '../services/providers/streamResolver';
 import { DEFAULT_AUDIO_LAB, StorageService } from '../services/storage/storageService';
 import {
@@ -284,6 +286,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         StorageService.loadAudioLab(),
         StorageService.loadMonochromeServers(),
         StorageService.loadSearchHistory(),
+        SourceMemory.load(),
       ]);
 
       setPrefs(savedPrefs);
@@ -398,6 +401,9 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setIsBuffering(true);
       setResolvedStream(null);
 
+      await SourceMemory.load();
+      if (!isCurrent()) return;
+
       const offlineMeta = downloadsRef.current[track.id];
       const queue = createStreamCandidateQueue(
         track,
@@ -408,6 +414,7 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       let played: ResolvedStream | null = null;
       let lastTried: ResolvedStream | null = null;
+      const startedAt = Date.now();
 
       try {
         // Try every candidate in priority order until one actually produces audio
@@ -418,10 +425,57 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
           lastTried = cand;
           setResolvedStream(cand);
-          await audioEngine.loadAndPlay(cand.url, track, volumeRef.current, cand.headers);
+
+          // iOS: Monochrome FLAC comes as octet-stream without an extension, which AVPlayer cannot
+          // open — fetch it once into the stream cache as <id>.flac and play the file.
+          let playUrl = cand.url;
+          let playHeaders = cand.headers;
+          let localUri: string | undefined;
+          if (StreamFileCache.needsLocalFile(cand.codec, cand.url)) {
+            const key = cand.cacheKey || `${cand.source}-${track.id}`;
+            const cachedAlready = StreamFileCache.cachedUri(key);
+            if (!cachedAlready) {
+              queue.diagnostics.push({
+                module: cand.sourceLabel,
+                step: 'Download FLAC for iOS',
+                ok: null,
+                detail: 'AVPlayer cannot stream this FLAC — caching it once…',
+              });
+              setResolvedStream({ ...cand, diagnostics: [...queue.diagnostics] });
+            }
+            const t0 = Date.now();
+            try {
+              localUri = await StreamFileCache.ensureLocal(key, cand.url, cand.headers, 45000);
+              if (!isCurrent()) return;
+              if (!cachedAlready) {
+                queue.diagnostics.push({
+                  module: cand.sourceLabel,
+                  step: 'Download FLAC for iOS',
+                  ok: true,
+                  detail: 'Cached — next plays start instantly',
+                  latencyMs: Date.now() - t0,
+                });
+              }
+              playUrl = localUri;
+              playHeaders = undefined;
+            } catch {
+              if (!isCurrent()) return;
+              queue.diagnostics.push({
+                module: cand.sourceLabel,
+                step: 'Download FLAC for iOS',
+                ok: false,
+                detail: 'Too slow — finishing in the background, trying next source',
+                latencyMs: Date.now() - t0,
+              });
+              setResolvedStream({ ...cand, diagnostics: [...queue.diagnostics] });
+              continue;
+            }
+          }
+
+          await audioEngine.loadAndPlay(playUrl, track, volumeRef.current, playHeaders);
           if (!isCurrent()) return;
 
-          const local = cand.isOffline || cand.source === 'synth';
+          const local = cand.isOffline || cand.source === 'synth' || /^file:/i.test(playUrl);
           const timeoutMs = local ? 7000 : 12000;
           const result = await audioEngine.waitUntilAudible(timeoutMs);
           if (!isCurrent() || result === 'superseded') return;
@@ -431,13 +485,18 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               module: cand.sourceLabel,
               step: 'Playback started',
               ok: true,
-              detail: cand.qualityLabel,
+              detail: `${cand.qualityLabel}${cand.fromMemory ? ' · remembered source' : ''}`,
+              latencyMs: Date.now() - startedAt,
             });
             played = { ...cand, diagnostics: [...queue.diagnostics] };
             setResolvedStream(played);
+            if (prefsRef.current.rememberSources) {
+              SourceMemory.rememberSuccess(track, cand, Date.now() - startedAt, localUri);
+            }
             break;
           }
 
+          SourceMemory.rememberFailure(track, cand);
           queue.diagnostics.push({
             module: cand.sourceLabel,
             step: 'Player check',
@@ -462,8 +521,8 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (lastTried) setResolvedStream({ ...lastTried, diagnostics: [...queue.diagnostics] });
         showToast(
           vi
-            ? 'Không phát được bài này từ nguồn nào. Thử bài khác hoặc xem "Chẩn đoán luồng" trong trình phát.'
-            : 'No source could play this track. Try another song or check Stream Diagnostics.'
+            ? 'Không tìm được bản đầy đủ phát được cho bài này. Xem "Chẩn đoán luồng" trong trình phát để biết lý do.'
+            : 'No full-length source could play this track. Check Stream Diagnostics in the player.'
         );
         return;
       }
@@ -977,11 +1036,20 @@ export const MochyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setDownloadingIds((prev) => ({ ...prev, [track.id]: true }));
       try {
         // Pick the first downloadable candidate (skip HLS manifests, previews & synth)
-        const queue = createStreamCandidateQueue(track, prefs, monochromeServers);
+        await SourceMemory.load();
+        // Downloads want the best quality, so FLAC is not pushed behind instant-start sources here
+        const queue = createStreamCandidateQueue(
+          track,
+          { ...prefs, preferInstantStart: false },
+          monochromeServers
+        );
         let stream = await queue.next();
         while (
           stream &&
-          (stream.isPreview || stream.source === 'synth' || stream.codec.startsWith('HLS'))
+          (stream.isPreview ||
+            stream.source === 'synth' ||
+            stream.codec.startsWith('HLS') ||
+            !/^https?:/i.test(stream.url))
         ) {
           stream = await queue.next();
         }

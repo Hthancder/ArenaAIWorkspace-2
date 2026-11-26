@@ -13,6 +13,11 @@ export const DEFAULT_MONOCHROME_SERVER: ModuleServerConfig = {
 };
 
 const UNREACHABLE_RETRY_MS = 10 * 60 * 1000;
+
+// MonochromeModule.kt sends a desktop browser UA with every request
+export const MONOCHROME_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+export const MONOCHROME_STREAM_HEADERS: Record<string, string> = { 'User-Agent': MONOCHROME_UA };
 const downServers = new Map<string, { reason: string; at: number }>();
 
 export interface FlacStreamInfo {
@@ -91,7 +96,7 @@ function parseStreamerTracks(json: any): CatalogCandidate[] {
       album: t?.albumTitle || t?.album || undefined,
       durationSec,
       isrc: t?.isrc || undefined,
-      artworkUrl: resolveCoverUrl(t?.coverUrl || t?.albumCover || t?.cover || t?.album?.cover),
+      artworkUrl: resolveCoverUrl(t?.artwork || t?.coverUrl || t?.albumCover || t?.cover || t?.album?.cover),
     });
   }
   return out;
@@ -139,7 +144,7 @@ export async function verifyMonochromeServer(
       server.kind === 'relay'
         ? `${base}/search?q=test&n=1`
         : `${base}/search/tracks?q=test&limit=1`;
-    const headers: Record<string, string> = { Accept: 'application/json' };
+    const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': MONOCHROME_UA };
     if (server.kind === 'relay') headers['X-Relay-Client'] = 'relay/2';
 
     const res = await fetchTimeout(searchUrl, { headers }, 4500);
@@ -170,7 +175,7 @@ export async function searchMonochromeCatalog(
         srv.kind === 'relay'
           ? `${base}/search?q=${encoded}&n=${limit}`
           : `${base}/search/tracks?q=${encoded}&limit=${limit}`;
-      const headers: Record<string, string> = { Accept: 'application/json' };
+      const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': MONOCHROME_UA };
       if (srv.kind === 'relay') headers['X-Relay-Client'] = 'relay/2';
 
       const res = await fetchTimeout(url, { headers }, 3800);
@@ -206,6 +211,8 @@ export async function resolveMonochromeStream(
   onStep: (step: DiagnosticStep) => void
 ): Promise<{
   url: string;
+  /** Monochrome track id — the key the iOS FLAC file cache uses */
+  id: string;
   qualityLabel: string;
   sampleRateHz: number;
 } | null> {
@@ -229,7 +236,7 @@ export async function resolveMonochromeStream(
       srv.kind === 'relay'
         ? `${base}/search?q=${encodeURIComponent(q)}&n=8`
         : `${base}/search/tracks?q=${encodeURIComponent(q)}&limit=8`;
-    const headers: Record<string, string> = { Accept: 'application/json' };
+    const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': MONOCHROME_UA };
     if (srv.kind === 'relay') headers['X-Relay-Client'] = 'relay/2';
 
     try {
@@ -263,7 +270,7 @@ export async function resolveMonochromeStream(
         const trackUrl = `${base}/track/${best.track.id}`;
         const headRes = await fetchTimeout(
           trackUrl,
-          { headers: { Range: 'bytes=0-41' } },
+          { headers: { ...MONOCHROME_STREAM_HEADERS, Range: 'bytes=0-41' } },
           3500
         );
         if (!headRes.ok) continue;
@@ -287,6 +294,7 @@ export async function resolveMonochromeStream(
         });
         return {
           url: trackUrl,
+          id: best.track.id,
           qualityLabel: flac.label,
           sampleRateHz: flac.sampleRate,
         };
@@ -309,6 +317,7 @@ export async function resolveMonochromeStream(
           });
           return {
             url: streamHeader,
+            id: best.track.id,
             qualityLabel: flac?.label || 'FLAC · 16-bit / 44.1 kHz',
             sampleRateHz: flac?.sampleRate || 44100,
           };

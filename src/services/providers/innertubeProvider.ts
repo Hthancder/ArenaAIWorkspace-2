@@ -1,4 +1,4 @@
-// Port of Mochy's YouTube Music InnerTube Provider (YouTubeClient.kt: IPADOS / VISIONOS / WEB_REMIX)
+// Port of Mochy's YouTube Music InnerTube Provider (YouTubeClient.kt / YTPlayerUtils.kt: VISIONOS → ANDROID_VR → IPADOS, WEB_REMIX search)
 // Direct InnerTube on Native iOS (AVPlayer supports HLS & M4A natively!) + Piped CORS fallback on Web
 
 import { Platform } from 'react-native';
@@ -21,8 +21,15 @@ async function fetchTimeout(url: string, init: RequestInit = {}, timeoutMs = 450
 }
 
 /**
- * Direct YouTube InnerTube iOS / visionOS player extraction on Native iOS devices
- * (ported from YouTubeClient.IPADOS & YouTubeClient.VISIONOS in realidkroo/Mochy-Music)
+ * Direct YouTube InnerTube player extraction on native iOS, following YTPlayerUtils.kt:
+ *
+ * - VISIONOS is the MAIN_CLIENT: it is the only client measured upstream to serve a complete
+ *   track without a PoToken. It mints its own visitor id (POST /youtubei/v1/visitor_id), speaks
+ *   api format 2 with clientScreen WATCH / platform MOBILE, and sends no Origin/Referer.
+ * - IOS / IPADOS come last: their links look healthy but googlevideo stops serving them after the
+ *   ~786 KB "untokened window" (≈30 s) — that was the "only plays 30 seconds" bug.
+ * - Every link is range-probed past that window (last byte, or byte 1 MiB) before it is offered,
+ *   exactly like YTPlayerUtils.validateStatus(), so a cut-off link never reaches AVPlayer.
  */
 export interface InnerTubeStreamCandidate {
   url: string;
@@ -31,100 +38,260 @@ export interface InnerTubeStreamCandidate {
   headers?: Record<string, string>;
 }
 
-async function extractInnerTubeIosStreams(videoId: string): Promise<InnerTubeStreamCandidate[]> {
-  const out: InnerTubeStreamCandidate[] = [];
-  const clients = [
-    {
-      clientName: 'IOS',
-      clientVersion: '21.03.3',
-      deviceMake: 'Apple',
-      deviceModel: 'iPad7,6',
-      osName: 'iPadOS',
-      osVersion: '17.7.10.21H450',
-      userAgent: 'com.google.ios.youtube/21.03.3 (iPad7,6; U; CPU iPadOS 17_7_10 like Mac OS X; en-US)',
-    },
-    {
-      clientName: 'VISIONOS',
-      clientVersion: '1.04',
-      deviceMake: 'Apple',
-      deviceModel: 'RealityDevice17,1',
-      osName: 'visionOS',
-      osVersion: '26.6.0.23O770',
-      userAgent: 'com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; US)',
-    },
-  ];
+interface YtClient {
+  name: string;
+  clientName: string;
+  clientVersion: string;
+  clientId: string;
+  userAgent: string;
+  osName?: string;
+  osVersion?: string;
+  deviceMake?: string;
+  deviceModel?: string;
+  apiFormatVersion?: string;
+  clientScreen?: string;
+  platform?: string;
+  ownVisitorId?: boolean;
+}
 
-  for (const c of clients) {
+const VISIONOS: YtClient = {
+  name: 'visionOS',
+  clientName: 'VISIONOS',
+  clientVersion: '1.04',
+  clientId: '101',
+  userAgent: 'com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; US)',
+  osName: 'visionOS',
+  osVersion: '26.6.0.23O770',
+  deviceMake: 'Apple',
+  deviceModel: 'RealityDevice17,1',
+  apiFormatVersion: '2',
+  clientScreen: 'WATCH',
+  platform: 'MOBILE',
+  ownVisitorId: true,
+};
+
+const ANDROID_VR: YtClient = {
+  name: 'Android VR',
+  clientName: 'ANDROID_VR',
+  clientVersion: '1.61.48',
+  clientId: '28',
+  userAgent:
+    'com.google.android.apps.youtube.vr.oculus/1.61.48 (Linux; U; Android 12; en_US; Quest 3; Build/SQ3A.220605.009.A1; Cronet/132.0.6808.3)',
+  osName: 'Android',
+  osVersion: '12',
+  deviceMake: 'Oculus',
+  deviceModel: 'Quest 3',
+};
+
+const IPADOS: YtClient = {
+  name: 'iPadOS',
+  clientName: 'IOS',
+  clientVersion: '21.03.3',
+  clientId: '5',
+  userAgent: 'com.google.ios.youtube/21.03.3 (iPad7,6; U; CPU iPadOS 17_7_10 like Mac OS X; en-US)',
+  osName: 'iPadOS',
+  osVersion: '17.7.10.21H450',
+  deviceMake: 'Apple',
+  deviceModel: 'iPad7,6',
+};
+
+const STREAM_CLIENTS: YtClient[] = [VISIONOS, ANDROID_VR, IPADOS];
+
+const UNTOKENED_WINDOW_PROBE_BYTE = 1_048_576;
+const visitorIds = new Map<string, string>();
+/** visionOS rests for a while after two bot checks in a row, like upstream's BOT_CHECK_REST_MS */
+let visionRestingUntil = 0;
+
+function clientContext(c: YtClient, visitorData?: string) {
+  return {
+    client: {
+      clientName: c.clientName,
+      clientVersion: c.clientVersion,
+      ...(c.clientScreen ? { clientScreen: c.clientScreen, utcOffsetMinutes: 0 } : {}),
+      ...(c.platform ? { platform: c.platform } : {}),
+      ...(c.osName ? { osName: c.osName } : {}),
+      ...(c.osVersion ? { osVersion: c.osVersion } : {}),
+      ...(c.deviceMake ? { deviceMake: c.deviceMake } : {}),
+      ...(c.deviceModel ? { deviceModel: c.deviceModel } : {}),
+      hl: 'en',
+      gl: 'VN',
+      ...(visitorData ? { visitorData } : {}),
+    },
+  };
+}
+
+function clientHeaders(c: YtClient, visitorData?: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'User-Agent': c.userAgent,
+    'X-YouTube-Client-Name': c.clientId,
+    'X-YouTube-Client-Version': c.clientVersion,
+    'X-Goog-Api-Format-Version': c.apiFormatVersion || '1',
+    ...(visitorData ? { 'X-Goog-Visitor-Id': visitorData } : {}),
+  };
+}
+
+async function mintVisitorId(c: YtClient, force = false): Promise<string | undefined> {
+  if (!force && visitorIds.has(c.clientName)) return visitorIds.get(c.clientName);
+  try {
+    const res = await fetchTimeout(
+      'https://www.youtube.com/youtubei/v1/visitor_id?prettyPrint=false',
+      { method: 'POST', headers: clientHeaders(c), body: JSON.stringify({ context: clientContext(c) }) },
+      3500
+    );
+    if (!res.ok) return undefined;
+    const j = await res.json();
+    const v = j?.responseContext?.visitorData;
+    if (typeof v === 'string' && v) {
+      visitorIds.set(c.clientName, v);
+      return v;
+    }
+  } catch {
+    // request goes out without one
+  }
+  return undefined;
+}
+
+async function playerRequest(c: YtClient, videoId: string, visitorData?: string): Promise<any> {
+  const res = await fetchTimeout(
+    'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
+    {
+      method: 'POST',
+      headers: clientHeaders(c, visitorData),
+      body: JSON.stringify({
+        context: clientContext(c, visitorData),
+        videoId,
+        contentCheckOk: true,
+        racyCheckOk: true,
+      }),
+    },
+    5000
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+const isBotCheck = (data: any) =>
+  data?.playabilityStatus?.status === 'LOGIN_REQUIRED' &&
+  /bot/i.test(String(data?.playabilityStatus?.reason || ''));
+
+/** Range-probes past the untokened window; 206/200 = served, 403 = cut off */
+async function validateStream(
+  url: string,
+  headers: Record<string, string>,
+  contentLength?: number
+): Promise<boolean> {
+  const offset = contentLength && contentLength > 1 ? contentLength - 1 : UNTOKENED_WINDOW_PROBE_BYTE;
+  try {
+    const res = await fetchTimeout(url, { headers: { ...headers, Range: `bytes=${offset}-${offset}` } }, 4000);
+    return res.ok || res.status === 206 || (res.status === 416 && !contentLength);
+  } catch {
+    return false;
+  }
+}
+
+/** HLS: checks the last segment of the first audio rendition is still served */
+async function validateHls(master: string, headers: Record<string, string>): Promise<boolean> {
+  try {
+    const m = await fetchTimeout(master, { headers }, 4000);
+    if (!m.ok) return false;
+    const text = await m.text();
+    const media =
+      (text.match(/#EXT-X-MEDIA:TYPE=AUDIO[^\n]*URI="([^"]+)"/) || [])[1] ||
+      text.split('\n').find((l) => l.startsWith('http'));
+    if (!media) return false;
+    const pl = await fetchTimeout(media, { headers }, 4000);
+    if (!pl.ok) return false;
+    const segs = (await pl.text()).split('\n').filter((l) => l && !l.startsWith('#'));
+    const last = segs[segs.length - 1];
+    if (!last) return false;
+    const segUrl = last.startsWith('http') ? last : media.replace(/[^/]*$/, '') + last;
+    const r = await fetchTimeout(segUrl, { headers: { ...headers, Range: 'bytes=0-1' } }, 4000);
+    return r.ok || r.status === 206;
+  } catch {
+    return false;
+  }
+}
+
+async function extractInnerTubeIosStreams(
+  videoId: string,
+  onStep: (step: DiagnosticStep) => void
+): Promise<InnerTubeStreamCandidate[]> {
+  for (const c of STREAM_CLIENTS) {
+    if (c === VISIONOS && Date.now() < visionRestingUntil) {
+      onStep({ module: 'InnerTube', step: 'visionOS', ok: false, detail: 'Resting after bot checks' });
+      continue;
+    }
+    const t0 = Date.now();
     try {
-      const res = await fetchTimeout(
-        'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': c.userAgent,
-            'X-YouTube-Client-Name': c.clientName === 'IOS' ? '5' : '101',
-            'X-YouTube-Client-Version': c.clientVersion,
-          },
-          body: JSON.stringify({
-            videoId,
-            context: {
-              client: {
-                clientName: c.clientName,
-                clientVersion: c.clientVersion,
-                deviceMake: c.deviceMake,
-                deviceModel: c.deviceModel,
-                osName: c.osName,
-                osVersion: c.osVersion,
-                hl: 'en',
-                gl: 'VN',
-              },
-            },
-            contentCheckOk: true,
-            racyCheckOk: true,
-          }),
-        },
-        5000
-      );
+      let visitor = c.ownVisitorId ? await mintVisitorId(c) : undefined;
+      let data = await playerRequest(c, videoId, visitor);
+      if (c.ownVisitorId && isBotCheck(data)) {
+        // a burned visitor id gets "confirm you're not a bot": mint a fresh one and ask once more
+        visitor = await mintVisitorId(c, true);
+        data = await playerRequest(c, videoId, visitor);
+        if (isBotCheck(data) && c === VISIONOS) visionRestingUntil = Date.now() + 30 * 60 * 1000;
+      }
 
-      if (!res.ok) continue;
-      const data = await res.json();
       const status = data?.playabilityStatus?.status;
-      if (status && status !== 'OK') continue;
+      if (status && status !== 'OK') {
+        onStep({
+          module: 'InnerTube',
+          step: `${c.name} player`,
+          ok: false,
+          detail: `${status}${data?.playabilityStatus?.reason ? ' · ' + String(data.playabilityStatus.reason).slice(0, 60) : ''}`,
+          latencyMs: Date.now() - t0,
+        });
+        continue;
+      }
 
-      // googlevideo validates the User-Agent of the client that requested the stream,
-      // so AVPlayer must send the same UA (forwarded through AVURLAssetHTTPHeaderFieldsKey).
-      const headers = { 'User-Agent': c.userAgent };
+      // googlevideo checks the UA against the client named in the url's own `c=` parameter,
+      // so AVPlayer sends the same UA (forwarded through AVURLAssetHTTPHeaderFieldsKey).
+      const headers = { 'User-Agent': c.userAgent, Accept: '*/*' };
       const adaptive: any[] = data?.streamingData?.adaptiveFormats || [];
-      // Prefer audio/mp4 (AAC M4A itag 140/141) — AVPlayer decodes it natively in hardware
+      // AVPlayer decodes AAC in MP4 natively (itag 140/139); WebM/Opus is not playable on iOS 15
       const mp4Audios = adaptive
         .filter((f) => String(f?.mimeType || '').startsWith('audio/mp4') && f?.url)
         .sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
 
-      if (mp4Audios[0]?.url) {
-        const kbps = Math.round((Number(mp4Audios[0].bitrate) || 130000) / 1000);
-        out.push({
-          url: mp4Audios[0].url,
-          qualityLabel: `AAC ${kbps} kbps · InnerTube ${c.clientName}`,
-          codec: 'AAC',
-          headers,
-        });
+      const out: InnerTubeStreamCandidate[] = [];
+      for (const f of mp4Audios.slice(0, 2)) {
+        const ok = await validateStream(f.url, headers, Number(f.contentLength) || undefined);
+        if (!ok) continue;
+        const kbps = Math.round((Number(f.bitrate) || 130000) / 1000);
+        out.push({ url: f.url, qualityLabel: `AAC ${kbps} kbps · YouTube ${c.name}`, codec: 'AAC', headers });
+        break;
       }
 
-      if (data?.streamingData?.hlsManifestUrl) {
-        out.push({
-          url: data.streamingData.hlsManifestUrl,
-          qualityLabel: `HLS · InnerTube ${c.clientName}`,
-          codec: 'HLS/AAC',
-          headers,
-        });
+      const hls = data?.streamingData?.hlsManifestUrl;
+      if (out.length === 0 && hls && (await validateHls(hls, headers))) {
+        out.push({ url: hls, qualityLabel: `HLS · YouTube ${c.name}`, codec: 'HLS/AAC', headers });
       }
+
+      onStep({
+        module: 'InnerTube',
+        step: `${c.name} player`,
+        ok: out.length > 0,
+        detail:
+          out.length > 0
+            ? out.map((o) => o.qualityLabel).join(' + ')
+            : `${mp4Audios.length} AAC link(s) cut off before the full track (no PoToken)`,
+        latencyMs: Date.now() - t0,
+      });
       if (out.length > 0) return out;
-    } catch {
-      // try next client
+    } catch (e: any) {
+      onStep({
+        module: 'InnerTube',
+        step: `${c.name} player`,
+        ok: false,
+        detail: String(e?.message || 'network error').slice(0, 60),
+        latencyMs: Date.now() - t0,
+      });
     }
   }
-  return out;
+  return [];
 }
 
 export async function searchInnerTubeTracks(query: string, limit = 12): Promise<Track[]> {
@@ -140,6 +307,8 @@ export async function searchInnerTubeTracks(query: string, limit = 12): Promise<
           headers: {
             'Content-Type': 'application/json',
             Origin: 'https://music.youtube.com',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0',
           },
           body: JSON.stringify({
             query: query.trim(),
@@ -147,7 +316,7 @@ export async function searchInnerTubeTracks(query: string, limit = 12): Promise<
             context: {
               client: {
                 clientName: 'WEB_REMIX',
-                clientVersion: '1.20260401.01.00',
+                clientVersion: '1.20260707.12.00',
                 hl: 'vi',
                 gl: 'VN',
               },
@@ -275,17 +444,8 @@ export async function resolveInnerTubeStream(
 
   const candidates: InnerTubeStreamCandidate[] = [];
   if (Platform.OS !== 'web') {
-    const nativeStreams = await extractInnerTubeIosStreams(targetVideoId);
-    if (nativeStreams.length > 0) {
-      onStep({
-        module: 'InnerTube',
-        step: 'iOS/visionOS Player stream',
-        ok: true,
-        detail: nativeStreams.map((n) => n.codec).join(' + '),
-        latencyMs: Date.now() - t0,
-      });
-      candidates.push(...nativeStreams);
-    }
+    const nativeStreams = await extractInnerTubeIosStreams(targetVideoId, onStep);
+    candidates.push(...nativeStreams);
   }
 
   // Piped stream endpoint (Web, or iOS when direct InnerTube extraction returned nothing)
