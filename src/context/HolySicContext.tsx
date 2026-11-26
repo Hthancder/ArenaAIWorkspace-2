@@ -1018,6 +1018,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [internalStartTrack]);
   const continueWithSimilarRef = useRef<((seed: Track) => void) | null>(null);
+  /** play token of the song whose crossfade has already started */
+  const crossfadeFiredRef = useRef(-1);
 
   const playPrevious = useCallback(() => {
     triggerHaptic('light');
@@ -1047,6 +1049,29 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (st.durationSec > 0 && Number.isFinite(st.durationSec) && !currentTrackRef.current?.isLive)
         setDurationSec(st.durationSec);
       trackListeningRef.current?.(st.currentTimeSec, st.durationSec, st.isPlaying);
+
+      // Crossfade: start the next song while this one is still playing
+      const cf = prefsRef.current.crossfadeSec || 0;
+      const cur = currentTrackRef.current;
+      if (
+        cf > 0 &&
+        st.isPlaying &&
+        cur &&
+        !cur.isLive &&
+        st.durationSec > cf * 2 + 5 &&
+        st.currentTimeSec >= st.durationSec - cf - 0.4 &&
+        crossfadeFiredRef.current !== playTokenRef.current &&
+        repeatRef.current !== 'ONE' &&
+        !sleepEndTrackRef.current &&
+        (queueIndexRef.current + 1 < queueRef.current.length ||
+          repeatRef.current === 'ALL' ||
+          prefsRef.current.autoPlaySimilar)
+      ) {
+        crossfadeFiredRef.current = playTokenRef.current;
+        audioEngine.beginCrossfade(cf);
+        playNext();
+        return;
+      }
 
       if (st.didJustFinish) {
         if (sleepEndTrackRef.current) {

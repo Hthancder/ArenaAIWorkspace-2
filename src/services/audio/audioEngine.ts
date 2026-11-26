@@ -134,7 +134,15 @@ class HolySicAudioEngine {
     await this.ensureInitialized();
     this.loadSeq += 1;
     this.userVolume = Math.max(0, Math.min(1, volume));
-    volume = this.userVolume * this.gainMultiplier;
+    // crossfade: the new song starts silent and rises once it is audible; otherwise a held
+    // (crossfading) player from a manual change is faded out quickly
+    if (this.fadeInSec > 0) this.rampFactor = 0;
+    else {
+      this.rampFactor = 1;
+      this.flushFadeHold(0.8);
+    }
+    this.awaitingAudible = true;
+    volume = this.userVolume * this.gainMultiplier * this.rampFactor;
 
     if (Platform.OS !== 'web') {
       await this.loadNative(url, track, volume, headers);
@@ -186,6 +194,8 @@ class HolySicAudioEngine {
   /** Stops and tears down the current player (used when every stream candidate failed). */
   stop(): void {
     this.loadSeq += 1;
+    this.fadeInSec = 0;
+    this.flushFadeHold(1.5);
     if (Platform.OS !== 'web') {
       this.releaseNativePlayer();
     } else if (this.webAudio) {
@@ -481,6 +491,7 @@ class HolySicAudioEngine {
       this.nativeSub = player.addListener('playbackStatusUpdate', (st) => {
         if (seq !== this.loadSeq || this.nativePlayer !== player) return;
         this.nativePlaying = !!st.playing;
+        if (this.awaitingAudible && st.playing && (st.currentTime || 0) > 0.05) this.onAudible();
         this.emit({
           isPlaying: st.playing,
           isBuffering: st.isBuffering || (!st.isLoaded && st.playing),
@@ -694,6 +705,7 @@ class HolySicAudioEngine {
 
     const pushCurrent = (didJustFinish = false, error: string | null = null) => {
       if (this.webAudio !== el) return;
+      if (this.awaitingAudible && !el.paused && el.currentTime > 0.05) this.onAudible();
       const rawDur = el.duration;
       const durationSec = Number.isFinite(rawDur) && rawDur > 0 ? rawDur : track.durationSec || 0;
       this.emit({
@@ -752,6 +764,7 @@ class HolySicAudioEngine {
   }
 
   pause(): void {
+    this.killFades();
     if (Platform.OS !== 'web') {
       this.nativePlayer?.pause();
     } else {
@@ -772,6 +785,151 @@ class HolySicAudioEngine {
     }
   }
 
+  // ---------- Crossfade ----------
+  // The ending song is detached (no more status events, so it can't trigger another "next"),
+  // keeps playing while the next one resolves, then both cross over on an equal-power curve
+  // once the new song is actually audible.
+
+  private fadeHold:
+    { kind: 'native'; p: AudioPlayer } | { kind: 'web'; el: HTMLAudioElement } | null = null;
+  private fadeHoldTimer: ReturnType<typeof setTimeout> | null = null;
+  private fadeInSec = 0;
+  private rampFactor = 1;
+  private rampTimer: ReturnType<typeof setInterval> | null = null;
+  private awaitingAudible = false;
+  private fadingOut = new Set<() => void>();
+
+  /** Hand the current song over to a crossfade; call right before starting the next one. */
+  beginCrossfade(sec: number): void {
+    this.flushFadeHold(1.2);
+    const s = Math.max(0, Math.min(12, sec));
+    if (s <= 0) return;
+    if (Platform.OS !== 'web') {
+      if (!this.nativePlayer) return;
+      try {
+        this.nativeSub?.remove();
+        this.sampleSub?.remove();
+      } catch {
+        // ignore
+      }
+      this.nativeSub = null;
+      this.sampleSub = null;
+      this.fadeHold = { kind: 'native', p: this.nativePlayer };
+      this.nativePlayer = null;
+    } else {
+      if (!this.webAudio) return;
+      if (this.webPollTimer) {
+        clearInterval(this.webPollTimer);
+        this.webPollTimer = null;
+      }
+      this.fadeHold = { kind: 'web', el: this.webAudio };
+      this.webAudio = null;
+    }
+    this.fadeInSec = s;
+    // the next song never became audible (slow network / no source): fade the old one anyway
+    this.fadeHoldTimer = setTimeout(() => this.flushFadeHold(Math.min(3, s)), (s + 12) * 1000);
+  }
+
+  /** True while an ending song is still sounding under a crossfade */
+  isCrossfading(): boolean {
+    return !!this.fadeHold || this.fadingOut.size > 0;
+  }
+
+  private onAudible(): void {
+    this.awaitingAudible = false;
+    const sec = this.fadeInSec;
+    this.fadeInSec = 0;
+    if (this.rampTimer) clearInterval(this.rampTimer);
+    this.rampTimer = null;
+    if (sec <= 0) {
+      this.rampFactor = 1;
+      return;
+    }
+    const t0 = Date.now();
+    this.rampTimer = setInterval(() => {
+      const k = Math.min(1, (Date.now() - t0) / (sec * 1000));
+      this.rampFactor = Math.sin((k * Math.PI) / 2);
+      this.applyVolume();
+      if (k >= 1 && this.rampTimer) {
+        clearInterval(this.rampTimer);
+        this.rampTimer = null;
+      }
+    }, 50);
+    this.flushFadeHold(sec);
+  }
+
+  private flushFadeHold(sec: number): void {
+    if (this.fadeHoldTimer) clearTimeout(this.fadeHoldTimer);
+    this.fadeHoldTimer = null;
+    const h = this.fadeHold;
+    this.fadeHold = null;
+    if (h) this.fadeOut(h, sec);
+  }
+
+  private fadeOut(
+    h: { kind: 'native'; p: AudioPlayer } | { kind: 'web'; el: HTMLAudioElement },
+    sec: number
+  ): void {
+    const setV = (v: number) => {
+      try {
+        if (h.kind === 'native') h.p.volume = v;
+        else h.el.volume = v;
+      } catch {
+        // released
+      }
+    };
+    let start = 1;
+    try {
+      start = h.kind === 'native' ? h.p.volume : h.el.volume;
+    } catch {
+      // ignore
+    }
+    const t0 = Date.now();
+    const ms = Math.max(1, sec * 1000);
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const kill = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+      this.fadingOut.delete(kill);
+      try {
+        if (h.kind === 'native') {
+          h.p.pause();
+          h.p.remove();
+        } else {
+          h.el.pause();
+          h.el.removeAttribute('src');
+          h.el.load();
+        }
+      } catch {
+        // ignore
+      }
+    };
+    this.fadingOut.add(kill);
+    if (sec <= 0) return kill();
+    timer = setInterval(() => {
+      const k = Math.min(1, (Date.now() - t0) / ms);
+      setV(start * Math.cos((k * Math.PI) / 2));
+      if (k >= 1) kill();
+    }, 50);
+  }
+
+  /** Pause / hard stop: silence anything still crossfading right away */
+  private killFades(): void {
+    this.flushFadeHold(0);
+    [...this.fadingOut].forEach((k) => k());
+    if (this.rampTimer) {
+      clearInterval(this.rampTimer);
+      this.rampTimer = null;
+      this.rampFactor = 1;
+      this.applyVolume();
+    }
+    this.fadeInSec = 0;
+    if (this.rampFactor < 1) {
+      this.rampFactor = 1;
+      this.applyVolume();
+    }
+  }
+
   /** User volume × loudness-normalisation gain (ReplayGain-style, idea from Cog) */
   private userVolume = 1;
   private gainMultiplier = 1;
@@ -783,7 +941,11 @@ class HolySicAudioEngine {
 
   setVolume(vol: number): void {
     this.userVolume = Math.max(0, Math.min(1, vol));
-    const v = this.userVolume * this.gainMultiplier;
+    this.applyVolume();
+  }
+
+  private applyVolume(): void {
+    const v = this.userVolume * this.gainMultiplier * this.rampFactor;
     if (Platform.OS !== 'web') {
       if (this.nativePlayer) this.nativePlayer.volume = v;
     } else if (this.webAudio) {

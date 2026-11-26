@@ -222,6 +222,37 @@ export const MergedSettings: React.FC = () => {
             : 'ReplayGain-style: uses source loudness (YouTube, TIDAL ReplayGain) so songs play at an even level without clipping',
           sw(prefs.normalizeVolume, (v) => updatePrefs({ normalizeVolume: v }))
         )}
+        <View style={styles.cfRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowTitle}>{vi ? 'Chuyển bài mượt (Crossfade)' : 'Crossfade'}</Text>
+            <Text style={styles.rowDesc}>
+              {prefs.crossfadeSec > 0
+                ? vi
+                  ? `Bài sau to dần trong ${prefs.crossfadeSec} giây cuối của bài trước`
+                  : `The next song fades in over the last ${prefs.crossfadeSec}s`
+                : vi
+                  ? 'Tắt — các bài nối tiếp nhau bình thường'
+                  : 'Off — songs play back to back'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.cfChips}>
+          {[0, 2, 4, 6, 8, 12].map((sec) => {
+            const on = prefs.crossfadeSec === sec;
+            return (
+              <Pressable
+                key={sec}
+                onPress={() => updatePrefs({ crossfadeSec: sec })}
+                style={[styles.cfChip, on && { backgroundColor: palette.accent }]}
+                accessibilityLabel={`Crossfade ${sec}s`}
+              >
+                <Text style={[styles.cfChipText, on && { color: palette.onAccent }]}>
+                  {sec === 0 ? (vi ? 'Tắt' : 'Off') : `${sec}s`}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
         {row(
           vi ? 'Tự phát bài tương tự' : 'Autoplay similar songs',
           vi
@@ -551,6 +582,18 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   switchRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
+  cfRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 8 },
+  cfChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 10, paddingBottom: 8 },
+  cfChip: {
+    minWidth: 46,
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  cfChipText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
   rowTitle: { color: '#FFFFFF', fontSize: 14.5, fontWeight: '700' },
   rowDesc: { color: HOLYSIC_COLORS.textSecondary, fontSize: 12.5, marginTop: 2, lineHeight: 18 },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },

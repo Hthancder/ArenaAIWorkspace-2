@@ -99,6 +99,8 @@ export interface HolySicPreferences {
   showMiniLyricsTicker: boolean;
   showRemainingTime: boolean;
   autoPlaySimilar: boolean;
+  /** Crossfade between songs, in seconds (0 = off) */
+  crossfadeSec: number;
   preferredJioSaavnQuality: JioSaavnQuality;
   moduleOrder: ('monochrome' | 'jiosaavn' | 'innertube' | 'itunes')[];
   /** Fall back to Apple's 30-second preview when no full-length source plays (off = never) */
@@ -146,6 +148,7 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   showMiniLyricsTicker: true,
   showRemainingTime: false,
   autoPlaySimilar: true,
+  crossfadeSec: 0,
   preferredJioSaavnQuality: '320',
   moduleOrder: ['monochrome', 'jiosaavn', 'innertube', 'itunes'],
   allowPreviewFallback: false,
