@@ -41,9 +41,46 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
     playNext,
     playPrevious,
     toggleLike,
+    lyrics,
+    activeLyricIndex,
+    isLoadingLyrics,
   } = useHolySic();
   const vi = prefs.language === 'vi';
   const [help, setHelp] = useState(false);
+  const [kind, setKind] = useState<'player' | 'lyrics'>('player');
+  const songLyrics =
+    lyrics && currentTrack && lyrics.trackId === currentTrack.id && lyrics.synced
+      ? lyrics.lines.filter((l) => !l.isBackground)
+      : null;
+  // the same index rule as the widget (background vocals are not sent to it)
+  const lyricIdx = useMemo(() => {
+    if (!songLyrics || !lyrics) return -1;
+    const cur = lyrics.lines[activeLyricIndex];
+    if (!cur) return -1;
+    const i = songLyrics.indexOf(cur);
+    if (i >= 0) return i;
+    return songLyrics.findIndex((l) => l.startSec > cur.startSec) - 1;
+  }, [songLyrics, lyrics, activeLyricIndex]);
+  const lineAt = (i: number) => {
+    const l = songLyrics?.[i];
+    if (!l) return null;
+    return l.text.trim() || '♪';
+  };
+  const lyricsMsg = currentTrack?.isLive
+    ? vi
+      ? 'Radio trực tiếp — không có lời'
+      : 'Live radio — no lyrics'
+    : isLoadingLyrics
+      ? vi
+        ? 'Đang tìm lời bài hát…'
+        : 'Finding lyrics…'
+      : lyrics && lyrics.trackId === currentTrack?.id && (lyrics.lines.length || lyrics.plainText)
+        ? vi
+          ? 'Bài này chỉ có lời không đồng bộ — chạm để xem'
+          : 'Only unsynced lyrics — tap to read'
+        : vi
+          ? 'Không có lời — thưởng thức giai điệu nhé'
+          : 'No lyrics — enjoy the music';
 
   const status = useMemo(() => {
     if (Platform.OS !== 'ios') return 'preview' as const;
@@ -96,63 +133,97 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
         {vi ? 'Widget màn hình chính' : 'Home Screen widget'}
       </Text>
       <View style={styles.card}>
-        {/* live preview, same layout as the medium SwiftUI widget */}
-        <View style={styles.widget} accessibilityLabel={vi ? 'Xem trước widget' : 'Widget preview'}>
-          <LinearGradient
-            colors={[top, bottom]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.fill}
-          />
-          <LinearGradient
-            colors={[accent + '48', 'transparent']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0.7, y: 0.8 }}
-            style={styles.fill}
-          />
-          <LinearGradient colors={['rgba(0,0,0,0.04)', 'rgba(0,0,0,0.42)']} style={styles.fill} />
-          <View style={styles.wRow}>
-            <View style={styles.coverWrap}>
-              <ArtworkImage
-                source={{ uri: currentTrack?.artworkUrl }}
-                fallbackSeed={currentTrack?.title}
-                style={styles.cover}
-              />
-            </View>
-            <View style={styles.wInfo}>
-              <View style={styles.badgeRow}>
-                <View style={styles.stateBadge}>
-                  <Ionicons
-                    name={currentTrack?.isLive ? 'radio' : isPlaying ? 'pulse' : 'pause'}
-                    size={9}
-                    color={accent}
+        <View style={styles.seg}>
+          {(
+            [
+              ['player', vi ? 'Đang phát' : 'Now Playing', 'musical-notes'],
+              ['lyrics', vi ? 'Lời bài hát' : 'Lyrics', 'chatbox-ellipses'],
+            ] as const
+          ).map(([id, label, icon]) => {
+            const on = kind === id;
+            return (
+              <Pressable
+                key={id}
+                onPress={() => setKind(id)}
+                style={[styles.segBtn, on && { backgroundColor: UI.fg(0.1) }]}
+                accessibilityLabel={`Widget ${id}`}
+              >
+                <Ionicons name={icon} size={13} color={on ? palette.accent : UI.text2} />
+                <Text style={[styles.segText, on && { color: UI.text }]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {kind === 'lyrics' ? (
+          <View
+            style={styles.widget}
+            accessibilityLabel={vi ? 'Xem trước widget lời bài hát' : 'Lyrics widget preview'}
+          >
+            <LinearGradient
+              colors={[top, bottom]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.fill}
+            />
+            <LinearGradient
+              colors={[accent + '40', 'transparent']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0.7, y: 0.8 }}
+              style={styles.fill}
+            />
+            <LinearGradient colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.5)']} style={styles.fill} />
+            <View style={styles.lyWrap}>
+              <View style={styles.lyHead}>
+                <View style={styles.lyCover}>
+                  <ArtworkImage
+                    source={{ uri: currentTrack?.artworkUrl }}
+                    fallbackSeed={currentTrack?.title}
+                    style={styles.cover}
                   />
-                  <Text style={[styles.stateText, { color: accent }]}>
-                    {currentTrack?.isLive
-                      ? 'LIVE'
-                      : isPlaying
-                        ? vi
-                          ? 'ĐANG PHÁT'
-                          : 'NOW PLAYING'
-                        : vi
-                          ? 'TẠM DỪNG'
-                          : 'PAUSED'}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.lyTitle} numberOfLines={1}>
+                    {currentTrack?.title || (vi ? 'Chưa phát bài nào' : 'Nothing playing')}
+                  </Text>
+                  <Text style={styles.lyArtist} numberOfLines={1}>
+                    {currentTrack?.artist || 'HolySic'}
                   </Text>
                 </View>
-                {!!badge && (
-                  <Text style={styles.quality} numberOfLines={1}>
-                    {badge}
-                  </Text>
+                <View style={styles.lyState}>
+                  <Ionicons name={isPlaying ? 'pulse' : 'pause'} size={10} color={accent} />
+                </View>
+              </View>
+              <View style={styles.lyBody}>
+                {songLyrics ? (
+                  <>
+                    {lineAt(lyricIdx - 1) ? (
+                      <Text style={styles.lyOther} numberOfLines={1}>
+                        {lineAt(lyricIdx - 1)}
+                      </Text>
+                    ) : null}
+                    <Text
+                      style={[styles.lyCurrent, { textShadowColor: accent + '99' }]}
+                      numberOfLines={2}
+                      accessibilityLabel="Widget lyric line"
+                    >
+                      {lyricIdx >= 0 ? lineAt(lyricIdx) : '♪ ♪ ♪'}
+                    </Text>
+                    {lineAt(lyricIdx + 1) ? (
+                      <Text style={[styles.lyOther, { opacity: 0.6 }]} numberOfLines={1}>
+                        {lineAt(lyricIdx + 1)}
+                      </Text>
+                    ) : null}
+                  </>
+                ) : (
+                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+                    <Ionicons name="chatbox-ellipses" size={15} color={accent} />
+                    <Text style={styles.lyMsg} numberOfLines={3}>
+                      {currentTrack ? lyricsMsg : vi ? 'Chạm để mở HolySic' : 'Tap to open HolySic'}
+                    </Text>
+                  </View>
                 )}
               </View>
-              <View style={{ flex: 1 }} />
-              <Text style={styles.wTitle} numberOfLines={1}>
-                {currentTrack?.title || (vi ? 'Chưa phát bài nào' : 'Nothing playing')}
-              </Text>
-              <Text style={styles.wArtist} numberOfLines={1}>
-                {currentTrack?.artist || 'HolySic'}
-              </Text>
-              <View style={styles.track}>
+              <View style={[styles.track, { marginTop: 0 }]}>
                 <View
                   style={[
                     styles.trackFill,
@@ -160,50 +231,133 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
                   ]}
                 />
               </View>
-              {dur > 0 && (
-                <View style={styles.times}>
-                  <Text style={styles.time}>{clock(positionSec)}</Text>
-                  <Text style={styles.time}>{clock(dur)}</Text>
+            </View>
+          </View>
+        ) : (
+          /* live preview, same layout as the medium SwiftUI widget */
+          <View
+            style={styles.widget}
+            accessibilityLabel={vi ? 'Xem trước widget' : 'Widget preview'}
+          >
+            <LinearGradient
+              colors={[top, bottom]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.fill}
+            />
+            <LinearGradient
+              colors={[accent + '48', 'transparent']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0.7, y: 0.8 }}
+              style={styles.fill}
+            />
+            <LinearGradient colors={['rgba(0,0,0,0.04)', 'rgba(0,0,0,0.42)']} style={styles.fill} />
+            <View style={styles.wRow}>
+              <View style={styles.coverWrap}>
+                <ArtworkImage
+                  source={{ uri: currentTrack?.artworkUrl }}
+                  fallbackSeed={currentTrack?.title}
+                  style={styles.cover}
+                />
+              </View>
+              <View style={styles.wInfo}>
+                <View style={styles.badgeRow}>
+                  <View style={styles.stateBadge}>
+                    <Ionicons
+                      name={currentTrack?.isLive ? 'radio' : isPlaying ? 'pulse' : 'pause'}
+                      size={9}
+                      color={accent}
+                    />
+                    <Text style={[styles.stateText, { color: accent }]}>
+                      {currentTrack?.isLive
+                        ? 'LIVE'
+                        : isPlaying
+                          ? vi
+                            ? 'ĐANG PHÁT'
+                            : 'NOW PLAYING'
+                          : vi
+                            ? 'TẠM DỪNG'
+                            : 'PAUSED'}
+                    </Text>
+                  </View>
+                  {!!badge && (
+                    <Text style={styles.quality} numberOfLines={1}>
+                      {badge}
+                    </Text>
+                  )}
                 </View>
-              )}
-              <View style={styles.controls}>
-                <Pressable onPress={playPrevious} hitSlop={8} accessibilityLabel="Widget previous">
-                  <Ionicons name="play-back" size={17} color="#FFFFFF" />
-                </Pressable>
-                <Pressable
-                  onPress={togglePlay}
-                  style={styles.playBtn}
-                  accessibilityLabel="Widget play pause"
-                >
-                  <Ionicons
-                    name={isPlaying ? 'pause' : 'play'}
-                    size={16}
-                    color="#111"
-                    style={!isPlaying ? { marginLeft: 2 } : undefined}
+                <View style={{ flex: 1 }} />
+                <Text style={styles.wTitle} numberOfLines={1}>
+                  {currentTrack?.title || (vi ? 'Chưa phát bài nào' : 'Nothing playing')}
+                </Text>
+                <Text style={styles.wArtist} numberOfLines={1}>
+                  {currentTrack?.artist || 'HolySic'}
+                </Text>
+                <View style={styles.track}>
+                  <View
+                    style={[
+                      styles.trackFill,
+                      { width: `${Math.max(3, pct * 100)}%`, backgroundColor: accent },
+                    ]}
                   />
-                </Pressable>
-                <Pressable onPress={playNext} hitSlop={8} accessibilityLabel="Widget next">
-                  <Ionicons name="play-forward" size={17} color="#FFFFFF" />
-                </Pressable>
-                <Pressable
-                  onPress={() => currentTrack && toggleLike(currentTrack)}
-                  hitSlop={8}
-                  accessibilityLabel="Widget like"
-                >
-                  <Ionicons name={liked ? 'heart' : 'heart-outline'} size={17} color="#FFFFFF" />
-                </Pressable>
+                </View>
+                {dur > 0 && (
+                  <View style={styles.times}>
+                    <Text style={styles.time}>{clock(positionSec)}</Text>
+                    <Text style={styles.time}>{clock(dur)}</Text>
+                  </View>
+                )}
+                <View style={styles.controls}>
+                  <Pressable
+                    onPress={playPrevious}
+                    hitSlop={8}
+                    accessibilityLabel="Widget previous"
+                  >
+                    <Ionicons name="play-back" size={17} color="#FFFFFF" />
+                  </Pressable>
+                  <Pressable
+                    onPress={togglePlay}
+                    style={styles.playBtn}
+                    accessibilityLabel="Widget play pause"
+                  >
+                    <Ionicons
+                      name={isPlaying ? 'pause' : 'play'}
+                      size={16}
+                      color="#111"
+                      style={!isPlaying ? { marginLeft: 2 } : undefined}
+                    />
+                  </Pressable>
+                  <Pressable onPress={playNext} hitSlop={8} accessibilityLabel="Widget next">
+                    <Ionicons name="play-forward" size={17} color="#FFFFFF" />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => currentTrack && toggleLike(currentTrack)}
+                    hitSlop={8}
+                    accessibilityLabel="Widget like"
+                  >
+                    <Ionicons name={liked ? 'heart' : 'heart-outline'} size={17} color="#FFFFFF" />
+                  </Pressable>
+                </View>
               </View>
             </View>
           </View>
-        </View>
+        )}
 
         <View style={styles.sizes}>
-          {[
-            { icon: 'square' as const, vi: 'Nhỏ', en: 'Small' },
-            { icon: 'tablet-landscape' as const, vi: 'Vừa', en: 'Medium' },
-            { icon: 'tablet-portrait' as const, vi: 'Lớn · hàng chờ', en: 'Large · up next' },
-            { icon: 'lock-closed' as const, vi: 'Màn hình khoá', en: 'Lock Screen' },
-          ].map((s) => (
+          {(kind === 'lyrics'
+            ? [
+                { icon: 'square' as const, vi: 'Nhỏ', en: 'Small' },
+                { icon: 'tablet-landscape' as const, vi: 'Vừa · 3 dòng', en: 'Medium · 3 lines' },
+                { icon: 'tablet-portrait' as const, vi: 'Lớn · 7 dòng', en: 'Large · 7 lines' },
+                { icon: 'lock-closed' as const, vi: 'Màn hình khoá', en: 'Lock Screen' },
+              ]
+            : [
+                { icon: 'square' as const, vi: 'Nhỏ', en: 'Small' },
+                { icon: 'tablet-landscape' as const, vi: 'Vừa', en: 'Medium' },
+                { icon: 'tablet-portrait' as const, vi: 'Lớn · hàng chờ', en: 'Large · up next' },
+                { icon: 'lock-closed' as const, vi: 'Màn hình khoá', en: 'Lock Screen' },
+              ]
+          ).map((s) => (
             <View key={s.en} style={styles.sizeChip}>
               <Ionicons name={s.icon} size={11} color={UI.text2} />
               <Text style={styles.sizeText}>{vi ? s.vi : s.en}</Text>
@@ -226,8 +380,8 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
           <View style={styles.helpBox}>
             <Text style={styles.helpText}>
               {vi
-                ? '1. Giữ ngón tay trên màn hình chính đến khi biểu tượng rung\n2. Chạm + ở góc trên → tìm “HolySic”\n3. Chọn cỡ Nhỏ / Vừa / Lớn → Thêm widget\nMàn hình khoá (iOS 16+): giữ màn hình khoá → Tuỳ chỉnh → Thêm tiện ích → HolySic\n\nNút trên widget (phát, chuyển bài, thích) mở HolySic và thực hiện ngay. Thanh tiến độ tự chạy trên iOS 16+, iOS 15 cập nhật mỗi ~10 giây.'
-                : '1. Touch and hold the Home Screen until the icons jiggle\n2. Tap + in the corner → search “HolySic”\n3. Pick Small / Medium / Large → Add Widget\nLock Screen (iOS 16+): hold the Lock Screen → Customize → Add Widgets → HolySic\n\nWidget buttons (play, skip, like) open HolySic and act right away. The progress bar runs live on iOS 16+, about every 10 s on iOS 15.'}
+                ? '1. Giữ ngón tay trên màn hình chính đến khi biểu tượng rung\n2. Chạm + ở góc trên → tìm “HolySic”\n3. Vuốt để chọn widget “Đang phát” hoặc “Lời bài hát”, chọn cỡ Nhỏ / Vừa / Lớn → Thêm widget\nMàn hình khoá (iOS 16+): giữ màn hình khoá → Tuỳ chỉnh → Thêm tiện ích → HolySic\n\nNút trên widget (phát, chuyển bài, thích) mở HolySic và thực hiện ngay. Thanh tiến độ tự chạy trên iOS 16+, iOS 15 cập nhật mỗi ~10 giây. Widget lời bài hát đổi dòng đúng lúc theo lời đồng bộ (cả khi app chạy nền); chạm vào để mở lời trong trình phát.'
+                : '1. Touch and hold the Home Screen until the icons jiggle\n2. Tap + in the corner → search “HolySic”\n3. Swipe to “Now Playing” or “Lyrics”, pick Small / Medium / Large → Add Widget\nLock Screen (iOS 16+): hold the Lock Screen → Customize → Add Widgets → HolySic\n\nWidget buttons (play, skip, like) open HolySic and act right away. The progress bar runs live on iOS 16+, about every 10 s on iOS 15. The lyrics widget switches lines on time from synced lyrics (also while HolySic is in the background); tap it to open the lyrics in the player.'}
             </Text>
             {status === 'noGroup' && (
               <Text style={[styles.helpText, { marginTop: 8 }]}>
@@ -319,6 +473,55 @@ const styles = themedSheet(() => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  seg: {
+    flexDirection: 'row',
+    gap: 4,
+    padding: 3,
+    borderRadius: 12,
+    backgroundColor: UI.fg(0.05),
+    marginBottom: 12,
+  },
+  segBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 7,
+    borderRadius: 9,
+  },
+  segText: { color: UI.text2, fontSize: 12.5, fontWeight: '700' },
+  lyWrap: { flex: 1, padding: 14 },
+  lyHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lyCover: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 0.6,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  lyTitle: { color: '#FFFFFF', fontSize: 12.5, fontWeight: '800' },
+  lyArtist: { color: 'rgba(255,255,255,0.62)', fontSize: 10.5, fontWeight: '500' },
+  lyState: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  lyBody: { flex: 1, justifyContent: 'center', gap: 5, paddingVertical: 4 },
+  lyOther: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '700' },
+  lyCurrent: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '900',
+    lineHeight: 21,
+    textShadowRadius: 10,
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  lyMsg: { flex: 1, color: 'rgba(255,255,255,0.78)', fontSize: 13.5, fontWeight: '700' },
   sizes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
   sizeChip: {
     flexDirection: 'row',

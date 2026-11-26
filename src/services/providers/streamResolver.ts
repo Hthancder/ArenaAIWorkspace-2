@@ -38,6 +38,18 @@ export function createStreamCandidateQueue(
   monochromeServers: ModuleServerConfig[],
   offlineUri?: string
 ): StreamCandidateQueue {
+  // Bit-perfect: lossless first — Monochrome FLAC leads and is never pushed behind
+  // instant-start (lossy) sources
+  if (prefs.bitPerfect) {
+    prefs = {
+      ...prefs,
+      preferInstantStart: false,
+      moduleOrder: [
+        'monochrome',
+        ...prefs.moduleOrder.filter((m) => m !== 'monochrome'),
+      ] as HolySicPreferences['moduleOrder'],
+    };
+  }
   const diagnostics: DiagnosticStep[] = [];
   const pushStep = (step: DiagnosticStep) => diagnostics.push(step);
   const producers: Promise<Candidate[]>[] = [];
@@ -86,8 +98,9 @@ export function createStreamCandidateQueue(
             url: wavUri,
             source: 'synth',
             sourceLabel: 'HolySic Sound Lab',
-            qualityLabel: 'PCM 16-bit · Stereo',
+            qualityLabel: 'PCM 16-bit · 22.05 kHz',
             codec: 'WAV',
+            sampleRateHz: 22050,
           } as Candidate,
         ];
       })

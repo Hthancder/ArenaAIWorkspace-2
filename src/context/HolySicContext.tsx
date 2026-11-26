@@ -85,6 +85,7 @@ import {
 import { SourceMemory } from '../services/providers/sourceMemory';
 import { resolvePlayableStream } from '../services/providers/streamResolver';
 import { createStreamCandidateQueue } from '../services/providers/streamResolver';
+import { AudioOutput, sourceFacts } from '../services/audio/audioOutput';
 import { DEFAULT_AUDIO_LAB, StorageService } from '../services/storage/storageService';
 import {
   AlbumSummary,
@@ -883,6 +884,9 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
           audioEngine.setGainMultiplier(
             Loudness.multiplier(track, cand, prefsRef.current.normalizeVolume)
           );
+          // Bit-perfect: ask the output to run at this song's sample rate (USB DACs follow)
+          if (prefsRef.current.bitPerfect)
+            await AudioOutput.matchSampleRate(sourceFacts(track, cand).rateHz);
           await audioEngine.loadAndPlay(playUrl, track, volumeRef.current, playHeaders);
           if (!isCurrent()) return;
 
@@ -1072,7 +1076,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       // Crossfade: start the next song while this one is still playing — except between
       // consecutive songs of the same album (live sets, DJ mixes, concept albums stay gapless)
-      const cf = prefsRef.current.crossfadeSec || 0;
+      const cf = prefsRef.current.bitPerfect ? 0 : prefsRef.current.crossfadeSec || 0;
       const cur = currentTrackRef.current;
       if (
         cf > 0 &&
@@ -1093,7 +1097,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ? queueRef.current[queueIndexRef.current + 1]
           : undefined;
         if (!continuesAlbum(cur, upcoming)) {
-          audioEngine.beginCrossfade(cf);
+          audioEngine.beginCrossfade(cf, prefsRef.current.crossfadeCurve);
           playNext();
           return;
         }
@@ -2213,6 +2217,26 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const positionSecRef = useRef(positionSec);
   positionSecRef.current = positionSec;
 
+  // Bit-perfect: engine bypass + output sample rate follows the song (back to normal when off)
+  useEffect(() => {
+    audioEngine.setBitPerfect(prefs.bitPerfect);
+    if (!prefs.bitPerfect) {
+      AudioOutput.reset();
+      return;
+    }
+    const facts = sourceFacts(currentTrack, resolvedStream);
+    if (facts.rateHz) {
+      AudioOutput.matchSampleRate(facts.rateHz);
+      return;
+    }
+    // rate not in the metadata: use the one measured from the PCM tap once audio flows
+    const t = setTimeout(() => {
+      const measured = audioEngine.measuredSampleRate();
+      if (measured) AudioOutput.matchSampleRate(measured);
+    }, 3500);
+    return () => clearTimeout(t);
+  }, [prefs.bitPerfect, currentTrack, resolvedStream]);
+
   // Re-apply normalisation immediately when the switch changes
   useEffect(() => {
     if (currentTrack)
@@ -2224,10 +2248,10 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const loudnessLabel = useMemo(
     () =>
-      currentTrack && prefs.normalizeVolume
+      currentTrack && prefs.normalizeVolume && !prefs.bitPerfect
         ? Loudness.describe(currentTrack, resolvedStream)
         : null,
-    [currentTrack, prefs.normalizeVolume, resolvedStream]
+    [currentTrack, prefs.normalizeVolume, prefs.bitPerfect, resolvedStream]
   );
 
   const [importSheet, setImportSheet] = useState<{ mode: 'link' | 'list'; text: string } | null>(

@@ -30,6 +30,7 @@ export const AudioLabModal: React.FC = () => {
     applyEqPreset,
     palette,
     prefs,
+    updatePrefs,
     haptic,
   } = useHolySic();
   useModalLayer('audiolab', isAudioLabOpen);
@@ -99,7 +100,28 @@ export const AudioLabModal: React.FC = () => {
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}
         >
-          {!dspLive && (
+          {prefs.bitPerfect && (
+            <View style={[styles.honestCard, { borderColor: palette.accent + '55' }]}>
+              <Ionicons name="lock-closed" size={17} color={palette.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.bpText}>
+                  {vi
+                    ? 'Bit-perfect đang bật nên Audio Lab tạm bỏ qua — tín hiệu đi thẳng, không qua EQ hay đổi tốc độ. Cài đặt của bạn vẫn được giữ.'
+                    : 'Bit-perfect is on, so Audio Lab is bypassed — no EQ or speed change touches the signal. Your settings are kept.'}
+                </Text>
+                <Pressable
+                  onPress={() => updatePrefs({ bitPerfect: false })}
+                  style={[styles.bpOffBtn, { backgroundColor: palette.accent }]}
+                  accessibilityLabel="Turn off bit-perfect"
+                >
+                  <Text style={{ color: palette.onAccent, fontWeight: '800', fontSize: 12.5 }}>
+                    {vi ? 'Tắt bit-perfect' : 'Turn off bit-perfect'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+          {!dspLive && !prefs.bitPerfect && (
             <View style={[styles.honestCard, { borderColor: palette.accent + '55' }]}>
               <Ionicons name="information-circle" size={18} color={palette.accent} />
               <Text style={styles.honestText}>
@@ -379,6 +401,14 @@ const styles = themedSheet(() => ({
     backgroundColor: UI.fg(0.07),
     borderWidth: 1,
     borderColor: UI.fg(0.12),
+  },
+  bpText: { color: UI.fg(0.88), fontSize: 12.5, lineHeight: 18 },
+  bpOffBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 99,
   },
   honestCard: {
     flexDirection: 'row',

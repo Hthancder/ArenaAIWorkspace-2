@@ -3,9 +3,11 @@
 import { useEffect, useRef } from 'react';
 import { Linking, Platform } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
+import { PlayerPaneBus } from '../ui/playerPaneBus';
 import {
   parseWidgetUrl,
   publishArtwork,
+  publishLyrics,
   publishNowPlaying,
   WidgetAction,
   widgetSupported,
@@ -42,6 +44,10 @@ export function useWidgetBridge() {
     playPrevious,
     toggleLike,
     prefs,
+    lyrics,
+    isLoadingLyrics,
+    lyricsOffsetSec,
+    setIsPlayerOpen,
   } = useHolySic();
 
   const enabled = Platform.OS === 'ios' && widgetSupported();
@@ -52,6 +58,39 @@ export function useWidgetBridge() {
     if (!enabled) return;
     publishArtwork(currentTrack?.artworkUrl);
   }, [enabled, currentTrack?.artworkUrl]);
+
+  // lyrics: the whole timed pack once per song (and when the lyrics delay changes)
+  const songLyrics = lyrics && currentTrack && lyrics.trackId === currentTrack.id ? lyrics : null;
+  const synced = !!songLyrics?.synced && songLyrics.lines.length > 0;
+  const lyricsId = synced ? `${currentTrack!.id}@${Math.round(lyricsOffsetSec * 1000)}` : undefined;
+  const lyricsState = !currentTrack
+    ? undefined
+    : synced
+      ? 'synced'
+      : isLoadingLyrics
+        ? 'loading'
+        : songLyrics && (songLyrics.lines.length > 0 || songLyrics.plainText)
+          ? 'plain'
+          : 'none';
+  useEffect(() => {
+    if (!enabled) return;
+    if (!lyricsId || !songLyrics) {
+      publishLyrics(null);
+      return;
+    }
+    publishLyrics({
+      id: lyricsId,
+      synced: true,
+      lines: songLyrics.lines
+        .filter((l) => !l.isBackground)
+        .slice(0, 600)
+        .map((l) => ({
+          t: Math.max(0, Math.round((l.startSec + lyricsOffsetSec) * 100) / 100),
+          x: (l.text || '').replace(/\s+/g, ' ').trim().slice(0, 160),
+        })),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, lyricsId, songLyrics]);
 
   // state (re-published on changes and position jumps only)
   const liked = currentTrack ? isLiked(currentTrack.id) : false;
@@ -79,6 +118,8 @@ export function useWidgetBridge() {
       darkPalette.accent,
       artColors?.primary,
       prefs.language,
+      lyricsId,
+      lyricsState,
     ].join('·');
     const prev = last.current;
     if (prev && prev.key === key) {
@@ -104,6 +145,8 @@ export function useWidgetBridge() {
       isLive: !!currentTrack.isLive,
       upNext,
       lang: prefs.language,
+      lyricsId,
+      lyricsState,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -117,17 +160,37 @@ export function useWidgetBridge() {
     darkPalette.accent,
     artColors,
     prefs.language,
+    lyricsId,
+    lyricsState,
   ]);
 
   // widget buttons
-  const actions = useRef({ togglePlay, playNext, playPrevious, toggleLike, currentTrack });
-  actions.current = { togglePlay, playNext, playPrevious, toggleLike, currentTrack };
+  const actions = useRef({
+    togglePlay,
+    playNext,
+    playPrevious,
+    toggleLike,
+    currentTrack,
+    setIsPlayerOpen,
+  });
+  actions.current = {
+    togglePlay,
+    playNext,
+    playPrevious,
+    toggleLike,
+    currentTrack,
+    setIsPlayerOpen,
+  };
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const run = (a: WidgetAction | null) => {
       const x = actions.current;
       if (!a || a === 'open') return;
-      if (a === 'toggle') x.togglePlay();
+      if (a === 'lyrics') {
+        if (!x.currentTrack) return;
+        PlayerPaneBus.request('lyrics');
+        x.setIsPlayerOpen(true);
+      } else if (a === 'toggle') x.togglePlay();
       else if (a === 'next') x.playNext();
       else if (a === 'prev') x.playPrevious();
       else if (a === 'like' && x.currentTrack) x.toggleLike(x.currentTrack);

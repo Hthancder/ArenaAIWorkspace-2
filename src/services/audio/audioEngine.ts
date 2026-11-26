@@ -5,6 +5,7 @@
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { Platform } from 'react-native';
 import { AudioLabSettings, Track } from '../../types/music';
+import { CROSSFADE_CURVES, CrossfadeCurve, CurveFns, curveOf } from './crossfadeCurves';
 
 export interface SpectrumStatus {
   /** live = real samples flowing; waiting = arming the tap; unsupported = can't read this stream */
@@ -133,6 +134,8 @@ class HolySicAudioEngine {
   ): Promise<void> {
     await this.ensureInitialized();
     this.loadSeq += 1;
+    this.cancelPendingStart();
+    if (this.fadeInSec <= 0) this.startAt = 0; // only a sequential crossfade delays the start
     this.userVolume = Math.max(0, Math.min(1, volume));
     // crossfade: the new song starts silent and rises once it is audible; otherwise a held
     // (crossfading) player from a manual change is faded out quickly
@@ -142,7 +145,7 @@ class HolySicAudioEngine {
       this.flushFadeHold(0.8);
     }
     this.awaitingAudible = true;
-    volume = this.userVolume * this.gainMultiplier * this.rampFactor;
+    volume = this.effectiveVolume();
 
     if (Platform.OS !== 'web') {
       await this.loadNative(url, track, volume, headers);
@@ -160,6 +163,8 @@ class HolySicAudioEngine {
    */
   waitUntilAudible(timeoutMs: number): Promise<'ok' | 'error' | 'timeout' | 'superseded'> {
     const seq = this.loadSeq;
+    // a sequential crossfade holds the start back on purpose
+    timeoutMs += Math.max(0, this.startAt - Date.now());
     return new Promise((resolve) => {
       let done = false;
       let firstTime: number | null = null;
@@ -194,6 +199,8 @@ class HolySicAudioEngine {
   /** Stops and tears down the current player (used when every stream candidate failed). */
   stop(): void {
     this.loadSeq += 1;
+    this.cancelPendingStart();
+    this.startAt = 0;
     this.fadeInSec = 0;
     this.flushFadeHold(1.5);
     if (Platform.OS !== 'web') {
@@ -492,9 +499,10 @@ class HolySicAudioEngine {
         if (seq !== this.loadSeq || this.nativePlayer !== player) return;
         this.nativePlaying = !!st.playing;
         if (this.awaitingAudible && st.playing && (st.currentTime || 0) > 0.05) this.onAudible();
+        const held = !!this.startTimer;
         this.emit({
-          isPlaying: st.playing,
-          isBuffering: st.isBuffering || (!st.isLoaded && st.playing),
+          isPlaying: st.playing || held,
+          isBuffering: !held && (st.isBuffering || (!st.isLoaded && st.playing)),
           currentTimeSec: st.currentTime || 0,
           durationSec: st.duration > 0 ? st.duration : track.durationSec || 0,
           didJustFinish: st.didJustFinish,
@@ -507,7 +515,7 @@ class HolySicAudioEngine {
       if (this.currentLab) {
         player.shouldCorrectPitch = this.currentLab.preservePitch;
         player.setPlaybackRate(
-          this.currentLab.enabled ? this.currentLab.playbackRate || 1.0 : 1.0,
+          this.currentLab.enabled && !this.bitPerfect ? this.currentLab.playbackRate || 1.0 : 1.0,
           'high'
         );
       }
@@ -532,7 +540,9 @@ class HolySicAudioEngine {
         // Lock screen metadata is best-effort
       }
 
-      player.play();
+      this.startWhenDue(() => {
+        if (this.nativePlayer === player && seq === this.loadSeq) player.play();
+      });
     } catch (err: any) {
       this.emit({
         isPlaying: false,
@@ -677,11 +687,13 @@ class HolySicAudioEngine {
       this.webPollTimer = null;
     }
 
+    // bit-perfect: the element plays straight to the output, never through the Web Audio graph
     const canUseCorsDsp =
-      url.startsWith('data:') ||
-      url.startsWith('blob:') ||
-      url.includes('itunes.apple.com') ||
-      url.includes('mzstatic.com');
+      !this.bitPerfect &&
+      (url.startsWith('data:') ||
+        url.startsWith('blob:') ||
+        url.includes('itunes.apple.com') ||
+        url.includes('mzstatic.com'));
 
     const el = new Audio();
     if (canUseCorsDsp) {
@@ -692,7 +704,8 @@ class HolySicAudioEngine {
     el.volume = Math.max(0, Math.min(1, volume));
 
     if (this.currentLab) {
-      el.playbackRate = this.currentLab.playbackRate || 1.0;
+      el.playbackRate =
+        this.currentLab.enabled && !this.bitPerfect ? this.currentLab.playbackRate || 1.0 : 1.0;
       (el as any).preservesPitch = this.currentLab.preservePitch;
     }
 
@@ -708,9 +721,10 @@ class HolySicAudioEngine {
       if (this.awaitingAudible && !el.paused && el.currentTime > 0.05) this.onAudible();
       const rawDur = el.duration;
       const durationSec = Number.isFinite(rawDur) && rawDur > 0 ? rawDur : track.durationSec || 0;
+      const held = !!this.startTimer;
       this.emit({
-        isPlaying: !el.paused && !el.ended,
-        isBuffering: el.readyState < 2 && !el.paused,
+        isPlaying: (!el.paused && !el.ended) || held,
+        isBuffering: !held && el.readyState < 2 && !el.paused,
         currentTimeSec: el.currentTime || 0,
         durationSec,
         didJustFinish,
@@ -744,6 +758,14 @@ class HolySicAudioEngine {
       if (this.audioCtx && this.audioCtx.state === 'suspended') {
         await this.audioCtx.resume();
       }
+      if (this.startAt > Date.now() + 30) {
+        this.startWhenDue(() => {
+          if (this.webAudio === el) el.play().catch(() => {});
+        });
+        pushCurrent(false);
+        return;
+      }
+      this.startAt = 0;
       await el.play();
       pushCurrent(false);
     } catch {
@@ -753,6 +775,14 @@ class HolySicAudioEngine {
   }
 
   play(): void {
+    if (this.startTimer) {
+      // resumed while a sequential crossfade was holding the start: go now
+      const fn = this.startFn;
+      this.cancelPendingStart();
+      this.startAt = 0;
+      fn?.();
+      return;
+    }
     if (Platform.OS !== 'web') {
       this.nativePlayer?.play();
     } else if (this.webAudio) {
@@ -764,6 +794,8 @@ class HolySicAudioEngine {
   }
 
   pause(): void {
+    this.cancelPendingStart();
+    this.startAt = 0;
     this.killFades();
     if (Platform.OS !== 'web') {
       this.nativePlayer?.pause();
@@ -794,16 +826,18 @@ class HolySicAudioEngine {
     { kind: 'native'; p: AudioPlayer } | { kind: 'web'; el: HTMLAudioElement } | null = null;
   private fadeHoldTimer: ReturnType<typeof setTimeout> | null = null;
   private fadeInSec = 0;
+  private fadeCurve: CurveFns = CROSSFADE_CURVES.equalPower;
   private rampFactor = 1;
   private rampTimer: ReturnType<typeof setInterval> | null = null;
   private awaitingAudible = false;
   private fadingOut = new Set<() => void>();
 
   /** Hand the current song over to a crossfade; call right before starting the next one. */
-  beginCrossfade(sec: number): void {
+  beginCrossfade(sec: number, curve: CrossfadeCurve = 'equalPower'): void {
     this.flushFadeHold(1.2);
     const s = Math.max(0, Math.min(12, sec));
-    if (s <= 0) return;
+    if (s <= 0 || this.bitPerfect) return;
+    this.fadeCurve = curveOf(curve);
     if (Platform.OS !== 'web') {
       if (!this.nativePlayer) return;
       try {
@@ -826,8 +860,46 @@ class HolySicAudioEngine {
       this.webAudio = null;
     }
     this.fadeInSec = s;
+    const d = this.fadeCurve.inDelay;
+    if (d && d > 0 && d < 1) {
+      // the next song comes in late: run the ending song's curve from now and hold the next
+      // one's start until its part of the curve begins, so it plays from 0:00
+      const c = this.fadeCurve;
+      this.flushFadeHold(s, c);
+      this.startAt = Date.now() + s * d * 1000;
+      this.fadeInSec = s * (1 - d);
+      this.fadeCurve = { in: (k) => c.in(d + k * (1 - d)), out: c.out };
+      return;
+    }
     // the next song never became audible (slow network / no source): fade the old one anyway
     this.fadeHoldTimer = setTimeout(() => this.flushFadeHold(Math.min(3, s)), (s + 12) * 1000);
+  }
+
+  // ───── Held start (crossfade styles where the next song comes in late) ─────
+  private startAt = 0;
+  private startTimer: ReturnType<typeof setTimeout> | null = null;
+  private startFn: (() => void) | null = null;
+
+  private startWhenDue(fn: () => void): void {
+    const wait = this.startAt - Date.now();
+    if (wait <= 30) {
+      this.startAt = 0;
+      fn();
+      return;
+    }
+    this.startFn = fn;
+    this.startTimer = setTimeout(() => {
+      this.startTimer = null;
+      this.startFn = null;
+      this.startAt = 0;
+      fn();
+    }, wait);
+  }
+
+  private cancelPendingStart(): void {
+    if (this.startTimer) clearTimeout(this.startTimer);
+    this.startTimer = null;
+    this.startFn = null;
   }
 
   /** True while an ending song is still sounding under a crossfade */
@@ -845,30 +917,35 @@ class HolySicAudioEngine {
       this.rampFactor = 1;
       return;
     }
+    const curve = this.fadeCurve;
+    this.fadeCurve = CROSSFADE_CURVES.equalPower;
     const t0 = Date.now();
+    this.rampFactor = curve.in(0);
+    this.applyVolume();
     this.rampTimer = setInterval(() => {
       const k = Math.min(1, (Date.now() - t0) / (sec * 1000));
-      this.rampFactor = Math.sin((k * Math.PI) / 2);
+      this.rampFactor = k >= 1 ? 1 : curve.in(k);
       this.applyVolume();
       if (k >= 1 && this.rampTimer) {
         clearInterval(this.rampTimer);
         this.rampTimer = null;
       }
-    }, 50);
-    this.flushFadeHold(sec);
+    }, 40);
+    this.flushFadeHold(sec, curve);
   }
 
-  private flushFadeHold(sec: number): void {
+  private flushFadeHold(sec: number, curve: CurveFns = CROSSFADE_CURVES.equalPower): void {
     if (this.fadeHoldTimer) clearTimeout(this.fadeHoldTimer);
     this.fadeHoldTimer = null;
     const h = this.fadeHold;
     this.fadeHold = null;
-    if (h) this.fadeOut(h, sec);
+    if (h) this.fadeOut(h, sec, curve);
   }
 
   private fadeOut(
     h: { kind: 'native'; p: AudioPlayer } | { kind: 'web'; el: HTMLAudioElement },
-    sec: number
+    sec: number,
+    curve: CurveFns = CROSSFADE_CURVES.equalPower
   ): void {
     const setV = (v: number) => {
       try {
@@ -908,9 +985,9 @@ class HolySicAudioEngine {
     if (sec <= 0) return kill();
     timer = setInterval(() => {
       const k = Math.min(1, (Date.now() - t0) / ms);
-      setV(start * Math.cos((k * Math.PI) / 2));
+      setV(start * curve.out(k));
       if (k >= 1) kill();
-    }, 50);
+    }, 40);
   }
 
   /** Pause / hard stop: silence anything still crossfading right away */
@@ -944,8 +1021,35 @@ class HolySicAudioEngine {
     this.applyVolume();
   }
 
+  // ───── Bit-perfect ─────
+  // No DSP at all: unity gain (no user volume / normalisation), 1× speed, no EQ graph on web and
+  // no crossfade. Sample-rate matching lives in audioOutput.ts (AVAudioSession).
+  private bitPerfect = false;
+
+  setBitPerfect(on: boolean): void {
+    if (this.bitPerfect === on) return;
+    this.bitPerfect = on;
+    if (on) this.killFades();
+    this.applyVolume();
+    if (this.currentLab) this.applyAudioLab(this.currentLab);
+  }
+
+  isBitPerfect(): boolean {
+    return this.bitPerfect;
+  }
+
+  /** Sample rate measured from the PCM tap (iOS, progressive files) — 0 when unknown */
+  measuredSampleRate(): number {
+    return this.lastSampleAt && Date.now() - this.lastSampleAt < 5000 ? this.sampleRate : 0;
+  }
+
+  private effectiveVolume(): number {
+    if (this.bitPerfect) return this.rampFactor;
+    return this.userVolume * this.gainMultiplier * this.rampFactor;
+  }
+
   private applyVolume(): void {
-    const v = this.userVolume * this.gainMultiplier * this.rampFactor;
+    const v = this.effectiveVolume();
     if (Platform.OS !== 'web') {
       if (this.nativePlayer) this.nativePlayer.volume = v;
     } else if (this.webAudio) {
@@ -953,8 +1057,9 @@ class HolySicAudioEngine {
     }
   }
 
-  applyAudioLab(lab: AudioLabSettings): void {
-    this.currentLab = lab;
+  applyAudioLab(input: AudioLabSettings): void {
+    this.currentLab = input;
+    const lab = this.bitPerfect ? { ...input, enabled: false } : input;
     const rate = lab.enabled ? lab.playbackRate : 1.0;
 
     if (Platform.OS !== 'web') {

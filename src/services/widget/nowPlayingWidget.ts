@@ -4,6 +4,9 @@
 // network, so the app publishes a small snapshot of what's playing into the shared App Group:
 //   "nowPlaying" — JSON (title, artist, state, position sampled at updatedAt, colours, up next)
 //   "art"        — the cover as a small base64 JPEG (≈360 px, a few dozen KB)
+//   "lyrics"     — the song's timed lyric lines (sent once per song / offset change); the
+//                  widget schedules a timeline entry at every line, so lyrics follow the music
+//                  with no traffic from the app while it plays
 // and asks WidgetKit to redraw. Position is only re-published on jumps (seek, track change,
 // pause/resume) — the widget extrapolates from updatedAt, so no per-second traffic.
 //
@@ -35,6 +38,23 @@ export interface WidgetNowPlaying {
   isLive?: boolean;
   upNext?: WidgetQueueItem[];
   lang?: string;
+  /** id of the matching "lyrics" pack (stale lyrics from another song are ignored) */
+  lyricsId?: string;
+  /** what the lyrics widget should say when there is no timed pack */
+  lyricsState?: 'synced' | 'loading' | 'plain' | 'none';
+}
+
+export interface WidgetLyricLine {
+  /** start, seconds into the song (lyrics delay already applied) */
+  t: number;
+  /** text ('' = instrumental gap) */
+  x: string;
+}
+
+export interface WidgetLyrics {
+  id: string;
+  synced: boolean;
+  lines: WidgetLyricLine[];
 }
 
 // Local native module (modules/holysic-widget) — present in IPA / dev-client builds only
@@ -81,7 +101,8 @@ function reloadSoon() {
   reloadTimer = setTimeout(() => {
     reloadTimer = null;
     try {
-      mod()?.reload('HolySicNowPlaying');
+      // both widgets (Now Playing + Lyrics) read the same snapshot
+      mod()?.reload(null);
     } catch {
       // WidgetKit unavailable
     }
@@ -98,6 +119,22 @@ export function publishNowPlaying(np: WidgetNowPlaying | null) {
   lastJson = json;
   try {
     setKey('nowPlaying', np ? json : null);
+    reloadSoon();
+  } catch {
+    // ignore
+  }
+}
+
+let lastLyrics = '';
+
+/** Publish the current song's lyrics (null = none). Identical packs are skipped. */
+export function publishLyrics(pack: WidgetLyrics | null) {
+  if (!mod()) return;
+  const json = pack ? JSON.stringify(pack) : '';
+  if (json === lastLyrics) return;
+  lastLyrics = json;
+  try {
+    setKey('lyrics', pack ? json : null);
     reloadSoon();
   } catch {
     // ignore
@@ -163,12 +200,19 @@ export async function publishArtwork(uri: string | undefined | null) {
   reloadSoon();
 }
 
-export type WidgetAction = 'toggle' | 'next' | 'prev' | 'like' | 'open';
+export type WidgetAction = 'toggle' | 'next' | 'prev' | 'like' | 'open' | 'lyrics';
 
 /** holysic://widget/<action> → action */
 export function parseWidgetUrl(url: string | null | undefined): WidgetAction | null {
   const m = /^holysic:\/\/widget\/([a-z]+)/i.exec(url || '');
   if (!m) return null;
   const a = m[1].toLowerCase();
-  return a === 'toggle' || a === 'next' || a === 'prev' || a === 'like' || a === 'open' ? a : null;
+  return a === 'toggle' ||
+    a === 'next' ||
+    a === 'prev' ||
+    a === 'like' ||
+    a === 'open' ||
+    a === 'lyrics'
+    ? a
+    : null;
 }

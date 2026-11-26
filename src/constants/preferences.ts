@@ -1,5 +1,7 @@
 // HolySic Preferences & Enums — faithfully ported from PreferenceKeys.kt in realidkroo/Mochy-Music
 
+import type { CrossfadeCurve } from '../services/audio/crossfadeCurves';
+
 export type MainTab = 'home' | 'search' | 'library' | 'settings';
 
 export type PlayerStyle = 'FLAGSHIP' | 'TURNTABLE' | 'IPOD' | 'POSTER' | 'BEDSIDE';
@@ -106,6 +108,13 @@ export interface HolySicPreferences {
   autoPlaySimilar: boolean;
   /** Crossfade between songs, in seconds (0 = off) */
   crossfadeSec: number;
+  /** Shape of the crossfade (see services/audio/crossfadeCurves) */
+  crossfadeCurve: CrossfadeCurve;
+  /**
+   * Bit-perfect: no DSP at all (EQ, normalisation, crossfade, speed), software volume fixed at
+   * 100 %, lossless sources first and the output sample rate matched to the song (USB DACs)
+   */
+  bitPerfect: boolean;
   preferredJioSaavnQuality: JioSaavnQuality;
   moduleOrder: ('monochrome' | 'jiosaavn' | 'innertube' | 'itunes')[];
   /** Fall back to Apple's 30-second preview when no full-length source plays (off = never) */
@@ -155,6 +164,8 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   showRemainingTime: false,
   autoPlaySimilar: true,
   crossfadeSec: 0,
+  crossfadeCurve: 'equalPower',
+  bitPerfect: false,
   preferredJioSaavnQuality: '320',
   moduleOrder: ['monochrome', 'jiosaavn', 'innertube', 'itunes'],
   allowPreviewFallback: false,

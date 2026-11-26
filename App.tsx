@@ -20,7 +20,6 @@ import { SearchScreen } from './src/components/screens/SearchScreen';
 import { SettingsScreen } from './src/components/screens/SettingsScreen';
 import { ChartsModal } from './src/components/merge/ChartsModal';
 import { RadioModal } from './src/components/merge/RadioModal';
-import { HaloMark } from './src/components/brand/HaloGlow';
 import { ImportModal } from './src/components/merge/ImportModal';
 import { WelcomeModal } from './src/components/merge/WelcomeModal';
 import { SheetSlot } from './src/components/overlay/ModalLayers';
@@ -28,7 +27,7 @@ import { LocalLibraryScreen, LocalOverlayHost } from './src/components/local/Loc
 import { LocalLibrary } from './src/services/local/localLibrary';
 import { t } from './src/constants/i18n';
 import { MainTab } from './src/constants/preferences';
-import { HOLYSIC_COLORS, resolveFontFamily } from './src/constants/theme';
+import { resolveFontFamily } from './src/constants/theme';
 import { HolySicProvider, useHolySic } from './src/context/HolySicContext';
 import { useWidgetBridge } from './src/services/widget/useWidgetBridge';
 import {
@@ -164,11 +163,6 @@ const HolySicShell: React.FC = () => {
                   }}
                   style={styles.tabItem}
                 >
-                  {selected && (
-                    <View pointerEvents="none" style={styles.tabHalo}>
-                      <HaloMark size={20} color={HOLYSIC_COLORS.halo} />
-                    </View>
-                  )}
                   {tab.isBrandMark ? (
                     <HolySicMarkIcon size={23} color={tint} filled={selected} />
                   ) : (
@@ -227,7 +221,6 @@ export default function App() {
 }
 
 const styles = themedSheet(() => ({
-  tabHalo: { position: 'absolute', top: 1, alignSelf: 'center' },
   outerFrame: {
     flex: 1,
     alignItems: 'center',

@@ -34,6 +34,9 @@ merged in from Spotube, OpenSpot, Musike and Cog. All original notices are kept 
 - **Dynamic artwork colors**: `SOLID`, `COVER_GRADIENT`, `DARK_GRADIENT`, `APPLE_MUSIC`, `AMBIENT` — trích màu từ bìa album
 - **Queue** quản lý hàng đợi, **Shuffle / Repeat**, **Sleep Timer**, điều khiển Lock Screen (Control Center / Dynamic Island)
 - **MiniPlayer** nổi với `MiniLyricsTicker` hiển thị câu hát đang phát
+- **Crossfade 5 kiểu** (2–12 giây): Cân bằng (equal power), Mượt (S-curve), Tuyến tính, DJ cắt nhanh, Nhạt rồi vào — có biểu đồ xem trước; bài sau luôn vào từ 0:00; nghe trọn album thì giữ liền mạch (gapless)
+- **Bit-perfect**: tắt mọi xử lý (EQ, chuẩn hoá, crossfade, tốc độ), âm lượng phần mềm 100 %, ưu tiên nguồn lossless, cho đầu ra chạy đúng tần số của bài (DAC USB) và hiển thị đường tín hiệu thật (nguồn → xử lý → âm lượng → đầu ra)
+- **Widget iOS**: *Đang phát* (nhỏ / vừa / lớn + màn hình khoá) và *Lời bài hát* — lời đồng bộ đổi dòng đúng lúc ngay trên màn hình chính & màn hình khoá
 
 ### 🔍 Tìm kiếm đa nguồn / Multi-Source Search
 - **YouTube Music InnerTube** (iOS / visionOS client)

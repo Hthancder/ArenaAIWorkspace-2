@@ -1,8 +1,11 @@
 // Full-Screen HolySic Player Modal — Flagship, Turntable, iPod, Poster & Bedside Presets + Queue, Lyrics, Sleep Timer & Diagnostics
 
+import { SignalPathList } from '../audio/SignalPathList';
+import { useSignalPath } from '../audio/useSignalPath';
+import { PlayerPaneBus } from '../../services/ui/playerPaneBus';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   LayoutChangeEvent,
@@ -73,6 +76,7 @@ export const FullPlayerModal: React.FC = () => {
     loudnessLabel,
     ambient,
   } = useHolySic();
+  const bitPath = useSignalPath();
   const playerVisible = usePresentGate(isPlayerOpen, 'player');
   useModalLayer('player', playerVisible);
   const ambientColors = useAmbientColors();
@@ -83,6 +87,15 @@ export const FullPlayerModal: React.FC = () => {
   const rw = useHoldSeek(seekBy, -1);
 
   const [pane, setPane] = useState<SubPane>('artwork');
+  // widget "lyrics" deep link → open on the lyrics pane
+  useEffect(
+    () =>
+      PlayerPaneBus.subscribe((p) => {
+        setPane(p);
+        PlayerPaneBus.consume();
+      }),
+    []
+  );
   const [seekBarWidth, setSeekBarWidth] = useState(300);
   const [volBarWidth, setVolBarWidth] = useState(240);
 
@@ -158,11 +171,20 @@ export const FullPlayerModal: React.FC = () => {
             style={[styles.qualityBadgeBtn, { borderColor: palette.accent + '40' }]}
           >
             <Ionicons
-              name={resolvedStream?.isOffline ? 'arrow-down-circle' : 'sparkles'}
+              name={
+                prefs.bitPerfect
+                  ? bitPath.perfect
+                    ? 'checkmark-circle'
+                    : 'pulse'
+                  : resolvedStream?.isOffline
+                    ? 'arrow-down-circle'
+                    : 'sparkles'
+              }
               size={12}
               color={palette.accent}
             />
             <Text numberOfLines={1} style={[styles.qualityBadgeLabel, { color: palette.accent }]}>
+              {prefs.bitPerfect ? 'Bit-perfect · ' : ''}
               {resolvedStream?.qualityLabel || currentTrack.qualityBadge || 'HolySic Stream'}
               {loudnessLabel ? ` · RG ${loudnessLabel}` : ''}
             </Text>
@@ -267,6 +289,25 @@ export const FullPlayerModal: React.FC = () => {
                   : 'Resolving modules…'}
               </Text>
               <ScrollView style={{ marginTop: 12 }}>
+                {prefs.bitPerfect && (
+                  <View style={styles.bpBox}>
+                    <Text style={styles.bpBoxTitle}>
+                      {bitPath.perfect
+                        ? vi
+                          ? 'Bit-perfect: tín hiệu đi nguyên vẹn'
+                          : 'Bit-perfect: the signal is untouched'
+                        : vi
+                          ? 'Đường tín hiệu (Bit-perfect)'
+                          : 'Signal path (bit-perfect)'}
+                    </Text>
+                    <SignalPathList
+                      checks={bitPath.checks}
+                      text="#FFFFFF"
+                      text2="rgba(255,255,255,0.62)"
+                      line="rgba(255,255,255,0.14)"
+                    />
+                  </View>
+                )}
                 {(resolvedStream?.diagnostics || []).map((d, idx) => (
                   <View key={idx} style={styles.diagRow}>
                     <Ionicons
@@ -549,25 +590,40 @@ export const FullPlayerModal: React.FC = () => {
               </Pressable>
             </View>
 
-            {/* Volume Bar */}
-            <View style={styles.volumeRow}>
-              <Ionicons name="volume-low" size={16} color="rgba(255,255,255,0.5)" />
+            {/* Volume Bar (bit-perfect: software volume locked at 100 %) */}
+            {prefs.bitPerfect ? (
               <Pressable
-                onLayout={(e) => setVolBarWidth(e.nativeEvent.layout.width || 220)}
-                onPress={handleVolumePress}
-                style={styles.volTrackHit}
+                onPress={() => setPane('diagnostics')}
+                style={styles.volumeRow}
+                accessibilityLabel="Bit-perfect volume"
               >
-                <View style={styles.volTrack}>
-                  <View
-                    style={[
-                      styles.volFill,
-                      { width: `${volume * 100}%`, backgroundColor: 'rgba(255,255,255,0.82)' },
-                    ]}
-                  />
-                </View>
+                <Ionicons name="lock-closed" size={14} color={palette.accent} />
+                <Text style={styles.bpVolText} numberOfLines={1}>
+                  {prefs.language === 'vi'
+                    ? 'Bit-perfect · âm lượng 100 % — chỉnh bằng nút âm lượng'
+                    : 'Bit-perfect · volume 100 % — use the volume buttons'}
+                </Text>
               </Pressable>
-              <Ionicons name="volume-high" size={16} color="rgba(255,255,255,0.5)" />
-            </View>
+            ) : (
+              <View style={styles.volumeRow}>
+                <Ionicons name="volume-low" size={16} color="rgba(255,255,255,0.5)" />
+                <Pressable
+                  onLayout={(e) => setVolBarWidth(e.nativeEvent.layout.width || 220)}
+                  onPress={handleVolumePress}
+                  style={styles.volTrackHit}
+                >
+                  <View style={styles.volTrack}>
+                    <View
+                      style={[
+                        styles.volFill,
+                        { width: `${volume * 100}%`, backgroundColor: 'rgba(255,255,255,0.82)' },
+                      ]}
+                    />
+                  </View>
+                </Pressable>
+                <Ionicons name="volume-high" size={16} color="rgba(255,255,255,0.5)" />
+              </View>
+            )}
           </View>
         )}
 
@@ -919,6 +975,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 10,
     paddingHorizontal: 6,
+  },
+  bpBox: {
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 12,
+  },
+  bpBoxTitle: { color: '#FFFFFF', fontSize: 14.5, fontWeight: '800', marginBottom: 10 },
+  bpVolText: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.62)',
+    fontSize: 12.5,
+    fontWeight: '600',
   },
   volTrackHit: {
     flex: 1,

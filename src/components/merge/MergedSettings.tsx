@@ -22,6 +22,9 @@ import { Scrobbler } from '../../services/scrobble/scrobbler';
 import { LocalLibrary } from '../../services/local/localLibrary';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { WidgetSettingsCard } from '../widget/WidgetSettingsCard';
+import { BitPerfectCard } from '../audio/BitPerfectCard';
+import { CrossfadeCurvePreview } from '../audio/CrossfadeCurvePreview';
+import { CROSSFADE_CURVE_META } from '../../services/audio/crossfadeCurves';
 
 const HOME_SECTIONS: { id: HomeSectionId; vi: string; en: string }[] = [
   { id: 'quickActions', vi: 'Lối tắt nhanh', en: 'Quick actions' },
@@ -219,47 +222,104 @@ export const MergedSettings: React.FC = () => {
       {/* ───────── Widget ───────── */}
       <WidgetSettingsCard fontFamily={fontFamily} />
 
+      <BitPerfectCard fontFamily={fontFamily} />
+
       <Text style={[styles.sectionTitle, { fontFamily }]}>
         {vi ? 'Phát nhạc thông minh' : 'Smart playback'}
       </Text>
       <View style={styles.card}>
-        {row(
-          vi ? 'Chuẩn hoá âm lượng' : 'Volume normalisation',
-          vi
-            ? 'Như ReplayGain: dùng độ lớn do nguồn đo (YouTube loudness, TIDAL ReplayGain) để các bài nghe đều nhau, không vỡ tiếng'
-            : 'ReplayGain-style: uses source loudness (YouTube, TIDAL ReplayGain) so songs play at an even level without clipping',
-          sw(prefs.normalizeVolume, (v) => updatePrefs({ normalizeVolume: v }))
-        )}
-        <View style={styles.cfRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.rowTitle}>{vi ? 'Chuyển bài mượt (Crossfade)' : 'Crossfade'}</Text>
-            <Text style={styles.rowDesc}>
-              {prefs.crossfadeSec > 0
-                ? vi
-                  ? `Bài sau to dần trong ${prefs.crossfadeSec} giây cuối của bài trước · giữ liền mạch khi nghe trọn album`
-                  : `The next song fades in over the last ${prefs.crossfadeSec}s · albums played in order stay gapless`
-                : vi
-                  ? 'Tắt — các bài nối tiếp nhau bình thường'
-                  : 'Off — songs play back to back'}
+        {prefs.bitPerfect && (
+          <View style={styles.bpNote}>
+            <Ionicons name="lock-closed" size={13} color={UI.text2} />
+            <Text style={styles.bpNoteText}>
+              {vi
+                ? 'Bit-perfect đang bật — chuẩn hoá âm lượng và crossfade tạm nghỉ'
+                : 'Bit-perfect is on — normalisation and crossfade are paused'}
             </Text>
           </View>
-        </View>
-        <View style={styles.cfChips}>
-          {[0, 2, 4, 6, 8, 12].map((sec) => {
-            const on = prefs.crossfadeSec === sec;
-            return (
-              <Pressable
-                key={sec}
-                onPress={() => updatePrefs({ crossfadeSec: sec })}
-                style={[styles.cfChip, on && { backgroundColor: palette.accent }]}
-                accessibilityLabel={`Crossfade ${sec}s`}
-              >
-                <Text style={[styles.cfChipText, on && { color: palette.onAccent }]}>
-                  {sec === 0 ? (vi ? 'Tắt' : 'Off') : `${sec}s`}
-                </Text>
-              </Pressable>
-            );
-          })}
+        )}
+        <View
+          style={prefs.bitPerfect ? styles.dimmed : undefined}
+          pointerEvents={prefs.bitPerfect ? 'none' : 'auto'}
+        >
+          {row(
+            vi ? 'Chuẩn hoá âm lượng' : 'Volume normalisation',
+            vi
+              ? 'Như ReplayGain: dùng độ lớn do nguồn đo (YouTube loudness, TIDAL ReplayGain) để các bài nghe đều nhau, không vỡ tiếng'
+              : 'ReplayGain-style: uses source loudness (YouTube, TIDAL ReplayGain) so songs play at an even level without clipping',
+            sw(prefs.normalizeVolume, (v) => updatePrefs({ normalizeVolume: v }))
+          )}
+          <View style={styles.cfRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>
+                {vi ? 'Chuyển bài mượt (Crossfade)' : 'Crossfade'}
+              </Text>
+              <Text style={styles.rowDesc}>
+                {prefs.crossfadeSec > 0
+                  ? vi
+                    ? `Chuyển bài trong ${prefs.crossfadeSec} giây cuối · giữ liền mạch khi nghe trọn album`
+                    : `Songs blend over the last ${prefs.crossfadeSec}s · albums played in order stay gapless`
+                  : vi
+                    ? 'Tắt — các bài nối tiếp nhau bình thường'
+                    : 'Off — songs play back to back'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.cfChips}>
+            {[0, 2, 4, 6, 8, 12].map((sec) => {
+              const on = prefs.crossfadeSec === sec;
+              return (
+                <Pressable
+                  key={sec}
+                  onPress={() => updatePrefs({ crossfadeSec: sec })}
+                  style={[styles.cfChip, on && { backgroundColor: palette.accent }]}
+                  accessibilityLabel={`Crossfade ${sec}s`}
+                >
+                  <Text style={[styles.cfChipText, on && { color: palette.onAccent }]}>
+                    {sec === 0 ? (vi ? 'Tắt' : 'Off') : `${sec}s`}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {prefs.crossfadeSec > 0 && (
+            <View style={styles.cfStyleBox}>
+              <Text style={styles.cfStyleLabel}>{vi ? 'Kiểu chuyển' : 'Style'}</Text>
+              <View style={styles.cfChips}>
+                {CROSSFADE_CURVE_META.map((c) => {
+                  const on = (prefs.crossfadeCurve || 'equalPower') === c.id;
+                  return (
+                    <Pressable
+                      key={c.id}
+                      onPress={() => updatePrefs({ crossfadeCurve: c.id })}
+                      style={[styles.cfChip, on && { backgroundColor: palette.accent }]}
+                      accessibilityLabel={`Crossfade style ${c.en}`}
+                    >
+                      <Text style={[styles.cfChipText, on && { color: palette.onAccent }]}>
+                        {vi ? c.vi : c.en}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <CrossfadeCurvePreview
+                curve={prefs.crossfadeCurve || 'equalPower'}
+                sec={prefs.crossfadeSec}
+                accent={palette.accent}
+                ink={UI.text}
+                ink2={UI.text2}
+                vi={vi}
+              />
+              <Text style={[styles.rowDesc, { marginTop: 8 }]}>
+                {(() => {
+                  const m =
+                    CROSSFADE_CURVE_META.find((x) => x.id === prefs.crossfadeCurve) ||
+                    CROSSFADE_CURVE_META[0];
+                  return vi ? m.descVi : m.descEn;
+                })()}
+              </Text>
+            </View>
+          )}
         </View>
         {row(
           vi ? 'Tự phát bài tương tự' : 'Autoplay similar songs',
@@ -602,6 +662,26 @@ const styles = themedSheet(() => ({
     backgroundColor: UI.fg(0.08),
   },
   cfChipText: { color: UI.text, fontSize: 13, fontWeight: '800' },
+  cfStyleBox: {
+    marginTop: 2,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: UI.fg(0.04),
+  },
+  cfStyleLabel: { color: UI.text2, fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
+  dimmed: { opacity: 0.4 },
+  bpNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: UI.fg(0.05),
+    marginBottom: 4,
+  },
+  bpNoteText: { flex: 1, color: UI.text2, fontSize: 12.5, fontWeight: '600' },
   rowTitle: { color: UI.text, fontSize: 14.5, fontWeight: '700' },
   rowDesc: { color: UI.text2, fontSize: 12.5, marginTop: 2, lineHeight: 18 },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },

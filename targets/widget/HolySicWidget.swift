@@ -1,9 +1,12 @@
-// HolySic — Now Playing widget (home screen: small / medium / large; Lock Screen on iOS 16+).
+// HolySic — widgets (home screen: small / medium / large; Lock Screen on iOS 16+):
+//   • Now Playing — cover, progress, controls, up next
+//   • Lyrics      — the current lyric line, live: one timeline entry per line
 //
 // The app writes the current song into the shared App Group (UserDefaults suite
 // "group.com.holysic.music"): key "nowPlaying" = JSON, key "art" = a small base64 JPEG of the
-// cover. The widget never talks to the network; it only renders that snapshot. Buttons are deep
-// links (holysic://widget/…) handled by the app, so they work on iOS 15 too.
+// cover, key "lyrics" = the song's timed lines. The widgets never talk to the network; they only
+// render that snapshot. Buttons are deep links (holysic://widget/…) handled by the app, so they
+// work on iOS 15 too.
 //
 // HolySic started as a fork of Mochy Music by realidkroo (GPL-3.0).
 
@@ -37,6 +40,10 @@ struct NowPlaying: Codable {
   var isLive: Bool?
   var upNext: [QueueItem]?
   var lang: String?
+  /// id of the matching "lyrics" pack
+  var lyricsId: String?
+  /// synced | loading | plain | none
+  var lyricsState: String?
 
   var vi: Bool { (lang ?? "vi") == "vi" }
 
@@ -56,6 +63,28 @@ struct NowPlaying: Codable {
   }
 }
 
+struct LyricLine: Codable, Hashable {
+  /// start, seconds into the song
+  var t: Double
+  /// text ("" = instrumental gap)
+  var x: String
+}
+
+struct LyricsPack: Codable {
+  var id: String
+  var synced: Bool
+  var lines: [LyricLine]
+}
+
+/// index of the line sounding at `elapsed` (-1 = before the first line)
+func lyricIndex(_ lines: [LyricLine], at elapsed: Double) -> Int {
+  var idx = -1
+  for (i, l) in lines.enumerated() {
+    if elapsed + 0.15 >= l.t { idx = i } else { break }
+  }
+  return idx
+}
+
 enum SharedStore {
   static var defaults: UserDefaults? { UserDefaults(suiteName: holySicAppGroup) }
 
@@ -69,6 +98,15 @@ enum SharedStore {
     }
     guard let json = data else { return nil }
     return try? JSONDecoder().decode(NowPlaying.self, from: json)
+  }
+
+  static func lyrics(for np: NowPlaying?) -> [LyricLine]? {
+    guard let id = np?.lyricsId, let s = defaults?.string(forKey: "lyrics"),
+      let data = s.data(using: .utf8),
+      let pack = try? JSONDecoder().decode(LyricsPack.self, from: data),
+      pack.id == id, pack.synced, !pack.lines.isEmpty
+    else { return nil }
+    return pack.lines
   }
 
   static func artwork() -> UIImage? {
@@ -802,6 +840,411 @@ struct HolySicWidgetEntryView: View {
   }
 }
 
+// MARK: - Lyrics widget
+
+struct LyricsEntry: TimelineEntry {
+  let date: Date
+  let np: NowPlaying?
+  let art: UIImage?
+  let lines: [LyricLine]?
+  /// current line (-1 = before the first line)
+  let index: Int
+  var isSample = false
+}
+
+struct LyricsProvider: TimelineProvider {
+  // original sample text for the widget gallery
+  static let sampleLines: [LyricLine] = [
+    LyricLine(t: 60, x: "Phố đêm lên đèn, gió ru qua hồ"),
+    LyricLine(t: 66, x: "Mình đi chậm thôi, để nghe thành phố thở"),
+    LyricLine(t: 72, x: "Một chút mưa bay, một chút giai điệu"),
+    LyricLine(t: 78, x: "Giữ lại đêm nay trong từng nhịp nhỏ"),
+    LyricLine(t: 84, x: "Và ta cứ hát, như chưa từng vội"),
+  ]
+
+  func placeholder(in context: Context) -> LyricsEntry {
+    LyricsEntry(
+      date: Date(), np: NowPlayingProvider.sample, art: nil, lines: Self.sampleLines, index: 2,
+      isSample: true)
+  }
+
+  func getSnapshot(in context: Context, completion: @escaping (LyricsEntry) -> Void) {
+    if let np = SharedStore.nowPlaying() {
+      let lines = SharedStore.lyrics(for: np)
+      let idx = lines.map { lyricIndex($0, at: np.elapsed(at: Date())) } ?? -1
+      completion(
+        LyricsEntry(date: Date(), np: np, art: SharedStore.artwork(), lines: lines, index: idx))
+    } else {
+      completion(placeholder(in: context))
+    }
+  }
+
+  func getTimeline(in context: Context, completion: @escaping (Timeline<LyricsEntry>) -> Void) {
+    let now = Date()
+    let np = SharedStore.nowPlaying()
+    let art = SharedStore.artwork()
+    let lines = SharedStore.lyrics(for: np)
+    guard let song = np, let ls = lines else {
+      completion(
+        Timeline(
+          entries: [LyricsEntry(date: now, np: np, art: art, lines: nil, index: -1)],
+          policy: .never))
+      return
+    }
+    let elapsedNow = song.elapsed(at: now)
+    let current = lyricIndex(ls, at: elapsedNow)
+    var entries = [LyricsEntry(date: now, np: song, art: art, lines: ls, index: current)]
+    guard song.isPlaying, song.duration > 0, song.isLive != true else {
+      // paused: the line where it stopped; the app reloads us on resume / seek
+      completion(Timeline(entries: entries, policy: .never))
+      return
+    }
+    // Playing: an entry at the start of every upcoming line — WidgetKit swaps them on time, so
+    // the lyrics follow the music without the app doing anything
+    let start = song.startDate
+    let end = song.endDate
+    var i = current + 1
+    while i < ls.count && entries.count < 240 {
+      let at = start.addingTimeInterval(ls[i].t)
+      if at >= end { break }
+      if at > now {
+        entries.append(LyricsEntry(date: at, np: song, art: art, lines: ls, index: i))
+      }
+      i += 1
+    }
+    var policy: TimelineReloadPolicy = .never
+    if i < ls.count && entries.count >= 240, let last = entries.last {
+      // very long lyrics: ask for the rest when this batch runs out
+      policy = .after(last.date)
+    } else {
+      var ended = song
+      ended.isPlaying = false
+      ended.position = song.duration
+      ended.updatedAt = end.timeIntervalSince1970
+      entries.append(
+        LyricsEntry(
+          date: max(end, now.addingTimeInterval(1)), np: ended, art: art, lines: ls,
+          index: ls.count - 1))
+    }
+    completion(Timeline(entries: entries, policy: policy))
+  }
+}
+
+/// A lyric line as shown: instrumental gaps and "before the first line" become a note
+func lyricText(_ lines: [LyricLine], _ i: Int) -> String? {
+  guard i >= 0, i < lines.count else { return nil }
+  let x = lines[i].x.trimmingCharacters(in: .whitespacesAndNewlines)
+  return x.isEmpty ? "♪" : x
+}
+
+/// What to say when there is no timed lyrics pack
+func lyricsMessage(_ np: NowPlaying) -> (icon: String, text: String) {
+  let vi = np.vi
+  if np.isLive == true {
+    return ("dot.radiowaves.left.and.right", vi ? "Radio trực tiếp — không có lời" : "Live radio — no lyrics")
+  }
+  switch np.lyricsState ?? "none" {
+  case "loading", "synced":
+    return ("text.bubble", vi ? "Đang tìm lời bài hát…" : "Finding lyrics…")
+  case "plain":
+    return ("text.alignleft", vi ? "Bài này chỉ có lời không đồng bộ — chạm để xem" : "Only unsynced lyrics — tap to read")
+  default:
+    return ("music.quarternote.3", vi ? "Không có lời — thưởng thức giai điệu nhé" : "No lyrics — enjoy the music")
+  }
+}
+
+/// previous · current · next lines, the current one big
+struct LyricStack: View {
+  let lines: [LyricLine]
+  let index: Int
+  let accent: Color
+  var before = 1
+  var after = 1
+  var currentSize: CGFloat = 17
+  var otherSize: CGFloat = 12.5
+  var currentLines = 2
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: currentSize * 0.32) {
+      ForEach(Array(stride(from: index - before, to: index, by: 1)), id: \.self) { i in
+        if let t = lyricText(lines, i) {
+          Text(t)
+            .font(.system(size: otherSize, weight: .semibold, design: .rounded))
+            .foregroundColor(.white.opacity(0.38))
+            .lineLimit(1)
+        }
+      }
+      Text(index >= 0 ? (lyricText(lines, index) ?? "♪") : "♪ ♪ ♪")
+        .font(.system(size: currentSize, weight: .heavy, design: .rounded))
+        .foregroundColor(.white)
+        .lineLimit(currentLines)
+        .minimumScaleFactor(0.78)
+        .shadow(color: accent.opacity(0.55), radius: 10, x: 0, y: 0)
+        .fixedSize(horizontal: false, vertical: true)
+      ForEach(Array(stride(from: index + 1, through: index + after, by: 1)), id: \.self) { i in
+        if let t = lyricText(lines, i) {
+          Text(t)
+            .font(.system(size: otherSize, weight: .semibold, design: .rounded))
+            .foregroundColor(.white.opacity(i - index == 1 ? 0.6 : 0.4))
+            .lineLimit(1)
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+struct LyricsMessageView: View {
+  let np: NowPlaying
+  let accent: Color
+  var size: CGFloat = 14
+
+  var body: some View {
+    let m = lyricsMessage(np)
+    HStack(alignment: .top, spacing: 8) {
+      Image(systemName: m.icon)
+        .font(.system(size: size, weight: .bold))
+        .foregroundColor(accent)
+      Text(m.text)
+        .font(.system(size: size, weight: .semibold, design: .rounded))
+        .foregroundColor(.white.opacity(0.78))
+        .lineLimit(3)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+/// small cover + title + artist row
+struct SongHeader: View {
+  let np: NowPlaying
+  let art: UIImage?
+  let theme: Theme
+  var cover: CGFloat = 30
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Cover(art: art, theme: theme, corner: cover * 0.28)
+        .frame(width: cover, height: cover)
+      VStack(alignment: .leading, spacing: 0) {
+        Text(np.title)
+          .font(.system(size: cover > 36 ? 14 : 12.5, weight: .bold, design: .rounded))
+          .foregroundColor(.white)
+          .lineLimit(1)
+        Text(np.artist)
+          .font(.system(size: cover > 36 ? 11.5 : 10.5, weight: .medium))
+          .foregroundColor(.white.opacity(0.62))
+          .lineLimit(1)
+      }
+      Spacer(minLength: 4)
+      Image(systemName: np.isPlaying ? "waveform" : "pause.fill")
+        .font(.system(size: 10, weight: .bold))
+        .foregroundColor(theme.accent)
+        .padding(6)
+        .background(Circle().fill(Color.white.opacity(0.12)))
+    }
+  }
+}
+
+struct LyricsSmallView: View {
+  let entry: LyricsEntry
+  let np: NowPlaying
+
+  var body: some View {
+    let theme = Theme(np)
+    VStack(alignment: .leading, spacing: 0) {
+      HStack(spacing: 5) {
+        Image(systemName: "quote.bubble.fill")
+          .font(.system(size: 10, weight: .bold))
+          .foregroundColor(theme.accent)
+        Text(np.vi ? "LỜI BÀI HÁT" : "LYRICS")
+          .font(.system(size: 9, weight: .heavy))
+          .tracking(0.7)
+          .foregroundColor(.white.opacity(0.6))
+        Spacer(minLength: 0)
+      }
+      Spacer(minLength: 6)
+      if let lines = entry.lines {
+        LyricStack(
+          lines: lines, index: entry.index, accent: theme.accent, before: 0, after: 1,
+          currentSize: 15, otherSize: 11, currentLines: 4)
+      } else {
+        LyricsMessageView(np: np, accent: theme.accent, size: 12.5)
+      }
+      Spacer(minLength: 6)
+      Text("\(np.title) · \(np.artist)")
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundColor(.white.opacity(0.55))
+        .lineLimit(1)
+      ProgressBar(np: np, date: entry.date, accent: theme.accent, showTimes: false)
+        .padding(.top, 5)
+    }
+    .padding(13)
+    .widgetURL(deepLink("lyrics"))
+  }
+}
+
+struct LyricsMediumView: View {
+  let entry: LyricsEntry
+  let np: NowPlaying
+
+  var body: some View {
+    let theme = Theme(np)
+    VStack(alignment: .leading, spacing: 0) {
+      SongHeader(np: np, art: entry.art, theme: theme, cover: 30)
+      Spacer(minLength: 6)
+      if let lines = entry.lines {
+        LyricStack(
+          lines: lines, index: entry.index, accent: theme.accent, before: 1, after: 1,
+          currentSize: 17, otherSize: 12, currentLines: 2)
+      } else {
+        LyricsMessageView(np: np, accent: theme.accent, size: 14)
+      }
+      Spacer(minLength: 6)
+      ProgressBar(np: np, date: entry.date, accent: theme.accent, showTimes: false)
+    }
+    .padding(14)
+    .widgetURL(deepLink("lyrics"))
+  }
+}
+
+struct LyricsLargeView: View {
+  let entry: LyricsEntry
+  let np: NowPlaying
+
+  var body: some View {
+    let theme = Theme(np)
+    VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        Wordmark(size: 12)
+        Spacer()
+        StateBadge(np: np, accent: theme.accent)
+      }
+      SongHeader(np: np, art: entry.art, theme: theme, cover: 44)
+        .padding(.top, 12)
+      Spacer(minLength: 10)
+      if let lines = entry.lines {
+        LyricStack(
+          lines: lines, index: entry.index, accent: theme.accent, before: 2, after: 4,
+          currentSize: 22, otherSize: 14.5, currentLines: 3)
+      } else {
+        LyricsMessageView(np: np, accent: theme.accent, size: 16)
+      }
+      Spacer(minLength: 10)
+      ProgressBar(np: np, date: entry.date, accent: theme.accent)
+      Controls(np: np, size: 16)
+        .padding(.horizontal, 6)
+        .padding(.top, 4)
+    }
+    .padding(16)
+    .widgetURL(deepLink("lyrics"))
+  }
+}
+
+@available(iOSApplicationExtension 16.0, *)
+struct LyricsAccessoryView: View {
+  let entry: LyricsEntry
+  let family: WidgetFamily
+
+  var body: some View {
+    Group {
+      if let np = entry.np {
+        let line: String = {
+          if let lines = entry.lines {
+            return entry.index >= 0 ? (lyricText(lines, entry.index) ?? "♪") : "♪ ♪ ♪"
+          }
+          return lyricsMessage(np).text
+        }()
+        if family == .accessoryInline {
+          Label(line, systemImage: "quote.bubble")
+        } else {
+          VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+              Image(systemName: "quote.bubble.fill").font(.system(size: 10, weight: .bold))
+              Text(np.title).font(.system(size: 11, weight: .heavy)).lineLimit(1)
+                .widgetAccentable()
+            }
+            Text(line)
+              .font(.system(size: 14, weight: .bold, design: .rounded))
+              .lineLimit(2)
+              .minimumScaleFactor(0.8)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        }
+      } else {
+        Label("HolySic", systemImage: "quote.bubble")
+      }
+    }
+    .widgetURL(deepLink("lyrics"))
+  }
+}
+
+struct HolySicLyricsEntryView: View {
+  @Environment(\.widgetFamily) var family
+  let entry: LyricsEntry
+
+  var body: some View {
+    content
+  }
+
+  @ViewBuilder var content: some View {
+    if isAccessory {
+      accessory.widgetBackground { Color.clear }
+    } else if let np = entry.np {
+      let theme = Theme(np)
+      Group {
+        switch family {
+        case .systemMedium: LyricsMediumView(entry: entry, np: np)
+        case .systemLarge, .systemExtraLarge: LyricsLargeView(entry: entry, np: np)
+        default: LyricsSmallView(entry: entry, np: np)
+        }
+      }
+      // the lyrics read over a darker, more blurred cover
+      .widgetBackground { ArtBackdrop(theme: theme, art: entry.art, artOpacity: 0.42) }
+    } else {
+      EmptyStateView(compact: family == .systemSmall)
+        .widgetURL(deepLink("open"))
+        .widgetBackground { ArtBackdrop(theme: Theme(nil), art: nil) }
+    }
+  }
+
+  var isAccessory: Bool {
+    if #available(iOSApplicationExtension 16.0, *) {
+      return family == .accessoryRectangular || family == .accessoryInline
+    }
+    return false
+  }
+
+  @ViewBuilder var accessory: some View {
+    if #available(iOSApplicationExtension 16.0, *) {
+      LyricsAccessoryView(entry: entry, family: family)
+    } else {
+      EmptyView()
+    }
+  }
+}
+
+struct HolySicLyricsWidget: Widget {
+  let kind = "HolySicLyrics"
+
+  var families: [WidgetFamily] {
+    var f: [WidgetFamily] = [.systemSmall, .systemMedium, .systemLarge]
+    if #available(iOSApplicationExtension 16.0, *) {
+      f += [.accessoryRectangular, .accessoryInline]
+    }
+    return f
+  }
+
+  var body: some WidgetConfiguration {
+    StaticConfiguration(kind: kind, provider: LyricsProvider()) { entry in
+      HolySicLyricsEntryView(entry: entry)
+    }
+    .configurationDisplayName("HolySic · Lời bài hát")
+    .description("Lời bài hát chạy theo nhạc, ngay trên màn hình chính và màn hình khoá.")
+    .supportedFamilies(families)
+    .contentMarginsDisabledIfAvailable()
+  }
+}
+
 // MARK: - Widget
 
 struct HolySicWidget: Widget {
@@ -830,5 +1273,6 @@ struct HolySicWidget: Widget {
 struct HolySicWidgetBundle: WidgetBundle {
   var body: some Widget {
     HolySicWidget()
+    HolySicLyricsWidget()
   }
 }
