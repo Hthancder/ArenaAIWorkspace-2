@@ -89,7 +89,7 @@ export const StorageService = {
   savePlaylists: (playlists: Playlist[]) => writeJson(KEYS.PLAYLISTS, playlists),
 
   loadHistory: () => readJson<ListeningEvent[]>(KEYS.HISTORY, []),
-  saveHistory: (events: ListeningEvent[]) => writeJson(KEYS.HISTORY, events.slice(0, 250)),
+  saveHistory: (events: ListeningEvent[]) => writeJson(KEYS.HISTORY, events.slice(0, 600)),
 
   loadAudioLab: async (): Promise<AudioLabSettings> => {
     const saved = await readJson<Partial<AudioLabSettings>>(KEYS.AUDIOLAB, {});

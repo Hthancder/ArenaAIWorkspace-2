@@ -2,7 +2,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
@@ -19,6 +19,13 @@ import { AmbientSpill, useAmbientColors } from '../ambient/AmbientLight';
 import { searchStations } from '../../services/discovery/radioBrowser';
 import { AUDIUS_GENRES, fetchAudiusTrending } from '../../services/providers/audiusProvider';
 import { LocalLibrary } from '../../services/local/localLibrary';
+import { useLocalLibrary } from '../local/LocalLibraryScreen';
+import {
+  forgotten,
+  mostPlayed,
+  recentlyAdded,
+  ShelfItem,
+} from '../../services/library/smartShelves';
 
 export const HomeScreen: React.FC = () => {
   const {
@@ -49,6 +56,22 @@ export const HomeScreen: React.FC = () => {
   } = useHolySic();
 
   const ambientColors = useAmbientColors();
+  const vi = prefs.language === 'vi';
+  const localState = useLocalLibrary();
+  const shelfTop = useMemo(() => mostPlayed(history, vi), [history, vi]);
+  const shelfOld = useMemo(() => forgotten(history, likedTracks, vi), [history, likedTracks, vi]);
+  const shelfNew = useMemo(
+    () =>
+      recentlyAdded(
+        {
+          local: localState.files.map((f) => ({ track: f.track, addedAt: f.meta.addedAt })),
+          downloads,
+          liked: likedTracks,
+        },
+        vi
+      ),
+    [localState.files, downloads, likedTracks, vi]
+  );
   const shown = (id: HomeSectionId) => !prefs.hiddenHomeSections.includes(id);
   const country = CHART_COUNTRIES.find((c) => c.code === prefs.chartCountry) || CHART_COUNTRIES[0];
   const globalCode = country.code === 'us' ? 'gb' : 'us';
@@ -105,7 +128,6 @@ export const HomeScreen: React.FC = () => {
   const [moodTracks, setMoodTracks] = useState<Track[] | null>(null);
   const [loadingMood, setLoadingMood] = useState(false);
 
-  const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
   const hour = new Date().getHours();
@@ -397,6 +419,56 @@ export const HomeScreen: React.FC = () => {
         </>
       )}
 
+      {/* Smart shelves: computed from your own listening, on the device */}
+      {shown('smartNew') && (
+        <SmartShelf
+          title={vi ? 'Mới thêm' : 'Recently added'}
+          items={shelfNew}
+          fontFamily={fontFamily}
+          accent={palette.accent}
+          onAccent={palette.onAccent}
+          onPlay={(i) =>
+            playTrack(
+              shelfNew[i].track,
+              shelfNew.map((x) => x.track)
+            )
+          }
+        />
+      )}
+      {shown('smartTop') && (
+        <SmartShelf
+          title={vi ? 'Nghe nhiều' : 'Most played'}
+          hint={vi ? '30 ngày qua' : 'Last 30 days'}
+          items={shelfTop}
+          fontFamily={fontFamily}
+          accent={palette.accent}
+          onAccent={palette.onAccent}
+          rank
+          onPlay={(i) =>
+            playTrack(
+              shelfTop[i].track,
+              shelfTop.map((x) => x.track)
+            )
+          }
+        />
+      )}
+      {shown('smartForgotten') && (
+        <SmartShelf
+          title={vi ? 'Lâu chưa nghe' : 'Not played in a while'}
+          hint={vi ? 'Bài bạn từng mê' : 'Old favourites'}
+          items={shelfOld}
+          fontFamily={fontFamily}
+          accent={palette.accent}
+          onAccent={palette.onAccent}
+          onPlay={(i) =>
+            playTrack(
+              shelfOld[i].track,
+              shelfOld.map((x) => x.track)
+            )
+          }
+        />
+      )}
+
       {/* Featured Albums Shelf */}
       {shown('albums') && featuredAlbums.length > 0 && (
         <>
@@ -624,6 +696,60 @@ export const HomeScreen: React.FC = () => {
   );
 };
 
+/** A horizontal shelf of songs with a caption each (smart shelves). Hidden when empty. */
+const SmartShelf: React.FC<{
+  title: string;
+  hint?: string;
+  items: ShelfItem[];
+  fontFamily?: string;
+  accent: string;
+  onAccent: string;
+  rank?: boolean;
+  onPlay: (index: number) => void;
+}> = ({ title, hint, items, fontFamily, accent, onAccent, rank, onPlay }) => {
+  if (items.length < 2) return null;
+  return (
+    <>
+      <View style={styles.sectionHeader}>
+        <SectionTitle fontFamily={fontFamily}>{title}</SectionTitle>
+        {hint ? <Text style={styles.shelfHint}>{hint}</Text> : null}
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.horizontalCards}
+      >
+        {items.map((it, i) => (
+          <Pressable
+            key={it.track.id}
+            onPress={() => onPlay(i)}
+            style={styles.squareCard}
+            accessibilityLabel={`${title}: ${it.track.title}`}
+          >
+            <View>
+              <ArtworkImage source={{ uri: it.track.artworkUrl }} style={styles.squareArt} />
+              {rank && i < 3 ? (
+                <View style={[styles.rankBadge, { backgroundColor: accent }]}>
+                  <Text style={[styles.rankText, { color: onAccent }]}>{i + 1}</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text numberOfLines={1} style={[styles.squareTitle, { fontFamily }]}>
+              {it.track.title}
+            </Text>
+            <Text numberOfLines={1} style={styles.squareSub}>
+              {it.track.artist}
+            </Text>
+            <Text numberOfLines={1} style={[styles.shelfNote, { color: accent }]}>
+              {it.note}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </>
+  );
+};
+
 const styles = StyleSheet.create({
   homeWash: { position: 'absolute', top: -40, left: -40, right: -40, height: 420 },
   logoBadgeHalo: { borderWidth: 1, borderColor: 'rgba(252,211,77,0.35)' },
@@ -830,6 +956,20 @@ const styles = StyleSheet.create({
   squareCard: {
     width: 142,
   },
+  shelfHint: { color: HOLYSIC_COLORS.textMuted, fontSize: 12, fontWeight: '600' },
+  shelfNote: { fontSize: 11, fontWeight: '700', marginTop: 3, opacity: 0.9 },
+  rankBadge: {
+    position: 'absolute',
+    left: 8,
+    top: 8,
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  rankText: { color: '#0A0A0E', fontSize: 12, fontWeight: '900' },
   squareArt: {
     width: 142,
     height: 142,

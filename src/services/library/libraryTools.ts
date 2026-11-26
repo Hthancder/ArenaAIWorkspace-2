@@ -135,7 +135,7 @@ export function mergeLibrary(
     return {
       likedTracks: incoming.likedTracks,
       playlists: incoming.playlists,
-      history: incoming.history.slice(0, 250),
+      history: incoming.history.slice(0, 600),
       searchHistory: incoming.searchHistory.slice(0, 15),
     };
   }
@@ -157,7 +157,7 @@ export function mergeLibrary(
       (h) => `${h.track.id}-${h.playedAt}`
     )
       .sort((a, b) => b.playedAt - a.playedAt)
-      .slice(0, 250),
+      .slice(0, 600),
     searchHistory: uniqueBy([...current.searchHistory, ...incoming.searchHistory], (s) =>
       s.toLowerCase()
     ).slice(0, 15),

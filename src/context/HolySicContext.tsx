@@ -956,7 +956,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const updated = [
           event,
           ...prev.filter((e) => e.track.id !== track.id || Date.now() - e.playedAt > 60000),
-        ].slice(0, 200);
+        ].slice(0, 600); // Recap + Home shelves (Most played, Not played in a while)
         StorageService.saveHistory(updated);
         return updated;
       });

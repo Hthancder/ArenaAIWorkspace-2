@@ -31,6 +31,9 @@ export type HomeSectionId =
   | 'global'
   | 'albums'
   | 'recent'
+  | 'smartNew'
+  | 'smartTop'
+  | 'smartForgotten'
   | 'genres'
   | 'radio'
   | 'audius';
