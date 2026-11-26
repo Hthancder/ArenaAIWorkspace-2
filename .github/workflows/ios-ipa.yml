@@ -130,14 +130,6 @@ jobs:
             echo "::warning title=ldid::ldid unavailable; the IPA has no embedded App Group (widget would show its empty state)"
           fi
 
-      - name: Package HolySic-iOS.ipa
-        run: |
-          mkdir -p Payload
-          APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
-          cp -R "$APP_PATH" Payload/
-          zip -qry HolySic-iOS-Unsigned.ipa Payload
-          ls -lh HolySic-iOS-Unsigned.ipa
-
       - name: Package HolySic-TrollStore.tipa (TROLLTROLL team id + widget container)
         run: |
           APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
@@ -145,26 +137,26 @@ jobs:
             bash scripts/ios/trollstore-sign.sh "$APP_PATH" ios/HolySic/HolySic.entitlements \
               ios/.targets/HolySicWidget/generated.entitlements HolySic-TrollStore.tipa
           else
-            echo "::warning title=TrollStore::ldid unavailable; no .tipa built"
+            echo "::error title=TrollStore::ldid unavailable; no .tipa built"
+            exit 1
           fi
+          ls -lh HolySic-TrollStore.tipa
 
       - name: Release notes (credits)
         run: |
           {
-            echo "## HolySic iOS — unsigned IPA"
+            echo "## HolySic iOS — TrollStore build"
             echo ""
-            echo "AltStore / SideStore: HolySic-iOS-Unsigned.ipa · TrollStore: HolySic-TrollStore.tipa (widget-ready). Minimum iOS 15.1."
+            echo "TrollStore: HolySic-TrollStore.tipa (widget-ready). Minimum iOS 15.1."
             echo ""
             echo "HolySic started life as a fork of **Mochy Music** by realidkroo — https://github.com/realidkroo/Mochy-Music (GPL-3.0)."
             echo "Merged ideas from Spotube, OpenSpot, Musike and Cog; see NOTICE for every credit."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload HolySic-iOS-Unsigned.ipa Artifact
+      - name: Upload HolySic-TrollStore.tipa Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HolySic-iOS-Unsigned-IPA
-          path: |
-            HolySic-iOS-Unsigned.ipa
-            HolySic-TrollStore.tipa
-          if-no-files-found: warn
+          name: HolySic-TrollStore
+          path: HolySic-TrollStore.tipa
+          if-no-files-found: error
           retention-days: 30
