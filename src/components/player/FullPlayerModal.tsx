@@ -323,6 +323,7 @@ export const FullPlayerModal: React.FC = () => {
               <Tap
                 hitSlop={8}
                 onPress={() => setPane((p) => (p === 'styles' ? 'artwork' : 'styles'))}
+                accessibilityLabel={vi ? 'Kiểu trình phát' : 'Player style'}
                 style={[
                   styles.styleChipBtn,
                   pane === 'styles' && { backgroundColor: palette.accent },
@@ -339,6 +340,7 @@ export const FullPlayerModal: React.FC = () => {
                 hitSlop={8}
                 onPress={() => setActionTrack(currentTrack)}
                 style={styles.topIconBtn}
+                accessibilityLabel={vi ? 'Tuỳ chọn bài hát' : 'Song options'}
               >
                 <Ionicons name="ellipsis-horizontal" size={21} color="#FFFFFF" />
               </Tap>
@@ -352,60 +354,75 @@ export const FullPlayerModal: React.FC = () => {
             ) : pane === 'queue' ? (
               <QueuePane onDone={() => setPane('artwork')} />
             ) : pane === 'sleep' ? (
-              <View style={styles.overlayCard}>
-                {/* scrolls on short screens (4" SE) instead of spilling over the title */}
-                <ScrollView showsVerticalScrollIndicator={false}>
-                  <Text style={[styles.paneTitle, { fontFamily, marginBottom: 6 }]}>
-                    {vi ? 'Hẹn giờ tắt nhạc' : 'Sleep Timer'}
-                  </Text>
-                  <Text style={styles.subHelper}>
-                    {sleepEndOfTrack
-                      ? vi
-                        ? 'Đang bật: Tự dừng khi hết bài hiện tại'
-                        : 'Active: Stops after current song'
-                      : sleepRemainingSec !== null
-                        ? vi
-                          ? `Còn lại: ${formatTimeSec(sleepRemainingSec)}`
-                          : `Remaining: ${formatTimeSec(sleepRemainingSec)}`
-                        : vi
-                          ? 'Chọn thời gian để HolySic tự động dừng phát nhạc'
-                          : 'Choose when HolySic gently pauses playback'}
-                  </Text>
-                  <View style={styles.sleepGrid}>
-                    {[5, 15, 30, 45, 60].map((mins) => (
+              // sized to its content and centred on the stage (a floating card, not a blank page)
+              <View style={styles.centerStage}>
+                <View style={[styles.overlayCard, styles.overlayCardFit]}>
+                  <View>
+                    <View style={styles.paneHeaderRow}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                        <Ionicons name="moon" size={18} color={palette.accent} />
+                        <Text style={[styles.paneTitle, { fontFamily }]}>
+                          {vi ? 'Hẹn giờ tắt nhạc' : 'Sleep Timer'}
+                        </Text>
+                      </View>
                       <Tap
-                        key={mins}
+                        feedback="opacity"
+                        hitSlop={10}
+                        onPress={() => setPane('artwork')}
+                        accessibilityLabel={vi ? 'Đóng' : 'Close'}
+                      >
+                        <Ionicons name="close" size={22} color="#FFF" />
+                      </Tap>
+                    </View>
+                    <Text style={styles.subHelper}>
+                      {sleepEndOfTrack
+                        ? vi
+                          ? 'Đang bật: Tự dừng khi hết bài hiện tại'
+                          : 'Active: Stops after current song'
+                        : sleepRemainingSec !== null
+                          ? vi
+                            ? `Còn lại: ${formatTimeSec(sleepRemainingSec)}`
+                            : `Remaining: ${formatTimeSec(sleepRemainingSec)}`
+                          : vi
+                            ? 'Chọn thời gian để HolySic tự động dừng phát nhạc'
+                            : 'Choose when HolySic gently pauses playback'}
+                    </Text>
+                    <View style={styles.sleepGrid}>
+                      {[5, 15, 30, 45, 60].map((mins) => (
+                        <Tap
+                          key={mins}
+                          onPress={() => {
+                            setSleepTimer(mins);
+                            setPane('artwork');
+                          }}
+                          style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
+                        >
+                          <Text style={styles.sleepOptionText}>
+                            {mins} {vi ? 'phút' : 'min'}
+                          </Text>
+                        </Tap>
+                      ))}
+                      <Tap
                         onPress={() => {
-                          setSleepTimer(mins);
+                          setSleepTimer('end_of_track');
                           setPane('artwork');
                         }}
                         style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
                       >
                         <Text style={styles.sleepOptionText}>
-                          {mins} {vi ? 'phút' : 'min'}
+                          {vi ? 'Hết bài này' : 'End of Song'}
                         </Text>
                       </Tap>
-                    ))}
-                    <Tap
-                      onPress={() => {
-                        setSleepTimer('end_of_track');
-                        setPane('artwork');
-                      }}
-                      style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
-                    >
-                      <Text style={styles.sleepOptionText}>
-                        {vi ? 'Hết bài này' : 'End of Song'}
-                      </Text>
-                    </Tap>
+                    </View>
+                    {(sleepRemainingSec !== null || sleepEndOfTrack) && (
+                      <Tap onPress={() => setSleepTimer(null)} style={styles.turnOffSleepBtn}>
+                        <Text style={{ color: '#F87171', fontWeight: '700' }}>
+                          {vi ? 'Tắt hẹn giờ' : 'Turn Off Timer'}
+                        </Text>
+                      </Tap>
+                    )}
                   </View>
-                  {(sleepRemainingSec !== null || sleepEndOfTrack) && (
-                    <Tap onPress={() => setSleepTimer(null)} style={styles.turnOffSleepBtn}>
-                      <Text style={{ color: '#F87171', fontWeight: '700' }}>
-                        {vi ? 'Tắt hẹn giờ' : 'Turn Off Timer'}
-                      </Text>
-                    </Tap>
-                  )}
-                </ScrollView>
+                </View>
               </View>
             ) : pane === 'diagnostics' ? (
               <View style={styles.overlayCard}>
@@ -470,7 +487,7 @@ export const FullPlayerModal: React.FC = () => {
               <View style={styles.overlayCard}>
                 <View style={styles.paneHeaderRow}>
                   <Text style={[styles.paneTitle, { fontFamily }]}>
-                    {vi ? 'Chọn giao diện Player HolySic' : 'HolySic Player Presets'}
+                    {vi ? 'Giao diện trình phát' : 'Player style'}
                   </Text>
                   <Tap onPress={() => setPane('artwork')}>
                     <Ionicons name="close" size={22} color="#FFF" />
@@ -1072,6 +1089,8 @@ const styles = StyleSheet.create({
     width: 6,
     borderRadius: 3,
   },
+  centerStage: { flex: 1, justifyContent: 'center' },
+  overlayCardFit: { flexGrow: 0, flexShrink: 1, flexBasis: 'auto', maxHeight: '100%' },
   overlayCard: {
     flex: 1,
     backgroundColor: 'rgba(12, 12, 18, 0.72)',

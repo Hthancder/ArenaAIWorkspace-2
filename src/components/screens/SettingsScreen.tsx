@@ -416,7 +416,7 @@ export const SettingsScreen: React.FC = () => {
 
         {/* Font Customizer */}
         <Text style={[styles.inlineSubLabel, { marginTop: 10 }]}>
-          {vi ? 'Phông chữ ứng dụng (App Font)' : 'App Typography'}
+          {vi ? 'Phông chữ' : 'Typography'}
         </Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 6 }}>

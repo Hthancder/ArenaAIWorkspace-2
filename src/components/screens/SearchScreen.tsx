@@ -18,14 +18,14 @@ import { T as UI, themedSheet } from '../../theme/ui';
 import { useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
 
-const SOURCE_FILTERS: { id: 'all' | MusicSourceId; label: string }[] = [
-  { id: 'all', label: 'All Sources' },
-  { id: 'jiosaavn', label: 'JioSaavn 320k' },
-  { id: 'monochrome', label: 'Monochrome FLAC' },
-  { id: 'innertube', label: 'InnerTube YT' },
-  { id: 'itunes', label: 'Apple Catalog' },
-  { id: 'audius', label: 'Audius Indie' },
-  { id: 'radio', label: 'Radio Live' },
+const SOURCE_FILTERS: { id: 'all' | MusicSourceId; vi: string; en: string }[] = [
+  { id: 'all', vi: 'Tất cả', en: 'All' },
+  { id: 'innertube', vi: 'YouTube Music', en: 'YouTube Music' },
+  { id: 'monochrome', vi: 'Lossless FLAC', en: 'Lossless FLAC' },
+  { id: 'jiosaavn', vi: 'JioSaavn', en: 'JioSaavn' },
+  { id: 'itunes', vi: 'Apple Music', en: 'Apple Music' },
+  { id: 'audius', vi: 'Audius (indie)', en: 'Audius (indie)' },
+  { id: 'radio', vi: 'Radio', en: 'Radio' },
 ];
 
 const FEATURED_ARTISTS = [
@@ -52,6 +52,7 @@ export const SearchScreen: React.FC = () => {
     openMusicLink,
     openImport,
     searchSuggestions,
+    haptic,
   } = useHolySic();
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [linkBusy, setLinkBusy] = useState(false);
@@ -239,7 +240,10 @@ export const SearchScreen: React.FC = () => {
             return (
               <Tap
                 key={f.id}
-                onPress={() => setSourceFilter(f.id)}
+                onPress={() => {
+                  haptic('selection');
+                  setSourceFilter(f.id);
+                }}
                 style={[
                   styles.filterPill,
                   active && {
@@ -254,7 +258,7 @@ export const SearchScreen: React.FC = () => {
                     { color: active ? palette.onAccent : UI.fg(0.88) },
                   ]}
                 >
-                  {f.label}
+                  {vi ? f.vi : f.en}
                 </Text>
               </Tap>
             );
@@ -346,8 +350,8 @@ export const SearchScreen: React.FC = () => {
                 <Ionicons name="musical-notes" size={36} color={UI.text3} />
                 <Text style={styles.emptyText}>
                   {vi
-                    ? 'Không tìm thấy kết quả trên nguồn đã chọn. Hãy thử "All Sources"!'
-                    : 'No results on this source filter. Try switching to All Sources!'}
+                    ? 'Không tìm thấy kết quả trên nguồn đã chọn. Hãy thử "Tất cả"!'
+                    : 'No results on this source. Try "All"!'}
                 </Text>
               </View>
             )}

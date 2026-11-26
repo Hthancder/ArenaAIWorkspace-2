@@ -197,9 +197,7 @@ export const TrackActionSheet: React.FC = () => {
                       }}
                     >
                       <Ionicons name="play-forward-outline" size={21} color={UI.text} />
-                      <Text style={styles.menuLabel}>
-                        {vi ? 'Phát kế tiếp (Play Next)' : 'Play Next'}
-                      </Text>
+                      <Text style={styles.menuLabel}>{vi ? 'Phát kế tiếp' : 'Play Next'}</Text>
                     </Tap>
 
                     <Tap
@@ -298,7 +296,7 @@ export const TrackActionSheet: React.FC = () => {
                               ? 'Xoá bản tải ngoại tuyến'
                               : 'Remove Offline Download'
                             : vi
-                              ? 'Tải xuống nghe ngoại tuyến (Offline)'
+                              ? 'Tải xuống để nghe offline'
                               : 'Download for Offline Playback'}
                         </Text>
                       </Tap>

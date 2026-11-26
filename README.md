@@ -47,13 +47,11 @@ merged in from Spotube, OpenSpot, Musike and Cog. All original notices are kept 
 - **Haptics** ở mọi thao tác chính, điều khiển màn hình khoá / Dynamic Island
 
 #### 🧩 Không thấy widget? / Widget missing?
-**Cài đặt → Widget màn hình chính** sẽ cho biết chính xác tình trạng (đã liên kết · chưa đặt · thiếu extension · thiếu App Group).
 1. Mở app **ít nhất 1 lần**, rồi **khởi động lại iPhone** (iOS chỉ nạp widget mới sau khi app chạy).
 2. Nhấn giữ màn hình chính → **＋** (góc trên trái) → tìm **HolySic**.
 3. Nếu báo *thiếu extension*: khi cài bằng **Sideloadly** hãy **tắt** "Remove app extensions"; với **AltStore / SideStore** chọn **Keep App Extensions**. Tài khoản Apple miễn phí chỉ có 3 App ID — app + widget cần 2.
 4. iOS 15 chưa có widget màn hình khoá (cần iOS 16+); widget màn hình chính vẫn dùng bình thường.
 5. **TrollStore**: cài **`HolySic-TrollStore.tipa`** (không dùng file `.ipa`). File này đã ký sẵn team `TROLLTROLL` và container riêng cho widget, thiếu hai thứ đó iOS không đăng ký widget. Sau khi cài: TrollStore → **Settings → Refresh App Registrations**, mở HolySic 1 lần rồi **khởi động lại**.
-6. Thẻ widget trong Cài đặt có dòng chẩn đoán (chạm để sao chép). Nếu ghi **"ran never"** thì iOS chưa từng chạy widget; hãy gửi dòng đó khi báo lỗi.
 
 ### 🔍 Tìm kiếm đa nguồn / Multi-Source Search
 - **YouTube Music InnerTube** (iOS / visionOS client)
