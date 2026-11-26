@@ -82,6 +82,11 @@ jobs:
           APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
           MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP_PATH/Info.plist")
           echo "::notice title=MinimumOSVersion::$MIN_OS"
+          if [ ! -s "$APP_PATH/main.jsbundle" ]; then
+            echo "::error title=JS bundle::main.jsbundle missing from $APP_PATH (app would launch to a blank screen)"
+            exit 1
+          fi
+          echo "::notice title=JS bundle::main.jsbundle $(du -h "$APP_PATH/main.jsbundle" | cut -f1) · $(head -c 4 "$APP_PATH/main.jsbundle" | xxd -p)"
           if [ "$(printf '%s\n' "$MIN_OS" "15.1" | sort -V | tail -n1)" != "15.1" ]; then
             echo "::error title=Deployment target::App requires iOS $MIN_OS (expected 15.1)"
             exit 1
