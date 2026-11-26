@@ -85,11 +85,11 @@ export interface ChartGenre {
 export const CHART_GENRES: ChartGenre[] = [
   { id: null, vi: 'Tất cả', en: 'All', icon: 'flame', tint: '#F472B6' },
   { id: 14, vi: 'Pop', en: 'Pop', icon: 'sparkles', tint: '#EC4899' },
-  { id: 18, vi: 'Hip-Hop / Rap', en: 'Hip-Hop / Rap', icon: 'mic', tint: '#F59E0B' },
+  { id: 18, vi: 'Hip-Hop', en: 'Hip-Hop', icon: 'mic', tint: '#F59E0B' },
   { id: 15, vi: 'R&B / Soul', en: 'R&B / Soul', icon: 'heart', tint: '#A855F7' },
   { id: 51, vi: 'K-Pop', en: 'K-Pop', icon: 'star', tint: '#38BDF8' },
   { id: 27, vi: 'J-Pop', en: 'J-Pop', icon: 'flower', tint: '#FB7185' },
-  { id: 20, vi: 'Alternative / Indie', en: 'Alternative', icon: 'leaf', tint: '#22C55E' },
+  { id: 20, vi: 'Indie', en: 'Indie', icon: 'leaf', tint: '#22C55E' },
   { id: 21, vi: 'Rock', en: 'Rock', icon: 'flash', tint: '#EF4444' },
   { id: 7, vi: 'Electronic', en: 'Electronic', icon: 'pulse', tint: '#06B6D4' },
   { id: 17, vi: 'Dance', en: 'Dance', icon: 'disc', tint: '#8B5CF6' },

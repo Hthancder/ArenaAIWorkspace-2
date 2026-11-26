@@ -6,6 +6,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -69,8 +70,40 @@ export const TrackActionSheet: React.FC = () => {
   // the sheet rises from the bottom on a native spring while the dimmer fades (UIKit sheet)
   const rise = useRef(new Animated.Value(1)).current;
   const open = Boolean(actionTrack);
+  // pull the sheet down to dismiss it (UISheetPresentationController): follows the finger,
+  // flings away past a threshold or a fast flick, otherwise springs back into place
+  const dragY = useRef(new Animated.Value(0)).current;
+  const dragRef = useRef({ close: () => {}, enabled: true });
+  const listTopRef = useRef(true);
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_e, g) =>
+        dragRef.current.enabled && listTopRef.current && g.dy > 8 && g.dy > Math.abs(g.dx) * 1.4,
+      onPanResponderMove: (_e, g) => dragY.setValue(g.dy > 0 ? g.dy : g.dy / 5),
+      onPanResponderRelease: (_e, g) => {
+        if (g.dy > 110 || g.vy > 0.9) {
+          Animated.timing(dragY, {
+            toValue: 700,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => dragRef.current.close());
+        } else {
+          Animated.spring(dragY, {
+            toValue: 0,
+            useNativeDriver: true,
+            speed: 18,
+            bounciness: 4,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () =>
+        Animated.spring(dragY, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start(),
+    })
+  ).current;
   useEffect(() => {
     if (!open) return;
+    dragY.setValue(0);
+    listTopRef.current = true;
     rise.setValue(1);
     Animated.spring(rise, {
       toValue: 0,
@@ -78,7 +111,7 @@ export const TrackActionSheet: React.FC = () => {
       speed: 15,
       bounciness: 5,
     }).start();
-  }, [open, rise]);
+  }, [open, rise, dragY]);
   const riseY = rise.interpolate({ inputRange: [0, 1], outputRange: [0, 140] });
 
   const shown = actionTrack || lastTrack;
@@ -93,6 +126,7 @@ export const TrackActionSheet: React.FC = () => {
     setNewPlaylistName('');
     setActionTrack(null);
   };
+  dragRef.current = { close, enabled: !pickingPlaylist };
   const closeThen = (fn: () => void) => {
     pendingRef.current = fn;
     close();
@@ -114,7 +148,10 @@ export const TrackActionSheet: React.FC = () => {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <Pressable style={styles.backdrop} onPress={close}>
-          <Animated.View style={{ transform: [{ translateY: riseY }] }}>
+          <Animated.View
+            style={{ transform: [{ translateY: Animated.add(riseY, dragY) }] }}
+            {...pan.panHandlers}
+          >
             <Tap feedback="none" style={styles.sheetOuter} onPress={(e) => e.stopPropagation?.()}>
               <GlassSurface
                 intensity={75}
@@ -188,7 +225,12 @@ export const TrackActionSheet: React.FC = () => {
                     </ScrollView>
                   </View>
                 ) : (
-                  <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+                  <ScrollView
+                    style={{ maxHeight: 360 }}
+                    showsVerticalScrollIndicator={false}
+                    scrollEventThrottle={32}
+                    onScroll={(e) => (listTopRef.current = e.nativeEvent.contentOffset.y <= 0)}
+                  >
                     <Tap
                       style={styles.menuItem}
                       onPress={() => {

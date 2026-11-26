@@ -1103,6 +1103,16 @@ class HolySicAudioEngine {
     this.setVolume(this.userVolume);
   }
 
+  /** Sleep-timer fade (1 = untouched): the last seconds before the timer stops play glide down */
+  private sleepFade = 1;
+
+  setSleepFade(f: number): void {
+    const next = Math.max(0, Math.min(1, Number.isFinite(f) ? f : 1));
+    if (Math.abs(next - this.sleepFade) < 0.005) return;
+    this.sleepFade = next;
+    this.applyVolume();
+  }
+
   setVolume(vol: number): void {
     this.userVolume = Math.max(0, Math.min(1, vol));
     this.applyVolume();
@@ -1131,8 +1141,8 @@ class HolySicAudioEngine {
   }
 
   private effectiveVolume(): number {
-    if (this.bitPerfect) return this.rampFactor;
-    return this.userVolume * this.gainMultiplier * this.rampFactor;
+    if (this.bitPerfect) return this.rampFactor * this.sleepFade;
+    return this.userVolume * this.gainMultiplier * this.rampFactor * this.sleepFade;
   }
 
   private applyVolume(): void {

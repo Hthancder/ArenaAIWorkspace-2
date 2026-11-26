@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -48,6 +49,7 @@ export const HomeScreen: React.FC = () => {
     history,
     isLoadingHome,
     refreshHomeFeeds,
+    haptic,
     playTrack,
     startInstantMix,
     openCollection,
@@ -181,12 +183,32 @@ export const HomeScreen: React.FC = () => {
     pickColumns.push(activePicks.slice(i, i + 3));
   }
 
+  const [pulling, setPulling] = useState(false);
+  const pullRefresh = () => {
+    if (pulling) return;
+    haptic('light');
+    setPulling(true);
+    refreshHomeFeeds()
+      .catch(() => {})
+      .finally(() => setPulling(false));
+  };
+
   return (
     <ScrollView
       ref={scrollRef}
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      // native UIRefreshControl: pull the page down to fetch fresh picks & charts
+      refreshControl={
+        <RefreshControl
+          refreshing={pulling}
+          onRefresh={pullRefresh}
+          tintColor={palette.accent}
+          colors={[palette.accent]}
+          progressBackgroundColor="#1A1A24"
+        />
+      }
     >
       {currentTrack && ambient.spill && !prefs.pureBlack && (
         <AmbientSpill
@@ -216,14 +238,31 @@ export const HomeScreen: React.FC = () => {
         </View>
 
         <View style={styles.headerActions}>
-          <Tap onPress={() => setIsAudioLabOpen(true)} style={styles.headerIconBtn}>
+          <Tap
+            onPress={() => setIsAudioLabOpen(true)}
+            style={styles.headerIconBtn}
+            accessibilityLabel={vi ? 'Âm thanh (Audio Lab)' : 'Audio Lab'}
+          >
             <Ionicons name="options-outline" size={20} color={UI.text} />
           </Tap>
-          <Tap onPress={() => setIsRecapOpen(true)} style={styles.headerIconBtn}>
+          <Tap
+            onPress={() => setIsRecapOpen(true)}
+            style={styles.headerIconBtn}
+            accessibilityLabel={vi ? 'Thống kê nghe nhạc' : 'Listening stats'}
+          >
             <Ionicons name="stats-chart" size={19} color={palette.accent} />
           </Tap>
-          <Tap onPress={refreshHomeFeeds} style={styles.headerIconBtn}>
-            <Ionicons name="refresh" size={19} color={UI.text} />
+          <Tap
+            onPress={pullRefresh}
+            disabled={isLoadingHome}
+            style={styles.headerIconBtn}
+            accessibilityLabel={vi ? 'Làm mới' : 'Refresh'}
+          >
+            {isLoadingHome ? (
+              <ActivityIndicator size="small" color={UI.text} />
+            ) : (
+              <Ionicons name="refresh" size={19} color={UI.text} />
+            )}
           </Tap>
         </View>
       </View>

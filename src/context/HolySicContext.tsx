@@ -381,6 +381,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const reloadLyrics = useCallback(() => setLyricsAttempt((n) => n + 1), []);
 
   const [sleepRemainingSec, setSleepRemainingSec] = useState<number | null>(null);
+  const sleepEndAtRef = useRef<number | null>(null);
   const [sleepEndOfTrack, setSleepEndOfTrack] = useState(false);
 
   const [likedTracks, setLikedTracks] = useState<Track[]>([]);
@@ -1238,27 +1239,38 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, queueIndex, isPlaying, sessionBucket, shuffle, repeatMode, prefs.resumeQueue]);
 
-  // Sleep Timer countdown
+  // Sleep Timer — counts against the wall clock (a throttled background timer can't drift it),
+  // and the final 20 s fade the music out gently instead of cutting it mid-phrase
+  const sleepActive = sleepRemainingSec !== null;
   useEffect(() => {
-    if (sleepRemainingSec === null || sleepRemainingSec <= 0) return;
-    const timer = setInterval(() => {
-      setSleepRemainingSec((prev) => {
-        if (prev === null) return null;
-        if (prev <= 1) {
-          audioEngine.pause();
-          setIsPlaying(false);
-          showToast(
-            prefsRef.current.language === 'vi'
-              ? 'Hẹn giờ ngủ đã tắt nhạc chúc bạn ngủ ngon >_<'
-              : 'Sleep timer paused playback — goodnight >_<'
-          );
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    if (!sleepActive) return;
+    const FADE_SEC = 20;
+    const tick = () => {
+      const end = sleepEndAtRef.current;
+      if (!end) return;
+      const left = (end - Date.now()) / 1000;
+      if (left <= 0) {
+        sleepEndAtRef.current = null;
+        audioEngine.pause();
+        setIsPlaying(false);
+        setSleepRemainingSec(null);
+        // restore the level once silent, so the next Play starts at the normal volume
+        setTimeout(() => audioEngine.setSleepFade(1), 400);
+        showToast(
+          prefsRef.current.language === 'vi'
+            ? 'Đã tắt nhạc theo hẹn giờ. Ngủ ngon nhé 🌙'
+            : 'Sleep timer paused playback. Goodnight 🌙'
+        );
+        return;
+      }
+      audioEngine.setSleepFade(left < FADE_SEC ? Math.max(0.04, left / FADE_SEC) : 1);
+      const secs = Math.ceil(left);
+      setSleepRemainingSec((prev) => (prev === secs ? prev : secs));
+    };
+    tick();
+    const timer = setInterval(tick, 250);
     return () => clearInterval(timer);
-  }, [sleepRemainingSec, showToast]);
+  }, [sleepActive, showToast]);
 
   const togglePlay = useCallback(() => {
     triggerHaptic('light');
@@ -1483,6 +1495,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const setSleepTimer = useCallback(
     (val: number | 'end_of_track' | null) => {
       triggerHaptic('selection');
+      audioEngine.setSleepFade(1);
+      sleepEndAtRef.current = typeof val === 'number' ? Date.now() + val * 60_000 : null;
       if (val === null) {
         setSleepRemainingSec(null);
         setSleepEndOfTrack(false);

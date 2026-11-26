@@ -49,6 +49,7 @@ export const MergedSettings: React.FC = () => {
     unblockTrack,
     blockArtist,
     showToast,
+    haptic,
   } = useHolySic();
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -114,8 +115,14 @@ export const MergedSettings: React.FC = () => {
             return (
               <Tap
                 key={a.id}
-                onPress={() => updatePrefs({ accentColor: a.color })}
+                onPress={() => {
+                  haptic('selection');
+                  updatePrefs({ accentColor: a.color });
+                }}
                 style={{ alignItems: 'center', width: 58 }}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={vi ? a.vi : a.en}
               >
                 <View
                   style={[
@@ -128,7 +135,12 @@ export const MergedSettings: React.FC = () => {
                     <Ionicons name="color-palette" size={16} color={UI.text} />
                   )}
                 </View>
-                <Text style={styles.swatchLabel} numberOfLines={1}>
+                <Text
+                  style={styles.swatchLabel}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                >
                   {vi ? a.vi : a.en}
                 </Text>
               </Tap>

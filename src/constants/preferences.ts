@@ -51,9 +51,9 @@ export const ACCENT_PRESETS: { id: string; color: string; vi: string; en: string
   { id: 'rose', color: '#FB7185', vi: 'Hồng', en: 'Rose' },
   { id: 'violet', color: '#A78BFA', vi: 'Tím', en: 'Violet' },
   { id: 'sky', color: '#38BDF8', vi: 'Xanh trời', en: 'Sky' },
-  { id: 'emerald', color: '#34D399', vi: 'Ngọc lục bảo', en: 'Emerald' },
+  { id: 'emerald', color: '#34D399', vi: 'Ngọc bích', en: 'Emerald' },
   { id: 'lime', color: '#A3E635', vi: 'Chanh', en: 'Lime' },
-  { id: 'amber', color: '#FBBF24', vi: 'Hổ phách', en: 'Amber' },
+  { id: 'amber', color: '#FBBF24', vi: 'Vàng', en: 'Amber' },
   { id: 'orange', color: '#FB923C', vi: 'Cam', en: 'Orange' },
   { id: 'spotify', color: '#1ED760', vi: 'Xanh lá', en: 'Green' },
 ];

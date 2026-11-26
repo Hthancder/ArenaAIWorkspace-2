@@ -53,6 +53,7 @@ export const SearchScreen: React.FC = () => {
     openImport,
     searchSuggestions,
     haptic,
+    isOnline,
   } = useHolySic();
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [linkBusy, setLinkBusy] = useState(false);
@@ -63,6 +64,8 @@ export const SearchScreen: React.FC = () => {
   const [results, setResults] = useState<Track[]>([]);
   const [albumResults, setAlbumResults] = useState<AlbumSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
   const isLink = looksLikeLink(query);
   const localState = useLocalLibrary();
   // Local Files matches show instantly, above the online results
@@ -89,10 +92,12 @@ export const SearchScreen: React.FC = () => {
     }
     let cancelled = false;
     const timer = setTimeout(() => {
-      searchSuggestions(q).then((s) => {
-        if (!cancelled)
-          setSuggestions(s.filter((x) => x.toLowerCase() !== q.toLowerCase()).slice(0, 6));
-      });
+      searchSuggestions(q)
+        .then((s) => {
+          if (!cancelled)
+            setSuggestions(s.filter((x) => x.toLowerCase() !== q.toLowerCase()).slice(0, 6));
+        })
+        .catch(() => {});
     }, 180);
     return () => {
       cancelled = true;
@@ -120,15 +125,29 @@ export const SearchScreen: React.FC = () => {
     }
 
     setLoading(true);
+    setSearchFailed(false);
+    // a slower, older search must never overwrite the results of what is typed now
+    let stale = false;
     const timer = setTimeout(async () => {
-      const res = await searchTracks(trimmed, sourceFilter);
-      setResults(res.tracks);
-      setAlbumResults(res.albums);
+      try {
+        const res = await searchTracks(trimmed, sourceFilter);
+        if (stale) return;
+        setResults(res.tracks);
+        setAlbumResults(res.albums);
+      } catch {
+        if (stale) return;
+        setResults([]);
+        setAlbumResults([]);
+        setSearchFailed(true);
+      }
       setLoading(false);
     }, 320);
 
-    return () => clearTimeout(timer);
-  }, [query, searchTracks, sourceFilter]);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+  }, [query, searchTracks, sourceFilter, retryTick]);
 
   const submitQuery = (q: string) => {
     setQuery(q);
@@ -347,12 +366,60 @@ export const SearchScreen: React.FC = () => {
 
             {!loading && results.length === 0 && localTracks.length === 0 && (
               <View style={styles.emptyWrap}>
-                <Ionicons name="musical-notes" size={36} color={UI.text3} />
+                <Ionicons
+                  name={
+                    !isOnline
+                      ? 'cloud-offline-outline'
+                      : searchFailed
+                        ? 'warning-outline'
+                        : 'musical-notes'
+                  }
+                  size={36}
+                  color={UI.text3}
+                />
                 <Text style={styles.emptyText}>
-                  {vi
-                    ? 'Không tìm thấy kết quả trên nguồn đã chọn. Hãy thử "Tất cả"!'
-                    : 'No results on this source. Try "All"!'}
+                  {!isOnline
+                    ? vi
+                      ? 'Bạn đang ngoại tuyến. Chỉ tìm được nhạc trên máy và bài đã tải về.'
+                      : 'You’re offline. Only music on this device and downloads can be found.'
+                    : searchFailed
+                      ? vi
+                        ? 'Không kết nối được tới nguồn nhạc.'
+                        : 'Couldn’t reach the music sources.'
+                      : sourceFilter !== 'all'
+                        ? vi
+                          ? 'Không tìm thấy trên nguồn này. Thử chọn "Tất cả" nhé.'
+                          : 'Nothing on this source. Try "All".'
+                        : vi
+                          ? `Không tìm thấy kết quả cho “${query.trim()}”. Thử từ khoá ngắn hơn hoặc bỏ dấu.`
+                          : `No results for “${query.trim()}”. Try fewer words.`}
                 </Text>
+                {(searchFailed || sourceFilter !== 'all') && isOnline && (
+                  <Tap
+                    onPress={() => {
+                      haptic('light');
+                      if (sourceFilter !== 'all') setSourceFilter('all');
+                      else setRetryTick((n) => n + 1);
+                    }}
+                    style={[styles.emptyAction, { borderColor: palette.accent + '55' }]}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons
+                      name={sourceFilter !== 'all' ? 'apps-outline' : 'refresh'}
+                      size={15}
+                      color={palette.accent}
+                    />
+                    <Text style={[styles.emptyActionText, { color: palette.accent }]}>
+                      {sourceFilter !== 'all'
+                        ? vi
+                          ? 'Tìm ở tất cả nguồn'
+                          : 'Search all sources'
+                        : vi
+                          ? 'Thử lại'
+                          : 'Try again'}
+                    </Text>
+                  </Tap>
+                )}
               </View>
             )}
           </>
@@ -691,6 +758,17 @@ const styles = themedSheet(() => ({
     paddingHorizontal: 32,
     gap: 10,
   },
+  emptyAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  emptyActionText: { fontSize: 13.5, fontWeight: '700' },
   emptyText: {
     color: UI.text2,
     fontSize: 14,

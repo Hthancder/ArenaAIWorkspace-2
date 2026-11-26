@@ -28,6 +28,7 @@ import { TrackRow } from '../TrackRow';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 import { exportPlaylistM3U } from '../../services/import/playlistFiles';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { EmptyState } from '../ui/EmptyState';
 import { Tap } from '../ui/Tap';
 
 export const CollectionModal: React.FC = () => {
@@ -54,7 +55,10 @@ export const CollectionModal: React.FC = () => {
     searchTracks,
     showToast,
     createPlaylist,
+    isOnline,
+    setActiveTab,
   } = useHolySic();
+  const [reloadTick, setReloadTick] = useState(0);
   useModalLayer('collection', Boolean(collectionTarget));
 
   // ── iOS navigation feel: the page is pushed in from the right, and a swipe from the left edge
@@ -149,20 +153,24 @@ export const CollectionModal: React.FC = () => {
     if (collectionTarget.kind === 'album') {
       if (collectionTarget.summary) setAlbumData(collectionTarget.summary);
       setLoading(true);
-      loadAlbumFull(collectionTarget.id).then((res) => {
-        if (!cancelled) {
-          if (res) setAlbumData(res);
-          setLoading(false);
-        }
-      });
+      loadAlbumFull(collectionTarget.id)
+        .then((res) => {
+          if (!cancelled && res) setAlbumData(res);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     } else if (collectionTarget.kind === 'artist') {
       setLoading(true);
-      loadArtistFull(collectionTarget.id || collectionTarget.name).then((res) => {
-        if (!cancelled) {
-          setArtistData(res);
-          setLoading(false);
-        }
-      });
+      loadArtistFull(collectionTarget.id || collectionTarget.name)
+        .then((res) => {
+          if (!cancelled) setArtistData(res);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     } else {
       setLoading(false);
     }
@@ -170,7 +178,7 @@ export const CollectionModal: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [collectionTarget, loadAlbumFull, loadArtistFull]);
+  }, [collectionTarget, loadAlbumFull, loadArtistFull, reloadTick]);
 
   if (!collectionTarget) return null;
   const vi = prefs.language === 'vi';
@@ -466,6 +474,71 @@ export const CollectionModal: React.FC = () => {
               <ActivityIndicator size="large" color={headerPalette.accent} />
             </View>
           )}
+
+          {!loading &&
+            allTracks.length === 0 &&
+            (collectionTarget.kind === 'album' || collectionTarget.kind === 'artist' ? (
+              <EmptyState
+                icon={isOnline ? 'cloud-outline' : 'cloud-offline-outline'}
+                accent={headerPalette.accent}
+                title={
+                  isOnline
+                    ? vi
+                      ? 'Chưa tải được danh sách bài'
+                      : 'Couldn’t load the songs'
+                    : vi
+                      ? 'Bạn đang ngoại tuyến'
+                      : 'You’re offline'
+                }
+                message={
+                  isOnline
+                    ? vi
+                      ? 'Nguồn nhạc đang chậm hoặc không phản hồi. Thử lại sau giây lát.'
+                      : 'The music source is slow or not answering. Try again in a moment.'
+                    : vi
+                      ? 'Kết nối mạng để xem bài hát của trang này.'
+                      : 'Connect to the internet to see this page’s songs.'
+                }
+                actionLabel={vi ? 'Thử lại' : 'Try again'}
+                actionIcon="refresh"
+                onAction={() => setReloadTick((n) => n + 1)}
+              />
+            ) : (
+              <EmptyState
+                icon={
+                  collectionTarget.kind === 'liked'
+                    ? 'heart-outline'
+                    : collectionTarget.kind === 'offline'
+                      ? 'cloud-download-outline'
+                      : 'musical-notes-outline'
+                }
+                accent={headerPalette.accent}
+                title={
+                  collectionTarget.kind === 'liked'
+                    ? vi
+                      ? 'Chưa có bài hát đã thích'
+                      : 'No liked songs yet'
+                    : collectionTarget.kind === 'offline'
+                      ? vi
+                        ? 'Chưa có bài tải về'
+                        : 'No downloads yet'
+                      : vi
+                        ? 'Playlist còn trống'
+                        : 'This playlist is empty'
+                }
+                message={
+                  vi
+                    ? 'Tìm một bài rồi mở menu ⋯ để thêm vào đây.'
+                    : 'Find a song, then use its ⋯ menu to add it here.'
+                }
+                actionLabel={vi ? 'Tìm nhạc' : 'Find music'}
+                actionIcon="search"
+                onAction={() => {
+                  goBack();
+                  setActiveTab('search');
+                }}
+              />
+            ))}
 
           {/* Tracklist */}
           {canFilter && (
