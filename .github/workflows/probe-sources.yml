@@ -19,4 +19,11 @@ jobs:
         with:
           node-version: '22'
       - name: Probe sources
-        run: node --openssl-legacy-provider scripts/probe-sources.mjs
+        run: |
+          node --openssl-legacy-provider scripts/probe-sources.mjs 2>&1 | tee probe.txt
+          # surface the report as annotations (readable through the check-runs API)
+          split -l 40 probe.txt part_
+          for f in part_*; do
+            msg=$(sed -e 's/%/%25/g' "$f" | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::notice title=probe ${f}::${msg}"
+          done
