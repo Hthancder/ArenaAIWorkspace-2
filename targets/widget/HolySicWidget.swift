@@ -292,10 +292,10 @@ struct EdgeToEdge17: ViewModifier {
 /// The widget writes when iOS last ran it into the App Group, so the app can tell
 /// "the extension really runs on this iPhone" apart from "it is only embedded".
 enum Heartbeat {
-  static func beat(_ where: String) {
+  static func beat(_ source: String) {
     guard let d = SharedStore.defaults else { return }
     d.set(Date().timeIntervalSince1970, forKey: "widgetPing")
-    d.set(where, forKey: "widgetPingFrom")
+    d.set(source, forKey: "widgetPingFrom")
     d.set(UIDevice.current.systemVersion, forKey: "widgetPingOS")
   }
 }

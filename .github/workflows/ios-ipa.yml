@@ -138,12 +138,22 @@ jobs:
           zip -qry HolySic-iOS-Unsigned.ipa Payload
           ls -lh HolySic-iOS-Unsigned.ipa
 
+      - name: Package HolySic-TrollStore.tipa (TROLLTROLL team id + widget container)
+        run: |
+          APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
+          if command -v ldid >/dev/null 2>&1; then
+            bash scripts/ios/trollstore-sign.sh "$APP_PATH" ios/HolySic/HolySic.entitlements \
+              ios/.targets/HolySicWidget/generated.entitlements HolySic-TrollStore.tipa
+          else
+            echo "::warning title=TrollStore::ldid unavailable; no .tipa built"
+          fi
+
       - name: Release notes (credits)
         run: |
           {
             echo "## HolySic iOS — unsigned IPA"
             echo ""
-            echo "Sideload with AltStore / SideStore / TrollStore. Minimum iOS 15.1."
+            echo "AltStore / SideStore: HolySic-iOS-Unsigned.ipa · TrollStore: HolySic-TrollStore.tipa (widget-ready). Minimum iOS 15.1."
             echo ""
             echo "HolySic started life as a fork of **Mochy Music** by realidkroo — https://github.com/realidkroo/Mochy-Music (GPL-3.0)."
             echo "Merged ideas from Spotube, OpenSpot, Musike and Cog; see NOTICE for every credit."
@@ -153,5 +163,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: HolySic-iOS-Unsigned-IPA
-          path: HolySic-iOS-Unsigned.ipa
+          path: |
+            HolySic-iOS-Unsigned.ipa
+            HolySic-TrollStore.tipa
+          if-no-files-found: warn
           retention-days: 30

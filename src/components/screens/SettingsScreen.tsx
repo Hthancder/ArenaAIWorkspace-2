@@ -3,16 +3,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
-import {
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Linking, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import {
   UPSTREAM_DISCORD_URL,
   UPSTREAM_ORIGIN_URL,
@@ -34,6 +25,8 @@ import { HolySicMarkIcon } from '../HolySicIcons';
 import { MergedSettings } from '../merge/MergedSettings';
 import { WidgetCardAnchor } from '../widget/widgetAnchor';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { useTabScrollToTop } from '../../services/ui/tabBus';
+import { Tap } from '../ui/Tap';
 
 export const SettingsScreen: React.FC = () => {
   const {
@@ -49,7 +42,7 @@ export const SettingsScreen: React.FC = () => {
     haptic,
     ambient,
   } = useHolySic();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useTabScrollToTop('settings');
   const scrollY = useRef(0);
 
   const [newServerUrl, setNewServerUrl] = useState('');
@@ -109,7 +102,7 @@ export const SettingsScreen: React.FC = () => {
               : 'iOS port built on top of Mochy Music by realidkroo · GPL-3.0 >_<'}
           </Text>
           <View style={styles.bannerLinksRow}>
-            <Pressable
+            <Tap
               onPress={() => Linking.openURL(UPSTREAM_ORIGIN_URL)}
               style={[styles.miniLinkPill, { backgroundColor: palette.accent }]}
             >
@@ -117,35 +110,35 @@ export const SettingsScreen: React.FC = () => {
               <Text style={{ color: palette.onAccent, fontSize: 12, fontWeight: '800' }}>
                 {vi ? 'Mã nguồn gốc' : 'Upstream'}
               </Text>
-            </Pressable>
-            <Pressable
+            </Tap>
+            <Tap
               onPress={() => Linking.openURL(UPSTREAM_DISCORD_URL)}
               style={styles.miniLinkPillGhost}
             >
               <Ionicons name="chatbubbles-outline" size={14} color={UI.text} />
               <Text style={{ color: UI.text, fontSize: 12, fontWeight: '700' }}>Discord</Text>
-            </Pressable>
+            </Tap>
           </View>
         </View>
       </View>
 
       {/* Quick Tools */}
       <View style={styles.quickRow}>
-        <Pressable onPress={() => setIsAudioLabOpen(true)} style={styles.quickToolCard}>
+        <Tap onPress={() => setIsAudioLabOpen(true)} style={styles.quickToolCard}>
           <Ionicons name="options" size={22} color={palette.accent} />
           <Text style={styles.quickToolTitle}>Audio Lab & EQ</Text>
           <Text style={styles.quickToolSub}>AutoEQ · 8D · Reverb</Text>
-        </Pressable>
+        </Tap>
 
-        <Pressable onPress={() => setIsRecapOpen(true)} style={styles.quickToolCard}>
+        <Tap onPress={() => setIsRecapOpen(true)} style={styles.quickToolCard}>
           <Ionicons name="id-card" size={22} color="#34D399" />
           <Text style={styles.quickToolTitle}>HolySic Recap ID</Text>
           <Text style={styles.quickToolSub}>Stats & Listener Card</Text>
-        </Pressable>
+        </Tap>
       </View>
 
       {/* Widget — easy to find: jumps to the widget card (preview, status, how to add) */}
-      <Pressable
+      <Tap
         onPress={jumpToWidget}
         style={[styles.widgetRow, { borderColor: palette.accent + '33' }]}
         accessibilityRole="button"
@@ -165,7 +158,7 @@ export const SettingsScreen: React.FC = () => {
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={UI.text3} />
-      </Pressable>
+      </Tap>
 
       {/* Language Switch */}
       <Text style={[styles.sectionTitle, { fontFamily }]}>
@@ -175,7 +168,7 @@ export const SettingsScreen: React.FC = () => {
         {(['vi', 'en'] as const).map((lang) => {
           const active = prefs.language === lang;
           return (
-            <Pressable
+            <Tap
               key={lang}
               onPress={() => {
                 haptic('selection');
@@ -191,7 +184,7 @@ export const SettingsScreen: React.FC = () => {
               >
                 {lang === 'vi' ? '🇻🇳 Tiếng Việt' : '🌐 English'}
               </Text>
-            </Pressable>
+            </Tap>
           );
         })}
       </View>
@@ -204,7 +197,7 @@ export const SettingsScreen: React.FC = () => {
         {PLAYER_STYLE_META.map((meta) => {
           const active = prefs.playerStyle === meta.id;
           return (
-            <Pressable
+            <Tap
               key={meta.id}
               onPress={() => {
                 haptic('selection');
@@ -227,7 +220,7 @@ export const SettingsScreen: React.FC = () => {
                 size={22}
                 color={active ? palette.accent : UI.text3}
               />
-            </Pressable>
+            </Tap>
           );
         })}
       </View>
@@ -254,7 +247,7 @@ export const SettingsScreen: React.FC = () => {
             ).map((o) => {
               const on = (prefs.themeMode || 'dark') === o.id;
               return (
-                <Pressable
+                <Tap
                   key={o.id}
                   onPress={() => updatePrefs({ themeMode: o.id })}
                   style={[
@@ -286,7 +279,7 @@ export const SettingsScreen: React.FC = () => {
                   <Text style={[styles.themeLabel, on && { color: palette.accent }]}>
                     {vi ? o.vi : o.en}
                   </Text>
-                </Pressable>
+                </Tap>
               );
             })}
           </View>
@@ -356,7 +349,7 @@ export const SettingsScreen: React.FC = () => {
             ).map(([id, label]) => {
               const selected = prefs.playerBackground === id;
               return (
-                <Pressable
+                <Tap
                   key={id}
                   onPress={() => updatePrefs({ playerBackground: id })}
                   style={[styles.smallOptionPill, selected && { backgroundColor: palette.accent }]}
@@ -370,7 +363,7 @@ export const SettingsScreen: React.FC = () => {
                   >
                     {label}
                   </Text>
-                </Pressable>
+                </Tap>
               );
             })}
           </View>
@@ -396,7 +389,7 @@ export const SettingsScreen: React.FC = () => {
           ).map(([id, label]) => {
             const selected = prefs.ambientLight === id;
             return (
-              <Pressable
+              <Tap
                 key={id}
                 onPress={() => updatePrefs({ ambientLight: id })}
                 style={[styles.smallOptionPill, selected && { backgroundColor: palette.accent }]}
@@ -410,7 +403,7 @@ export const SettingsScreen: React.FC = () => {
                 >
                   {label}
                 </Text>
-              </Pressable>
+              </Tap>
             );
           })}
         </View>
@@ -458,7 +451,7 @@ export const SettingsScreen: React.FC = () => {
             ).map(([id, label]) => {
               const selected = prefs.fontStyle === id;
               return (
-                <Pressable
+                <Tap
                   key={id}
                   onPress={() => updatePrefs({ fontStyle: id })}
                   style={[styles.smallOptionPill, selected && { backgroundColor: palette.accent }]}
@@ -472,7 +465,7 @@ export const SettingsScreen: React.FC = () => {
                   >
                     {label}
                   </Text>
-                </Pressable>
+                </Tap>
               );
             })}
           </View>
@@ -502,13 +495,13 @@ export const SettingsScreen: React.FC = () => {
           };
           return (
             <View key={modId} style={styles.moduleRow}>
-              <Pressable
+              <Tap
                 disabled={idx === 0}
                 onPress={() => moveModuleUp(idx)}
                 style={[styles.upBtn, idx === 0 && { opacity: 0.25 }]}
               >
                 <Ionicons name="arrow-up" size={16} color={UI.text} />
-              </Pressable>
+              </Tap>
               <Text style={[styles.moduleLabel, !enabled && { opacity: 0.45 }]}>
                 {idx + 1}. {labelMap[modId]}
               </Text>
@@ -578,7 +571,7 @@ export const SettingsScreen: React.FC = () => {
           />
         </View>
 
-        <Pressable
+        <Tap
           onPress={() => {
             haptic('selection');
             SourceMemory.clear();
@@ -590,7 +583,7 @@ export const SettingsScreen: React.FC = () => {
           <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>
             {vi ? 'Xoá bộ nhớ nguồn & cache FLAC' : 'Clear source memory & FLAC cache'}
           </Text>
-        </Pressable>
+        </Tap>
 
         {/* JioSaavn Bitrate Choice */}
         <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>JioSaavn Stream Bitrate</Text>
@@ -598,7 +591,7 @@ export const SettingsScreen: React.FC = () => {
           {(['320', '160', '96'] as JioSaavnQuality[]).map((q) => {
             const active = prefs.preferredJioSaavnQuality === q;
             return (
-              <Pressable
+              <Tap
                 key={q}
                 onPress={() => updatePrefs({ preferredJioSaavnQuality: q })}
                 style={[styles.smallOptionPill, active && { backgroundColor: palette.accent }]}
@@ -612,7 +605,7 @@ export const SettingsScreen: React.FC = () => {
                 >
                   AAC {q} kbps
                 </Text>
-              </Pressable>
+              </Tap>
             );
           })}
         </View>
@@ -621,7 +614,7 @@ export const SettingsScreen: React.FC = () => {
         <View style={styles.relaySection}>
           <View style={styles.relayTopRow}>
             <Text style={styles.inlineSubLabel}>Monochrome FLAC Servers</Text>
-            <Pressable
+            <Tap
               disabled={verifying}
               onPress={async () => {
                 setVerifying(true);
@@ -632,7 +625,7 @@ export const SettingsScreen: React.FC = () => {
               <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>
                 {verifying ? 'Checking…' : t(prefs.language, 'verifyServers')}
               </Text>
-            </Pressable>
+            </Tap>
           </View>
 
           {monochromeServers.map((srv) => (
@@ -663,9 +656,9 @@ export const SettingsScreen: React.FC = () => {
                 )}
               </View>
               {!srv.builtIn && (
-                <Pressable onPress={() => removeMonochromeServer(srv.url)}>
+                <Tap onPress={() => removeMonochromeServer(srv.url)}>
                   <Ionicons name="trash-outline" size={17} color="#F87171" />
-                </Pressable>
+                </Tap>
               )}
             </View>
           ))}
@@ -679,15 +672,15 @@ export const SettingsScreen: React.FC = () => {
               autoCapitalize="none"
               style={styles.srvInput}
             />
-            <Pressable
+            <Tap
               onPress={() => setNewServerKind((k) => (k === 'relay' ? 'streamer' : 'relay'))}
               style={styles.kindToggle}
             >
               <Text style={{ color: UI.text, fontSize: 11, fontWeight: '700' }}>
                 {newServerKind.toUpperCase()}
               </Text>
-            </Pressable>
-            <Pressable
+            </Tap>
+            <Tap
               onPress={async () => {
                 if (!newServerUrl.trim()) return;
                 await addMonochromeServer(newServerUrl, newServerKind);
@@ -696,7 +689,7 @@ export const SettingsScreen: React.FC = () => {
               style={[styles.addSrvBtn, { backgroundColor: palette.accent }]}
             >
               <Ionicons name="add" size={18} color={palette.onAccent} />
-            </Pressable>
+            </Tap>
           </View>
         </View>
       </View>
@@ -741,7 +734,7 @@ export const SettingsScreen: React.FC = () => {
         </Text>
 
         {UPSTREAM_CREDITS.map((credit) => (
-          <Pressable
+          <Tap
             key={credit.name}
             onPress={() => Linking.openURL(credit.url)}
             style={[
@@ -760,7 +753,7 @@ export const SettingsScreen: React.FC = () => {
               <Text style={styles.creditDesc}>{vi ? credit.roleVi : credit.roleEn}</Text>
             </View>
             <Ionicons name="open-outline" size={17} color={UI.text2} />
-          </Pressable>
+          </Tap>
         ))}
       </View>
     </ScrollView>

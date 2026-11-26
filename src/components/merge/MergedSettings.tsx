@@ -5,15 +5,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { ACCENT_PRESETS, HomeSectionId } from '../../constants/preferences';
 import { hexToHue, HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
@@ -25,6 +17,7 @@ import { WidgetSettingsCard } from '../widget/WidgetSettingsCard';
 import { BitPerfectCard } from '../audio/BitPerfectCard';
 import { CrossfadeCurvePreview } from '../audio/CrossfadeCurvePreview';
 import { CROSSFADE_CURVE_META } from '../../services/audio/crossfadeCurves';
+import { Tap } from '../ui/Tap';
 
 const HOME_SECTIONS: { id: HomeSectionId; vi: string; en: string }[] = [
   { id: 'quickActions', vi: 'Lối tắt nhanh', en: 'Quick actions' },
@@ -120,7 +113,7 @@ export const MergedSettings: React.FC = () => {
           {ACCENT_PRESETS.map((a) => {
             const active = prefs.accentColor === a.color;
             return (
-              <Pressable
+              <Tap
                 key={a.id}
                 onPress={() => updatePrefs({ accentColor: a.color })}
                 style={{ alignItems: 'center', width: 58 }}
@@ -139,7 +132,7 @@ export const MergedSettings: React.FC = () => {
                 <Text style={styles.swatchLabel} numberOfLines={1}>
                   {vi ? a.vi : a.en}
                 </Text>
-              </Pressable>
+              </Tap>
             );
           })}
         </View>
@@ -152,7 +145,7 @@ export const MergedSettings: React.FC = () => {
             autoCapitalize="none"
             style={[styles.input, { flex: 1 }]}
           />
-          <Pressable
+          <Tap
             onPress={() => {
               const hex = customHex.startsWith('#') ? customHex : `#${customHex}`;
               if (hexToHue(hex) === null) {
@@ -166,7 +159,7 @@ export const MergedSettings: React.FC = () => {
             <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
               {vi ? 'Dùng màu' : 'Apply'}
             </Text>
-          </Pressable>
+          </Tap>
         </View>
 
         <Text style={[styles.rowTitle, { marginTop: 16 }]}>
@@ -174,7 +167,7 @@ export const MergedSettings: React.FC = () => {
         </Text>
         <View style={styles.inline}>
           {(['card', 'capsule'] as const).map((s) => (
-            <Pressable
+            <Tap
               key={s}
               onPress={() => updatePrefs({ miniPlayerStyle: s })}
               style={[
@@ -194,7 +187,7 @@ export const MergedSettings: React.FC = () => {
                     ? 'Viên nang'
                     : 'Capsule'}
               </Text>
-            </Pressable>
+            </Tap>
           ))}
         </View>
 
@@ -269,7 +262,7 @@ export const MergedSettings: React.FC = () => {
             {[0, 2, 4, 6, 8, 12].map((sec) => {
               const on = prefs.crossfadeSec === sec;
               return (
-                <Pressable
+                <Tap
                   key={sec}
                   onPress={() => updatePrefs({ crossfadeSec: sec })}
                   style={[styles.cfChip, on && { backgroundColor: palette.accent }]}
@@ -278,7 +271,7 @@ export const MergedSettings: React.FC = () => {
                   <Text style={[styles.cfChipText, on && { color: palette.onAccent }]}>
                     {sec === 0 ? (vi ? 'Tắt' : 'Off') : `${sec}s`}
                   </Text>
-                </Pressable>
+                </Tap>
               );
             })}
           </View>
@@ -289,7 +282,7 @@ export const MergedSettings: React.FC = () => {
                 {CROSSFADE_CURVE_META.map((c) => {
                   const on = (prefs.crossfadeCurve || 'equalPower') === c.id;
                   return (
-                    <Pressable
+                    <Tap
                       key={c.id}
                       onPress={() => updatePrefs({ crossfadeCurve: c.id })}
                       style={[styles.cfChip, on && { backgroundColor: palette.accent }]}
@@ -298,7 +291,7 @@ export const MergedSettings: React.FC = () => {
                       <Text style={[styles.cfChipText, on && { color: palette.onAccent }]}>
                         {vi ? c.vi : c.en}
                       </Text>
-                    </Pressable>
+                    </Tap>
                   );
                 })}
               </View>
@@ -372,9 +365,9 @@ export const MergedSettings: React.FC = () => {
             <Text style={[styles.rowDesc, { flex: 1 }]}>
               {vi ? 'Đã kết nối' : 'Connected'}: {scrobble.listenBrainzUser || 'ListenBrainz'}
             </Text>
-            <Pressable onPress={() => disconnectScrobbler('listenbrainz')}>
+            <Tap onPress={() => disconnectScrobbler('listenbrainz')}>
               <Text style={styles.danger}>{vi ? 'Ngắt' : 'Disconnect'}</Text>
-            </Pressable>
+            </Tap>
           </View>
         ) : (
           <View style={styles.inline}>
@@ -390,7 +383,7 @@ export const MergedSettings: React.FC = () => {
               autoCapitalize="none"
               style={[styles.input, { flex: 1 }]}
             />
-            <Pressable
+            <Tap
               onPress={() => run('lb', () => connectListenBrainz(lbToken))}
               style={[styles.btn, { backgroundColor: palette.accent }]}
             >
@@ -399,7 +392,7 @@ export const MergedSettings: React.FC = () => {
               ) : (
                 <Text style={{ color: palette.onAccent, fontWeight: '800' }}>OK</Text>
               )}
-            </Pressable>
+            </Tap>
           </View>
         )}
 
@@ -410,9 +403,9 @@ export const MergedSettings: React.FC = () => {
             <Text style={[styles.rowDesc, { flex: 1 }]}>
               {vi ? 'Đã kết nối' : 'Connected'}: {scrobble.lastfmUser}
             </Text>
-            <Pressable onPress={() => disconnectScrobbler('lastfm')}>
+            <Tap onPress={() => disconnectScrobbler('lastfm')}>
               <Text style={styles.danger}>{vi ? 'Ngắt' : 'Disconnect'}</Text>
-            </Pressable>
+            </Tap>
           </View>
         ) : (
           <>
@@ -453,7 +446,7 @@ export const MergedSettings: React.FC = () => {
               secureTextEntry
               style={[styles.input, styles.stack]}
             />
-            <Pressable
+            <Tap
               onPress={() =>
                 run('lf', async () => {
                   await connectLastfm(lf.key, lf.secret, lf.user, lf.pass);
@@ -472,7 +465,7 @@ export const MergedSettings: React.FC = () => {
                   {vi ? 'Kết nối Last.fm' : 'Connect Last.fm'}
                 </Text>
               )}
-            </Pressable>
+            </Tap>
           </>
         )}
         {err && <Text style={[styles.danger, { marginTop: 8 }]}>{err}</Text>}
@@ -484,14 +477,11 @@ export const MergedSettings: React.FC = () => {
       </Text>
       <View style={styles.card}>
         <View style={styles.inline}>
-          <Pressable
-            onPress={() => run('exp', exportLibrary)}
-            style={[styles.toolBtn, { flex: 1 }]}
-          >
+          <Tap onPress={() => run('exp', exportLibrary)} style={[styles.toolBtn, { flex: 1 }]}>
             <Ionicons name="share-outline" size={18} color={palette.accent} />
             <Text style={styles.toolText}>{vi ? 'Xuất sao lưu' : 'Export backup'}</Text>
-          </Pressable>
-          <Pressable
+          </Tap>
+          <Tap
             onPress={() =>
               run('imp', async () => {
                 const res = await pickLibraryBackup();
@@ -502,14 +492,14 @@ export const MergedSettings: React.FC = () => {
           >
             <Ionicons name="download-outline" size={18} color={palette.accent} />
             <Text style={styles.toolText}>{vi ? 'Nhập sao lưu' : 'Import backup'}</Text>
-          </Pressable>
+          </Tap>
         </View>
-        <Pressable onPress={() => LocalLibrary.open('')} style={[styles.toolBtn, { marginTop: 8 }]}>
+        <Tap onPress={() => LocalLibrary.open('')} style={[styles.toolBtn, { marginTop: 8 }]}>
           <Ionicons name="phone-portrait-outline" size={18} color={palette.accent} />
           <Text style={styles.toolText}>
             {vi ? 'Nhạc trên máy (thư mục, nhập từ Tệp)' : 'Local Files (folders, import)'}
           </Text>
-        </Pressable>
+        </Tap>
 
         {pending && (
           <View style={styles.preview}>
@@ -538,7 +528,7 @@ export const MergedSettings: React.FC = () => {
                 sw(withSettings, setWithSettings)
               )}
             <View style={[styles.inline, { marginTop: 8 }]}>
-              <Pressable
+              <Tap
                 onPress={() => {
                   applyLibraryBackup(pending.backup, 'merge', withSettings);
                   setPending(null);
@@ -548,8 +538,8 @@ export const MergedSettings: React.FC = () => {
                 <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
                   {vi ? 'Gộp' : 'Merge'}
                 </Text>
-              </Pressable>
-              <Pressable
+              </Tap>
+              <Tap
                 onPress={() => {
                   applyLibraryBackup(pending.backup, 'replace', withSettings);
                   setPending(null);
@@ -559,13 +549,13 @@ export const MergedSettings: React.FC = () => {
                 <Text style={{ color: '#FCA5A5', fontWeight: '800' }}>
                   {vi ? 'Thay thế' : 'Replace'}
                 </Text>
-              </Pressable>
-              <Pressable
+              </Tap>
+              <Tap
                 onPress={() => setPending(null)}
                 style={[styles.btn, { backgroundColor: UI.fg(0.08) }]}
               >
                 <Ionicons name="close" size={16} color={UI.text} />
-              </Pressable>
+              </Tap>
             </View>
           </View>
         )}
@@ -589,7 +579,7 @@ export const MergedSettings: React.FC = () => {
             placeholderTextColor={UI.text3}
             style={[styles.input, { flex: 1 }]}
           />
-          <Pressable
+          <Tap
             onPress={() => {
               if (newBlock.trim()) blockArtist(newBlock.trim());
               setNewBlock('');
@@ -597,15 +587,15 @@ export const MergedSettings: React.FC = () => {
             style={[styles.btn, { backgroundColor: palette.accent }]}
           >
             <Ionicons name="add" size={18} color={palette.onAccent} />
-          </Pressable>
+          </Tap>
         </View>
         {prefs.blacklist.artists.map((a) => (
           <View key={`a-${a}`} style={styles.blRow}>
             <Ionicons name="person-outline" size={15} color={UI.text3} />
             <Text style={styles.blText}>{a}</Text>
-            <Pressable hitSlop={8} onPress={() => unblockArtist(a)}>
+            <Tap hitSlop={8} onPress={() => unblockArtist(a)}>
               <Ionicons name="close-circle" size={18} color={UI.text3} />
-            </Pressable>
+            </Tap>
           </View>
         ))}
         {prefs.blacklist.tracks.map((tr) => (
@@ -614,9 +604,9 @@ export const MergedSettings: React.FC = () => {
             <Text style={styles.blText} numberOfLines={1}>
               {tr.title} — {tr.artist}
             </Text>
-            <Pressable hitSlop={8} onPress={() => unblockTrack(tr.id)}>
+            <Tap hitSlop={8} onPress={() => unblockTrack(tr.id)}>
               <Ionicons name="close-circle" size={18} color={UI.text3} />
-            </Pressable>
+            </Tap>
           </View>
         ))}
         {prefs.blacklist.artists.length === 0 && prefs.blacklist.tracks.length === 0 && (
@@ -624,11 +614,11 @@ export const MergedSettings: React.FC = () => {
             {vi ? 'Chưa chặn gì.' : 'Nothing blocked.'}
           </Text>
         )}
-        <Pressable onPress={() => updatePrefs({ onboarded: false })} style={{ marginTop: 14 }}>
+        <Tap onPress={() => updatePrefs({ onboarded: false })} style={{ marginTop: 14 }}>
           <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 12 }}>
             {vi ? 'Xem lại màn hình chào mừng' : 'Show the welcome tour again'}
           </Text>
-        </Pressable>
+        </Tap>
       </View>
     </>
   );

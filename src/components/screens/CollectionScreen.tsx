@@ -2,17 +2,20 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArtistBioCard } from '../ArtistBioCard';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Modal,
+  PanResponder,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
@@ -25,6 +28,7 @@ import { TrackRow } from '../TrackRow';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 import { exportPlaylistM3U } from '../../services/import/playlistFiles';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { Tap } from '../ui/Tap';
 
 export const CollectionModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -52,6 +56,64 @@ export const CollectionModal: React.FC = () => {
     createPlaylist,
   } = useHolySic();
   useModalLayer('collection', Boolean(collectionTarget));
+
+  // ── iOS navigation feel: the page is pushed in from the right, and a swipe from the left edge
+  // (or the back button) slides it away while the app shows through, dimmed, behind it ──
+  const { width: screenW } = useWindowDimensions();
+  const pushX = useRef(new Animated.Value(screenW)).current;
+  // a transformed layer only while the page moves; a plain view once it has settled
+  const [moving, setMoving] = useState(true);
+  const open = Boolean(collectionTarget);
+  useEffect(() => {
+    if (!open) return;
+    pushX.setValue(screenW);
+    setMoving(true);
+    Animated.timing(pushX, {
+      toValue: 0,
+      duration: 340,
+      easing: Easing.bezier(0.2, 0.9, 0.25, 1),
+      useNativeDriver: true,
+    }).start(({ finished }) => finished && setMoving(false));
+  }, [open, pushX, screenW]);
+  const nav = useRef({ close: () => openCollection(null), w: screenW });
+  nav.current = { close: () => openCollection(null), w: screenW };
+  const goBack = useCallback(() => {
+    setMoving(true);
+    Animated.timing(pushX, {
+      toValue: nav.current.w,
+      duration: 240,
+      easing: Easing.in(Easing.quad),
+      useNativeDriver: true,
+    }).start(() => nav.current.close());
+  }, [pushX]);
+  const edgeSwipe = useRef(
+    PanResponder.create({
+      // only from the left edge, only horizontal — claims it before the lists inside can
+      onMoveShouldSetPanResponderCapture: (_e, g) =>
+        g.x0 < 32 && g.dx > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => setMoving(true),
+      onPanResponderMove: (_e, g) => pushX.setValue(Math.max(0, g.dx)),
+      onPanResponderRelease: (_e, g) => {
+        if (g.dx > nav.current.w * 0.33 || (g.dx > 40 && g.vx > 0.5)) {
+          Animated.timing(pushX, {
+            toValue: nav.current.w,
+            duration: 200,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }).start(() => nav.current.close());
+        } else {
+          Animated.spring(pushX, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start(() =>
+            setMoving(false)
+          );
+        }
+      },
+      onPanResponderTerminate: () =>
+        Animated.spring(pushX, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start(() =>
+          setMoving(false)
+        ),
+    })
+  ).current;
 
   const [loading, setLoading] = useState(false);
   // Multi-select (Musike): pick songs, then play / like / queue / add to playlist / remove
@@ -204,14 +266,32 @@ export const CollectionModal: React.FC = () => {
   return (
     <Modal
       visible={Boolean(collectionTarget)}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={() => openCollection(null)}
+      animationType="none"
+      transparent
+      statusBarTranslucent
+      onRequestClose={goBack}
     >
-      <View
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: '#000',
+            opacity: pushX.interpolate({
+              inputRange: [0, screenW],
+              outputRange: [0.4, 0],
+              extrapolate: 'clamp',
+            }),
+          },
+        ]}
+      />
+      <Animated.View
+        {...edgeSwipe.panHandlers}
         style={[
           styles.root,
           { backgroundColor: prefs.pureBlack ? UI.surface('#000') : UI.surface('#0A0A0F') },
+          moving && styles.pushed,
+          moving && { transform: [{ translateX: pushX }] },
         ]}
       >
         <ScrollView
@@ -226,13 +306,18 @@ export const CollectionModal: React.FC = () => {
             style={[styles.hero, { paddingTop: Math.max(insets.top, 16) }]}
           >
             <View style={styles.navBar}>
-              <Pressable onPress={() => openCollection(null)} style={styles.backBtn}>
+              <Tap
+                onPress={goBack}
+                style={styles.backBtn}
+                accessibilityRole="button"
+                accessibilityLabel={prefs.language === 'vi' ? 'Quay lại' : 'Back'}
+              >
                 <Ionicons name="chevron-back" size={22} color={UI.text} />
-              </Pressable>
+              </Tap>
 
               <View style={{ flex: 1 }} />
               {tracks.length > 0 && (
-                <Pressable
+                <Tap
                   onPress={() => {
                     setSelecting((v) => !v);
                     setSelected({});
@@ -245,10 +330,10 @@ export const CollectionModal: React.FC = () => {
                     size={19}
                     color={UI.text}
                   />
-                </Pressable>
+                </Tap>
               )}
               {removablePlaylistId && (
-                <Pressable
+                <Tap
                   onPress={() => {
                     deletePlaylist(removablePlaylistId!);
                     openCollection(null);
@@ -256,7 +341,7 @@ export const CollectionModal: React.FC = () => {
                   style={styles.backBtn}
                 >
                   <Ionicons name="trash-outline" size={19} color="#F87171" />
-                </Pressable>
+                </Tap>
               )}
             </View>
 
@@ -280,7 +365,7 @@ export const CollectionModal: React.FC = () => {
 
               {tracks.length > 0 && (
                 <View style={styles.heroBtns}>
-                  <Pressable
+                  <Tap
                     onPress={() => {
                       playTrack(tracks[0], tracks);
                       openCollection(null);
@@ -291,9 +376,9 @@ export const CollectionModal: React.FC = () => {
                     <Text style={{ color: headerPalette.onAccent, fontWeight: '800' }}>
                       {t(prefs.language, 'playAll')}
                     </Text>
-                  </Pressable>
+                  </Tap>
 
-                  <Pressable
+                  <Tap
                     onPress={() => {
                       const shuffled = [...tracks].sort(() => Math.random() - 0.5);
                       playTrack(shuffled[0], shuffled);
@@ -305,13 +390,13 @@ export const CollectionModal: React.FC = () => {
                     <Text style={{ color: UI.text, fontWeight: '700' }}>
                       {t(prefs.language, 'shuffle')}
                     </Text>
-                  </Pressable>
+                  </Tap>
                 </View>
               )}
               {tracks.length > 0 && (
                 <View style={[styles.heroBtns, { marginTop: 10 }]}>
                   {canSaveAsPlaylist && (
-                    <Pressable
+                    <Tap
                       onPress={() => {
                         const pl = savePlaylistFromTracks(title, tracks, subtitle, artworkUrl);
                         showToast(
@@ -326,10 +411,10 @@ export const CollectionModal: React.FC = () => {
                       <Text style={styles.chipText}>
                         {vi ? 'Lưu playlist' : 'Save as playlist'}
                       </Text>
-                    </Pressable>
+                    </Tap>
                   )}
                   {collectionTarget.kind !== 'offline' && (
-                    <Pressable
+                    <Tap
                       onPress={() => {
                         tracks.slice(0, 50).forEach((x) => downloadTrack(x));
                         showToast(
@@ -348,9 +433,9 @@ export const CollectionModal: React.FC = () => {
                             ? 'Tải tất cả'
                             : 'Download all'}
                       </Text>
-                    </Pressable>
+                    </Tap>
                   )}
-                  <Pressable
+                  <Tap
                     onPress={async () => {
                       const rel = await exportPlaylistM3U(title, allTracks);
                       if (!rel) return;
@@ -370,7 +455,7 @@ export const CollectionModal: React.FC = () => {
                   >
                     <Ionicons name="share-outline" size={15} color={UI.text} />
                     <Text style={styles.chipText}>{vi ? 'Xuất M3U' : 'Export M3U'}</Text>
-                  </Pressable>
+                  </Tap>
                 </View>
               )}
             </View>
@@ -397,12 +482,12 @@ export const CollectionModal: React.FC = () => {
                   style={styles.filterInput}
                 />
                 {filterQ.length > 0 && (
-                  <Pressable hitSlop={8} onPress={() => setFilterQ('')}>
+                  <Tap hitSlop={8} onPress={() => setFilterQ('')}>
                     <Ionicons name="close-circle" size={16} color={UI.text3} />
-                  </Pressable>
+                  </Tap>
                 )}
               </View>
-              <Pressable
+              <Tap
                 onPress={() =>
                   setSortBy(SORT_ORDER[(SORT_ORDER.indexOf(sortBy) + 1) % SORT_ORDER.length])
                 }
@@ -417,7 +502,7 @@ export const CollectionModal: React.FC = () => {
                   color={sortBy !== 'default' ? headerPalette.accent : UI.fg(1)}
                 />
                 <Text style={styles.sortText}>{SORT_LABEL[sortBy]}</Text>
-              </Pressable>
+              </Tap>
             </View>
           )}
           {canFilter && filterQ.trim() !== '' && tracks.length === 0 && (
@@ -427,7 +512,7 @@ export const CollectionModal: React.FC = () => {
           )}
           {selecting && (
             <View style={styles.selectBar}>
-              <Pressable
+              <Tap
                 onPress={() => {
                   const all = chosen.length === tracks.length;
                   setSelected(all ? {} : Object.fromEntries(tracks.map((x) => [x.id, true])));
@@ -442,7 +527,7 @@ export const CollectionModal: React.FC = () => {
                       ? 'Chọn tất cả'
                       : 'All'}
                 </Text>
-              </Pressable>
+              </Tap>
               <Text style={{ color: UI.text, fontWeight: '700' }}>
                 {chosen.length} {vi ? 'đã chọn' : 'selected'}
               </Text>
@@ -454,7 +539,7 @@ export const CollectionModal: React.FC = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.bulkRow}
             >
-              <Pressable
+              <Tap
                 onPress={() => {
                   playTrack(chosen[0], chosen);
                   openCollection(null);
@@ -465,26 +550,26 @@ export const CollectionModal: React.FC = () => {
                 <Text style={[styles.chipText, { color: headerPalette.onAccent }]}>
                   {vi ? 'Phát' : 'Play'}
                 </Text>
-              </Pressable>
-              <Pressable onPress={() => queueTracks(chosen, true)} style={styles.chipBtn}>
+              </Tap>
+              <Tap onPress={() => queueTracks(chosen, true)} style={styles.chipBtn}>
                 <Ionicons name="play-forward-outline" size={15} color={UI.text} />
                 <Text style={styles.chipText}>{vi ? 'Phát kế' : 'Play next'}</Text>
-              </Pressable>
-              <Pressable onPress={() => queueTracks(chosen)} style={styles.chipBtn}>
+              </Tap>
+              <Tap onPress={() => queueTracks(chosen)} style={styles.chipBtn}>
                 <Ionicons name="list" size={15} color={UI.text} />
                 <Text style={styles.chipText}>{vi ? 'Hàng chờ' : 'Queue'}</Text>
-              </Pressable>
+              </Tap>
               {collectionTarget.kind !== 'liked' && (
-                <Pressable onPress={() => likeTracks(chosen)} style={styles.chipBtn}>
+                <Tap onPress={() => likeTracks(chosen)} style={styles.chipBtn}>
                   <Ionicons name="heart-outline" size={15} color={UI.text} />
                   <Text style={styles.chipText}>{vi ? 'Thích' : 'Like'}</Text>
-                </Pressable>
+                </Tap>
               )}
-              <Pressable onPress={() => setPickPlaylist((v) => !v)} style={styles.chipBtn}>
+              <Tap onPress={() => setPickPlaylist((v) => !v)} style={styles.chipBtn}>
                 <Ionicons name="add-circle-outline" size={15} color={UI.text} />
                 <Text style={styles.chipText}>{vi ? 'Vào playlist' : 'To playlist'}</Text>
-              </Pressable>
-              <Pressable
+              </Tap>
+              <Tap
                 onPress={() => {
                   chosen.forEach((x) => downloadTrack(x));
                 }}
@@ -492,9 +577,9 @@ export const CollectionModal: React.FC = () => {
               >
                 <Ionicons name="arrow-down-circle-outline" size={15} color={UI.text} />
                 <Text style={styles.chipText}>{vi ? 'Tải' : 'Download'}</Text>
-              </Pressable>
+              </Tap>
               {removablePlaylistId && (
-                <Pressable
+                <Tap
                   onPress={() => {
                     removeTracksFromPlaylist(
                       removablePlaylistId!,
@@ -508,13 +593,13 @@ export const CollectionModal: React.FC = () => {
                   <Text style={[styles.chipText, { color: '#F87171' }]}>
                     {vi ? 'Xoá' : 'Remove'}
                   </Text>
-                </Pressable>
+                </Tap>
               )}
             </ScrollView>
           )}
           {selecting && pickPlaylist && chosen.length > 0 && (
             <View style={styles.plPicker}>
-              <Pressable
+              <Tap
                 onPress={() => {
                   const pl = createPlaylist(
                     vi
@@ -530,11 +615,11 @@ export const CollectionModal: React.FC = () => {
                 <Text style={{ color: UI.text, fontWeight: '700' }}>
                   {vi ? 'Playlist mới' : 'New playlist'}
                 </Text>
-              </Pressable>
+              </Tap>
               {playlists
                 .filter((p) => p.id !== removablePlaylistId)
                 .map((p) => (
-                  <Pressable
+                  <Tap
                     key={p.id}
                     onPress={() => {
                       addTracksToPlaylist(p.id, chosen);
@@ -546,7 +631,7 @@ export const CollectionModal: React.FC = () => {
                     <Text style={{ color: UI.text }} numberOfLines={1}>
                       {p.name} ({p.tracks.length})
                     </Text>
-                  </Pressable>
+                  </Tap>
                 ))}
             </View>
           )}
@@ -554,7 +639,7 @@ export const CollectionModal: React.FC = () => {
           <View style={{ paddingHorizontal: 6 }}>
             {selecting &&
               tracks.map((song, idx) => (
-                <Pressable
+                <Tap
                   key={`sel-${song.id}-${idx}`}
                   onPress={() => setSelected((prev) => ({ ...prev, [song.id]: !prev[song.id] }))}
                   style={styles.selRow}
@@ -577,7 +662,7 @@ export const CollectionModal: React.FC = () => {
                       {song.artist}
                     </Text>
                   </View>
-                </Pressable>
+                </Tap>
               ))}
             {!selecting &&
               tracks.map((song, idx) => (
@@ -594,7 +679,7 @@ export const CollectionModal: React.FC = () => {
                 />
               ))}
             {!selecting && collectionTarget.kind === 'artist' && tracks.length > 0 && (
-              <Pressable onPress={loadMoreArtist} disabled={loadingMore} style={styles.loadMore}>
+              <Tap onPress={loadMoreArtist} disabled={loadingMore} style={styles.loadMore}>
                 {loadingMore ? (
                   <ActivityIndicator color={headerPalette.accent} />
                 ) : (
@@ -602,7 +687,7 @@ export const CollectionModal: React.FC = () => {
                     {vi ? 'Thêm bài của nghệ sĩ' : 'Load more songs'}
                   </Text>
                 )}
-              </Pressable>
+              </Tap>
             )}
           </View>
 
@@ -629,7 +714,7 @@ export const CollectionModal: React.FC = () => {
                   contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
                 >
                   {artistData.albums.map((alb) => (
-                    <Pressable
+                    <Tap
                       key={alb.id}
                       onPress={() => openCollection({ kind: 'album', id: alb.id, summary: alb })}
                       style={{ width: 136 }}
@@ -647,13 +732,13 @@ export const CollectionModal: React.FC = () => {
                       {alb.year && (
                         <Text style={{ color: UI.text3, fontSize: 12 }}>{alb.year}</Text>
                       )}
-                    </Pressable>
+                    </Tap>
                   ))}
                 </ScrollView>
               </View>
             )}
         </ScrollView>
-      </View>
+      </Animated.View>
       <SheetSlot layer="collection" />
     </Modal>
   );
@@ -694,6 +779,13 @@ const styles = themedSheet(() => ({
   filterEmpty: { color: UI.text3, textAlign: 'center', marginVertical: 18 },
   root: {
     flex: 1,
+  },
+  // edge shadow while the page slides (like a pushed UINavigationController page)
+  pushed: {
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: -6, height: 0 },
   },
   hero: {
     paddingHorizontal: 18,

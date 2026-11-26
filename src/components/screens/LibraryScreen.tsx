@@ -7,7 +7,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,6 +22,8 @@ import { TrackRow } from '../TrackRow';
 import { LocalLibrary } from '../../services/local/localLibrary';
 import { useLocalLibrary } from '../local/LocalLibraryScreen';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { useTabScrollToTop } from '../../services/ui/tabBus';
+import { Tap } from '../ui/Tap';
 
 type LibFilter = 'playlists' | 'liked' | 'offline' | 'history';
 
@@ -52,6 +53,7 @@ export const LibraryScreen: React.FC = () => {
   // 4" phones: header pills go icon-only so the title never wraps
   const narrow = useWindowDimensions().width < 360;
 
+  const scrollRef = useTabScrollToTop('library');
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -60,22 +62,22 @@ export const LibraryScreen: React.FC = () => {
           {t(prefs.language, 'library')}
         </Text>
         <View style={styles.headerRight}>
-          <Pressable
+          <Tap
             onPress={() => LocalLibrary.open()}
             style={styles.actionPill}
             accessibilityLabel={vi ? 'Nhạc trên máy' : 'Local Files'}
           >
             <Ionicons name="folder-open-outline" size={16} color={UI.text} />
-          </Pressable>
-          <Pressable
+          </Tap>
+          <Tap
             onPress={() => openImport('link')}
             style={styles.actionPill}
             accessibilityLabel={vi ? 'Nhập playlist' : 'Import playlist'}
           >
             <Ionicons name="cloud-upload-outline" size={16} color={UI.text} />
             {!narrow && <Text style={styles.actionPillText}>{vi ? 'Nhập' : 'Import'}</Text>}
-          </Pressable>
-          <Pressable
+          </Tap>
+          <Tap
             onPress={() => setShowCreateModal(true)}
             style={[styles.actionPill, { backgroundColor: palette.accent }]}
             accessibilityLabel={vi ? 'Tạo playlist mới' : 'New playlist'}
@@ -86,13 +88,13 @@ export const LibraryScreen: React.FC = () => {
                 {vi ? 'Tạo mới' : 'New'}
               </Text>
             )}
-          </Pressable>
+          </Tap>
         </View>
       </View>
 
       {/* Top Shelf Cards */}
       <View style={[styles.shelfRow, narrow && styles.shelfRowNarrow]}>
-        <Pressable
+        <Tap
           onPress={() => LocalLibrary.open()}
           style={[
             styles.shelfCard,
@@ -113,9 +115,9 @@ export const LibraryScreen: React.FC = () => {
           >
             {vi ? 'Trên máy' : 'Local'}
           </Text>
-        </Pressable>
+        </Tap>
 
-        <Pressable
+        <Tap
           onPress={() => openCollection({ kind: 'liked' })}
           style={[
             styles.shelfCard,
@@ -135,9 +137,9 @@ export const LibraryScreen: React.FC = () => {
           >
             {vi ? 'Đã thích' : 'Liked'}
           </Text>
-        </Pressable>
+        </Tap>
 
-        <Pressable
+        <Tap
           onPress={() => openCollection({ kind: 'offline' })}
           style={[
             styles.shelfCard,
@@ -157,9 +159,9 @@ export const LibraryScreen: React.FC = () => {
           >
             Offline
           </Text>
-        </Pressable>
+        </Tap>
 
-        <Pressable
+        <Tap
           onPress={() => setIsRecapOpen(true)}
           style={[
             styles.shelfCard,
@@ -179,7 +181,7 @@ export const LibraryScreen: React.FC = () => {
           >
             Recap ID
           </Text>
-        </Pressable>
+        </Tap>
       </View>
 
       {/* Filter Tabs */}
@@ -199,7 +201,7 @@ export const LibraryScreen: React.FC = () => {
         ).map((item) => {
           const active = tab === item.id;
           return (
-            <Pressable
+            <Tap
               key={item.id}
               onPress={() => setTab(item.id)}
               style={[
@@ -215,12 +217,13 @@ export const LibraryScreen: React.FC = () => {
               >
                 {item.label}
               </Text>
-            </Pressable>
+            </Tap>
           );
         })}
       </ScrollView>
 
       <ScrollView
+        ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -228,7 +231,7 @@ export const LibraryScreen: React.FC = () => {
         {tab === 'playlists' && (
           <View style={styles.playlistList}>
             {playlists.map((pl) => (
-              <Pressable
+              <Tap
                 key={pl.id}
                 onPress={() => openCollection({ kind: 'playlist', playlistId: pl.id })}
                 style={styles.playlistCard}
@@ -259,7 +262,7 @@ export const LibraryScreen: React.FC = () => {
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={UI.text3} />
-              </Pressable>
+              </Tap>
             ))}
           </View>
         )}
@@ -320,8 +323,8 @@ export const LibraryScreen: React.FC = () => {
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <Pressable style={styles.modalBackdrop} onPress={() => setShowCreateModal(false)}>
-            <Pressable style={styles.modalBox} onPress={(e) => e.stopPropagation?.()}>
+          <Tap style={styles.modalBackdrop} onPress={() => setShowCreateModal(false)}>
+            <Tap style={styles.modalBox} onPress={(e) => e.stopPropagation?.()}>
               <Text style={styles.modalTitle}>{t(prefs.language, 'createPlaylist')}</Text>
               <TextInput
                 value={plName}
@@ -340,10 +343,10 @@ export const LibraryScreen: React.FC = () => {
                 style={styles.modalInput}
               />
               <View style={styles.modalActions}>
-                <Pressable onPress={() => setShowCreateModal(false)} style={styles.cancelModalBtn}>
+                <Tap onPress={() => setShowCreateModal(false)} style={styles.cancelModalBtn}>
                   <Text style={{ color: UI.text, fontWeight: '600' }}>{vi ? 'Huỷ' : 'Cancel'}</Text>
-                </Pressable>
-                <Pressable
+                </Tap>
+                <Tap
                   onPress={() => {
                     if (!plName.trim()) return;
                     createPlaylist(plName, plDesc);
@@ -356,10 +359,10 @@ export const LibraryScreen: React.FC = () => {
                   <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
                     {vi ? 'Tạo ngay' : 'Create'}
                   </Text>
-                </Pressable>
+                </Tap>
               </View>
-            </Pressable>
-          </Pressable>
+            </Tap>
+          </Tap>
         </KeyboardAvoidingView>
       </Modal>
     </View>

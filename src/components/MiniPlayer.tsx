@@ -7,7 +7,6 @@ import {
   Animated,
   PanResponder,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -19,6 +18,7 @@ import { GlassSurface } from './GlassSurface';
 import { useHoldSeek } from '../hooks/useHoldSeek';
 import { AmbientSpill, useAmbientColors } from './ambient/AmbientLight';
 import { T as UI, themedSheet } from '../theme/ui';
+import { Tap } from './ui/Tap';
 
 export const MiniPlayer: React.FC = () => {
   const {
@@ -48,6 +48,9 @@ export const MiniPlayer: React.FC = () => {
   // Swipe gestures, like the iOS Music mini player: ← next song · → previous · ↑ open the player
   const dragX = useRef(new Animated.Value(0)).current;
   const dragY = useRef(new Animated.Value(0)).current;
+  // a swipe must never also count as a tap (web still delivers the click after a drag)
+  const swipedAt = useRef(0);
+  const tapOk = () => Date.now() - swipedAt.current > 400;
   const acts = useRef({ playNext, playPrevious, open: () => setIsPlayerOpen(true), haptic });
   acts.current = { playNext, playPrevious, open: () => setIsPlayerOpen(true), haptic };
   const axis = useRef<'x' | 'y' | null>(null);
@@ -57,6 +60,7 @@ export const MiniPlayer: React.FC = () => {
         (Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy)) ||
         (g.dy < -12 && Math.abs(g.dy) > Math.abs(g.dx)),
       onPanResponderGrant: (_e, g) => {
+        swipedAt.current = Date.now();
         // the grant can arrive with dx = dy = 0 (web) — lock the axis on the first real movement
         axis.current =
           Math.abs(g.dx) + Math.abs(g.dy) < 6 ? null : Math.abs(g.dx) > Math.abs(g.dy) ? 'x' : 'y';
@@ -70,6 +74,7 @@ export const MiniPlayer: React.FC = () => {
         else dragY.setValue(Math.max(-60, Math.min(0, g.dy * 0.6)));
       },
       onPanResponderRelease: (_e, g) => {
+        swipedAt.current = Date.now();
         const back = () => {
           Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
           Animated.spring(dragY, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
@@ -148,7 +153,7 @@ export const MiniPlayer: React.FC = () => {
         }),
       }}
     >
-      <Pressable onPress={() => setIsPlayerOpen(true)} style={styles.outer}>
+      <Tap onPress={() => tapOk() && setIsPlayerOpen(true)} style={styles.outer}>
         {ambient.spill && !prefs.pureBlack && (
           <AmbientSpill
             colors={ambientColors}
@@ -200,11 +205,11 @@ export const MiniPlayer: React.FC = () => {
               )}
             </View>
 
-            <Pressable
+            <Tap
               hitSlop={8}
               onPress={(e) => {
                 e.stopPropagation?.();
-                toggleLike(currentTrack);
+                if (tapOk()) toggleLike(currentTrack);
               }}
               style={styles.ctrlBtn}
             >
@@ -213,13 +218,13 @@ export const MiniPlayer: React.FC = () => {
                 size={21}
                 color={liked ? HOLYSIC_COLORS.roseLike : UI.fg(1)}
               />
-            </Pressable>
+            </Tap>
 
-            <Pressable
+            <Tap
               hitSlop={8}
               onPress={(e) => {
                 e.stopPropagation?.();
-                togglePlay();
+                if (tapOk()) togglePlay();
               }}
               style={[styles.playPill, { backgroundColor: palette.accent }]}
             >
@@ -233,13 +238,13 @@ export const MiniPlayer: React.FC = () => {
                   style={!isPlaying ? { marginLeft: 2 } : undefined}
                 />
               )}
-            </Pressable>
+            </Tap>
 
-            <Pressable
+            <Tap
               hitSlop={8}
               onPress={(e) => {
                 e.stopPropagation?.();
-                ff.guard(playNext)();
+                if (tapOk()) ff.guard(playNext)();
               }}
               onLongPress={ff.onLongPress}
               onPressOut={ff.onPressOut}
@@ -247,7 +252,7 @@ export const MiniPlayer: React.FC = () => {
               style={styles.ctrlBtn}
             >
               <Ionicons name="play-skip-forward" size={20} color={UI.text} />
-            </Pressable>
+            </Tap>
           </View>
 
           {/* Bottom hairline progress bar */}
@@ -260,7 +265,7 @@ export const MiniPlayer: React.FC = () => {
             />
           </View>
         </GlassSurface>
-      </Pressable>
+      </Tap>
     </Animated.View>
   );
 };

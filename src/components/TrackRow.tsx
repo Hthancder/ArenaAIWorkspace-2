@@ -1,8 +1,17 @@
 // Song Row Component with active equalizer bars, Offline/FLAC badges, Like & Menu
 
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import {
+  Animated,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { ArtworkImage } from './ArtworkImage';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../constants/theme';
 import { useHolySic } from '../context/HolySicContext';
@@ -16,7 +25,11 @@ interface TrackRowProps {
   indexBadge?: number;
   compact?: boolean;
   onRemove?: () => void;
+  /** swipe → like · ← play next (off inside horizontal carousels) */
+  swipeable?: boolean;
 }
+
+const SWIPE_AT = 76;
 
 export const TrackRow: React.FC<TrackRowProps> = ({
   track,
@@ -24,6 +37,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   indexBadge,
   compact = false,
   onRemove,
+  swipeable = true,
 }) => {
   const {
     currentTrack,
@@ -38,7 +52,61 @@ export const TrackRow: React.FC<TrackRowProps> = ({
     palette,
     prefs,
     haptic,
+    addToQueue,
   } = useHolySic();
+
+  // ── Apple-Music-style swipe actions: → like / unlike, ← play next. The row follows the finger
+  // (with resistance past the trigger point), a haptic tick marks "release now to do it" ──
+  const dragX = useRef(new Animated.Value(0)).current;
+  const [rowW, setRowW] = useState(0);
+  const armed = useRef(0);
+  // a swipe must never also count as a tap on the row (web delivers the click anyway)
+  const swipedAt = useRef(0);
+  const acts = useRef({ like: () => {}, next: () => {}, haptic });
+  acts.current = {
+    like: () => toggleLike(track),
+    next: () => addToQueue(track, true),
+    haptic,
+  };
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      onPanResponderGrant: () => {
+        armed.current = 0;
+        swipedAt.current = Date.now();
+      },
+      onPanResponderMove: (_e, g) => {
+        const d = g.dx;
+        const a = Math.abs(d);
+        // rubber band past the trigger point
+        const shown = a <= SWIPE_AT ? d : Math.sign(d) * (SWIPE_AT + (a - SWIPE_AT) * 0.35);
+        dragX.setValue(shown);
+        const now = a >= SWIPE_AT ? Math.sign(d) : 0;
+        if (now !== armed.current) {
+          armed.current = now;
+          if (now !== 0) acts.current.haptic('light');
+        }
+      },
+      onPanResponderRelease: () => {
+        swipedAt.current = Date.now();
+        const dir = armed.current;
+        armed.current = 0;
+        if (dir > 0) acts.current.like();
+        else if (dir < 0) acts.current.next();
+        Animated.spring(dragX, {
+          toValue: 0,
+          useNativeDriver: true,
+          speed: 16,
+          bounciness: 6,
+        }).start();
+      },
+      onPanResponderTerminate: () => {
+        armed.current = 0;
+        Animated.spring(dragX, { toValue: 0, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
 
   const { width: winW } = useWindowDimensions();
   // 4" phones: drop the secondary bits (quality pill, duration in grids) so the title gets room
@@ -50,6 +118,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
   const handlePress = () => {
+    if (Date.now() - swipedAt.current < 400) return;
     if (active) {
       togglePlay();
     } else {
@@ -71,11 +140,12 @@ export const TrackRow: React.FC<TrackRowProps> = ({
             : 'AAC';
   const lossless = /FLAC|ALAC|WAV|AIFF/.test(track.source === 'local' ? badgeLabel : qb);
 
-  return (
+  const row = (
     <Pressable
       onPress={handlePress}
       // touch and hold → the song menu, with a haptic tap (like Music's context menu)
       onLongPress={() => {
+        if (Date.now() - swipedAt.current < 400) return;
         haptic('medium');
         setActionTrack(track);
       }}
@@ -219,9 +289,122 @@ export const TrackRow: React.FC<TrackRowProps> = ({
       )}
     </Pressable>
   );
+
+  if (!swipeable) return row;
+  const vi = prefs.language === 'vi';
+  const likeOpacity = dragX.interpolate({
+    inputRange: [0, 24, SWIPE_AT],
+    outputRange: [0, 0.6, 1],
+    extrapolate: 'clamp',
+  });
+  const nextOpacity = dragX.interpolate({
+    inputRange: [-SWIPE_AT, -24, 0],
+    outputRange: [1, 0.6, 0],
+    extrapolate: 'clamp',
+  });
+  const likeScale = dragX.interpolate({
+    inputRange: [0, SWIPE_AT, SWIPE_AT + 20],
+    outputRange: [0.6, 1, 1.18],
+    extrapolate: 'clamp',
+  });
+  const nextScale = dragX.interpolate({
+    inputRange: [-SWIPE_AT - 20, -SWIPE_AT, 0],
+    outputRange: [1.18, 1, 0.6],
+    extrapolate: 'clamp',
+  });
+  return (
+    <View
+      style={[styles.swipeWrap, Platform.OS === 'web' ? ({ userSelect: 'none' } as object) : null]}
+      onLayout={(e) => setRowW(e.nativeEvent.layout.width)}
+      {...pan.panHandlers}
+      accessibilityActions={[
+        { name: 'like', label: liked ? (vi ? 'Bỏ thích' : 'Unlike') : vi ? 'Thích' : 'Like' },
+        { name: 'next', label: vi ? 'Phát tiếp theo' : 'Play next' },
+      ]}
+      onAccessibilityAction={(e) => {
+        if (e.nativeEvent.actionName === 'like') toggleLike(track);
+        if (e.nativeEvent.actionName === 'next') addToQueue(track, true);
+      }}
+    >
+      {/* revealed behind the row */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.swipeBg,
+          styles.swipeLike,
+          {
+            width: rowW,
+            opacity: likeOpacity,
+            transform: [{ translateX: Animated.subtract(dragX, rowW) }],
+          },
+        ]}
+      >
+        <Animated.View style={[styles.swipeAct, { transform: [{ scale: likeScale }] }]}>
+          <Ionicons name={liked ? 'heart-dislike' : 'heart'} size={20} color="#fff" />
+          <Text style={styles.swipeText}>
+            {liked ? (vi ? 'Bỏ thích' : 'Unlike') : vi ? 'Thích' : 'Like'}
+          </Text>
+        </Animated.View>
+      </Animated.View>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.swipeBg,
+          styles.swipeNext,
+          {
+            width: rowW,
+            backgroundColor: palette.accent,
+            opacity: nextOpacity,
+            transform: [{ translateX: Animated.add(dragX, rowW) }],
+          },
+        ]}
+      >
+        <Animated.View style={[styles.swipeAct, { transform: [{ scale: nextScale }] }]}>
+          <Text style={[styles.swipeText, { color: UI.inv }]}>
+            {vi ? 'Phát tiếp' : 'Play next'}
+          </Text>
+          <Ionicons name="return-down-forward" size={20} color={UI.inv} />
+        </Animated.View>
+      </Animated.View>
+      <Animated.View style={{ transform: [{ translateX: dragX }] }}>{row}</Animated.View>
+    </View>
+  );
 };
 
 const styles = themedSheet(() => ({
+  swipeWrap: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 14,
+  },
+  swipeBg: {
+    position: 'absolute',
+    left: 0,
+    top: 2,
+    bottom: 2,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  // the icon rides the row's edge as it slides
+  swipeLike: {
+    backgroundColor: HOLYSIC_COLORS.roseLike,
+    justifyContent: 'flex-end',
+  },
+  swipeNext: {
+    justifyContent: 'flex-start',
+  },
+  swipeAct: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  swipeText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

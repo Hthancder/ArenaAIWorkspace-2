@@ -15,7 +15,6 @@ import {
   Modal,
   PanResponder,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -42,6 +41,7 @@ import { IpodClassicView } from './IpodPlayer';
 import { LyricsView } from './LyricsView';
 import { TurntableVinylStage } from './TurntablePlayer';
 import { SheetSlot, useModalLayer, usePresentGate } from '../overlay/ModalLayers';
+import { Tap } from '../ui/Tap';
 
 type SubPane = 'artwork' | 'lyrics' | 'queue' | 'sleep' | 'diagnostics' | 'styles';
 
@@ -120,6 +120,8 @@ export const FullPlayerModal: React.FC = () => {
   // ── swipe down to close (the player follows the finger, the app shows through behind it) ──
   const { height: screenH } = useWindowDimensions();
   const dragY = useRef(new Animated.Value(0)).current;
+  // the sheet only becomes a moving (transformed, rounded) layer while it's being dragged
+  const [dragging, setDragging] = useState(false);
   const swipeRef = useRef({
     close: () => setIsPlayerOpen(false),
     h: screenH,
@@ -142,6 +144,7 @@ export const FullPlayerModal: React.FC = () => {
   const dismissPan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) => g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx) * 1.4,
+      onPanResponderGrant: () => setDragging(true),
       onPanResponderMove: (_e, g) => dragY.setValue(Math.max(0, g.dy)),
       onPanResponderRelease: (_e, g) => {
         if (g.dy > 130 || (g.dy > 40 && g.vy > 0.9)) {
@@ -150,13 +153,20 @@ export const FullPlayerModal: React.FC = () => {
             toValue: swipeRef.current.h,
             duration: 220,
             useNativeDriver: true,
-          }).start(() => swipeRef.current.close());
+          }).start(() => {
+            swipeRef.current.close();
+            setDragging(false);
+          });
         } else {
-          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start(() =>
+            setDragging(false)
+          );
         }
       },
       onPanResponderTerminate: () =>
-        Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start(),
+        Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start(() =>
+          setDragging(false)
+        ),
     })
   ).current;
   // ── swipe the cover left / right to change song ──
@@ -240,8 +250,13 @@ export const FullPlayerModal: React.FC = () => {
         style={{
           flex: 1,
           overflow: 'hidden',
-          borderTopLeftRadius: 0,
-          transform: [{ translateY: dragY }],
+          ...(dragging
+            ? {
+                borderTopLeftRadius: 28,
+                borderTopRightRadius: 28,
+                transform: [{ translateY: dragY }],
+              }
+            : null),
           // web preview: drags must not turn into text selection
           ...(Platform.OS === 'web' ? ({ userSelect: 'none' } as object) : null),
         }}
@@ -268,16 +283,12 @@ export const FullPlayerModal: React.FC = () => {
           )}
           {/* Top Bar — also the grab area for swipe-down-to-close */}
           <View style={styles.topBar} {...dismissPan.panHandlers}>
-            <Pressable
-              hitSlop={10}
-              onPress={() => setIsPlayerOpen(false)}
-              style={styles.topIconBtn}
-            >
+            <Tap hitSlop={10} onPress={() => setIsPlayerOpen(false)} style={styles.topIconBtn}>
               <Ionicons name="chevron-down" size={24} color="#FFFFFF" />
-            </Pressable>
+            </Tap>
 
             {/* Interactive Stream Quality Pill -> Opens HolySic Diagnostics */}
-            <Pressable
+            <Tap
               onPress={() => setPane((p) => (p === 'diagnostics' ? 'artwork' : 'diagnostics'))}
               style={[styles.qualityBadgeBtn, { borderColor: palette.accent + '40' }]}
             >
@@ -299,10 +310,10 @@ export const FullPlayerModal: React.FC = () => {
                 {resolvedStream?.qualityLabel || currentTrack.qualityBadge || 'HolySic Stream'}
                 {loudnessLabel ? ` · RG ${loudnessLabel}` : ''}
               </Text>
-            </Pressable>
+            </Tap>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              <Pressable
+              <Tap
                 hitSlop={8}
                 onPress={() => setPane((p) => (p === 'styles' ? 'artwork' : 'styles'))}
                 style={[
@@ -315,15 +326,15 @@ export const FullPlayerModal: React.FC = () => {
                   size={16}
                   color={pane === 'styles' ? palette.onAccent : '#FFFFFF'}
                 />
-              </Pressable>
+              </Tap>
 
-              <Pressable
+              <Tap
                 hitSlop={8}
                 onPress={() => setActionTrack(currentTrack)}
                 style={styles.topIconBtn}
               >
                 <Ionicons name="ellipsis-horizontal" size={21} color="#FFFFFF" />
-              </Pressable>
+              </Tap>
             </View>
           </View>
 
@@ -355,7 +366,7 @@ export const FullPlayerModal: React.FC = () => {
                   </Text>
                   <View style={styles.sleepGrid}>
                     {[5, 15, 30, 45, 60].map((mins) => (
-                      <Pressable
+                      <Tap
                         key={mins}
                         onPress={() => {
                           setSleepTimer(mins);
@@ -366,9 +377,9 @@ export const FullPlayerModal: React.FC = () => {
                         <Text style={styles.sleepOptionText}>
                           {mins} {vi ? 'phút' : 'min'}
                         </Text>
-                      </Pressable>
+                      </Tap>
                     ))}
-                    <Pressable
+                    <Tap
                       onPress={() => {
                         setSleepTimer('end_of_track');
                         setPane('artwork');
@@ -378,14 +389,14 @@ export const FullPlayerModal: React.FC = () => {
                       <Text style={styles.sleepOptionText}>
                         {vi ? 'Hết bài này' : 'End of Song'}
                       </Text>
-                    </Pressable>
+                    </Tap>
                   </View>
                   {(sleepRemainingSec !== null || sleepEndOfTrack) && (
-                    <Pressable onPress={() => setSleepTimer(null)} style={styles.turnOffSleepBtn}>
+                    <Tap onPress={() => setSleepTimer(null)} style={styles.turnOffSleepBtn}>
                       <Text style={{ color: '#F87171', fontWeight: '700' }}>
                         {vi ? 'Tắt hẹn giờ' : 'Turn Off Timer'}
                       </Text>
-                    </Pressable>
+                    </Tap>
                   )}
                 </ScrollView>
               </View>
@@ -395,9 +406,9 @@ export const FullPlayerModal: React.FC = () => {
                   <Text style={[styles.paneTitle, { fontFamily }]}>
                     {vi ? 'Chẩn đoán luồng phát' : 'Stream Source Diagnostics'}
                   </Text>
-                  <Pressable onPress={() => setPane('artwork')}>
+                  <Tap onPress={() => setPane('artwork')}>
                     <Ionicons name="close" size={22} color="#FFF" />
-                  </Pressable>
+                  </Tap>
                 </View>
                 <Text style={styles.subHelper}>
                   {resolvedStream
@@ -454,15 +465,15 @@ export const FullPlayerModal: React.FC = () => {
                   <Text style={[styles.paneTitle, { fontFamily }]}>
                     {vi ? 'Chọn giao diện Player HolySic' : 'HolySic Player Presets'}
                   </Text>
-                  <Pressable onPress={() => setPane('artwork')}>
+                  <Tap onPress={() => setPane('artwork')}>
                     <Ionicons name="close" size={22} color="#FFF" />
-                  </Pressable>
+                  </Tap>
                 </View>
                 <ScrollView showsVerticalScrollIndicator={false}>
                   {PLAYER_STYLE_META.map((meta) => {
                     const selected = prefs.playerStyle === meta.id;
                     return (
-                      <Pressable
+                      <Tap
                         key={meta.id}
                         onPress={() => {
                           updatePrefs({ playerStyle: meta.id as PlayerStyle });
@@ -500,7 +511,7 @@ export const FullPlayerModal: React.FC = () => {
                             {meta.badge}
                           </Text>
                         </View>
-                      </Pressable>
+                      </Tap>
                     );
                   })}
                 </ScrollView>
@@ -598,7 +609,7 @@ export const FullPlayerModal: React.FC = () => {
                   </Text>
                 </View>
 
-                <Pressable
+                <Tap
                   hitSlop={10}
                   onPress={() => toggleLike(currentTrack)}
                   style={[
@@ -611,7 +622,7 @@ export const FullPlayerModal: React.FC = () => {
                     size={24}
                     color={liked ? HOLYSIC_COLORS.roseLike : '#FFFFFF'}
                   />
-                </Pressable>
+                </Tap>
               </View>
 
               {/* Live radio: no timeline, just an on-air bar */}
@@ -657,7 +668,7 @@ export const FullPlayerModal: React.FC = () => {
                     >
                       {formatTimeSec(shownPos)}
                     </Text>
-                    <Pressable
+                    <Tap
                       onPress={() => updatePrefs({ showRemainingTime: !prefs.showRemainingTime })}
                     >
                       <Text style={styles.timestampText}>
@@ -665,22 +676,22 @@ export const FullPlayerModal: React.FC = () => {
                           ? `-${formatTimeSec(Math.max(0, durationSec - shownPos))}`
                           : formatTimeSec(durationSec)}
                       </Text>
-                    </Pressable>
+                    </Tap>
                   </View>
                 </View>
               )}
 
               {/* Primary Transport Row */}
               <View style={styles.transportRow}>
-                <Pressable hitSlop={10} onPress={toggleShuffle} style={styles.sideCtrl}>
+                <Tap hitSlop={10} onPress={toggleShuffle} style={styles.sideCtrl}>
                   <Ionicons
                     name="shuffle"
                     size={22}
                     color={shuffle ? palette.accent : 'rgba(255,255,255,0.48)'}
                   />
-                </Pressable>
+                </Tap>
 
-                <Pressable
+                <Tap
                   hitSlop={10}
                   onPress={rw.guard(playPrevious)}
                   onLongPress={rw.onLongPress}
@@ -689,9 +700,9 @@ export const FullPlayerModal: React.FC = () => {
                   style={styles.skipBtn}
                 >
                   <Ionicons name="play-skip-back" size={30} color="#FFFFFF" />
-                </Pressable>
+                </Tap>
 
-                <Pressable
+                <Tap
                   onPress={togglePlay}
                   style={[styles.bigPlayBtn, { backgroundColor: palette.accent }]}
                 >
@@ -705,9 +716,9 @@ export const FullPlayerModal: React.FC = () => {
                       style={!isPlaying ? { marginLeft: 3 } : undefined}
                     />
                   )}
-                </Pressable>
+                </Tap>
 
-                <Pressable
+                <Tap
                   hitSlop={10}
                   onPress={ff.guard(playNext)}
                   onLongPress={ff.onLongPress}
@@ -716,9 +727,9 @@ export const FullPlayerModal: React.FC = () => {
                   style={styles.skipBtn}
                 >
                   <Ionicons name="play-skip-forward" size={30} color="#FFFFFF" />
-                </Pressable>
+                </Tap>
 
-                <Pressable hitSlop={10} onPress={cycleRepeat} style={styles.sideCtrl}>
+                <Tap hitSlop={10} onPress={cycleRepeat} style={styles.sideCtrl}>
                   <Ionicons
                     name="repeat"
                     size={22}
@@ -727,13 +738,13 @@ export const FullPlayerModal: React.FC = () => {
                   {repeatMode === 'ONE' && (
                     <Text style={[styles.repeatOneDot, { color: palette.accent }]}>1</Text>
                   )}
-                </Pressable>
+                </Tap>
               </View>
 
               {/* Volume — IPA: the real iPhone volume (side buttons move it too); bit-perfect keeps
                 the player at unity gain, so only the hardware volume is offered there */}
               {roomyPane ? null : prefs.bitPerfect && systemVol == null ? (
-                <Pressable
+                <Tap
                   onPress={() => setPane('diagnostics')}
                   style={styles.volumeRow}
                   accessibilityLabel="Bit-perfect volume"
@@ -744,7 +755,7 @@ export const FullPlayerModal: React.FC = () => {
                       ? 'Bit-perfect · âm lượng 100 % — chỉnh bằng nút âm lượng'
                       : 'Bit-perfect · volume 100 % — use the volume buttons'}
                   </Text>
-                </Pressable>
+                </Tap>
               ) : (
                 <View>
                   <View style={styles.volumeRow}>
@@ -761,7 +772,7 @@ export const FullPlayerModal: React.FC = () => {
                     />
                     <Ionicons name="volume-high" size={16} color="rgba(255,255,255,0.5)" />
                     {output.supported && (
-                      <Pressable
+                      <Tap
                         hitSlop={12}
                         onPress={() => {
                           haptic('light');
@@ -780,11 +791,11 @@ export const FullPlayerModal: React.FC = () => {
                           size={19}
                           color={outIsExternal ? palette.accent : 'rgba(255,255,255,0.6)'}
                         />
-                      </Pressable>
+                      </Tap>
                     )}
                   </View>
                   {(outIsExternal || prefs.bitPerfect) && !!outName && (
-                    <Pressable onPress={() => setPane('diagnostics')} style={styles.routeRow}>
+                    <Tap onPress={() => setPane('diagnostics')} style={styles.routeRow}>
                       <Ionicons
                         name={
                           prefs.bitPerfect
@@ -800,7 +811,7 @@ export const FullPlayerModal: React.FC = () => {
                         {prefs.bitPerfect ? 'Bit-perfect · ' : ''}
                         {outName.name}
                       </Text>
-                    </Pressable>
+                    </Tap>
                   )}
                 </View>
               )}
@@ -809,7 +820,7 @@ export const FullPlayerModal: React.FC = () => {
 
           {/* Bottom HolySic Action Deck (Lyrics · Queue · Audio Lab · Sleep Timer) */}
           <View style={styles.bottomDeck}>
-            <Pressable
+            <Tap
               onPress={() => setPane((p) => (p === 'lyrics' ? 'artwork' : 'lyrics'))}
               style={[
                 styles.deckPill,
@@ -834,9 +845,9 @@ export const FullPlayerModal: React.FC = () => {
               >
                 {vi ? 'Lời nhạc' : 'Lyrics'}
               </Text>
-            </Pressable>
+            </Tap>
 
-            <Pressable
+            <Tap
               onPress={() => setPane((p) => (p === 'queue' ? 'artwork' : 'queue'))}
               style={[
                 styles.deckPill,
@@ -861,9 +872,9 @@ export const FullPlayerModal: React.FC = () => {
               >
                 {vi ? 'Hàng chờ' : 'Queue'}
               </Text>
-            </Pressable>
+            </Tap>
 
-            <Pressable
+            <Tap
               onPress={() => setIsAudioLabOpen(true)}
               style={[
                 styles.deckPill,
@@ -888,9 +899,9 @@ export const FullPlayerModal: React.FC = () => {
               >
                 Audio Lab
               </Text>
-            </Pressable>
+            </Tap>
 
-            <Pressable
+            <Tap
               onPress={() => setPane((p) => (p === 'sleep' ? 'artwork' : 'sleep'))}
               style={[
                 styles.deckPill,
@@ -919,7 +930,7 @@ export const FullPlayerModal: React.FC = () => {
                       ? 'Hẹn giờ'
                       : 'Sleep'}
               </Text>
-            </Pressable>
+            </Tap>
           </View>
         </LinearGradient>
       </Animated.View>

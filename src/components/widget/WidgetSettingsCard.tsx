@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useState } from 'react';
-import { AppState, Platform, Pressable, Text, View } from 'react-native';
+import { AppState, Platform, Text, View } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
 import {
   widgetLinked,
@@ -16,6 +16,7 @@ import {
 import { WidgetCardAnchor } from './widgetAnchor';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { ArtworkImage } from '../ArtworkImage';
+import { Tap } from '../ui/Tap';
 
 const clock = (s: number) => {
   const v = Math.max(0, Math.floor(s || 0));
@@ -220,7 +221,7 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
           ).map(([id, label, icon]) => {
             const on = kind === id;
             return (
-              <Pressable
+              <Tap
                 key={id}
                 onPress={() => setKind(id)}
                 style={[styles.segBtn, on && { backgroundColor: UI.fg(0.1) }]}
@@ -228,7 +229,7 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
               >
                 <Ionicons name={icon} size={13} color={on ? palette.accent : UI.text2} />
                 <Text style={[styles.segText, on && { color: UI.text }]}>{label}</Text>
-              </Pressable>
+              </Tap>
             );
           })}
         </View>
@@ -386,14 +387,10 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
                   </View>
                 )}
                 <View style={styles.controls}>
-                  <Pressable
-                    onPress={playPrevious}
-                    hitSlop={8}
-                    accessibilityLabel="Widget previous"
-                  >
+                  <Tap onPress={playPrevious} hitSlop={8} accessibilityLabel="Widget previous">
                     <Ionicons name="play-back" size={17} color="#FFFFFF" />
-                  </Pressable>
-                  <Pressable
+                  </Tap>
+                  <Tap
                     onPress={togglePlay}
                     style={styles.playBtn}
                     accessibilityLabel="Widget play pause"
@@ -404,17 +401,17 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
                       color="#111"
                       style={!isPlaying ? { marginLeft: 2 } : undefined}
                     />
-                  </Pressable>
-                  <Pressable onPress={playNext} hitSlop={8} accessibilityLabel="Widget next">
+                  </Tap>
+                  <Tap onPress={playNext} hitSlop={8} accessibilityLabel="Widget next">
                     <Ionicons name="play-forward" size={17} color="#FFFFFF" />
-                  </Pressable>
-                  <Pressable
+                  </Tap>
+                  <Tap
                     onPress={() => currentTrack && toggleLike(currentTrack)}
                     hitSlop={8}
                     accessibilityLabel="Widget like"
                   >
                     <Ionicons name={liked ? 'heart' : 'heart-outline'} size={17} color="#FFFFFF" />
-                  </Pressable>
+                  </Tap>
                 </View>
               </View>
             </View>
@@ -448,12 +445,12 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
           <Text style={styles.statusText}>{statusLine.text}</Text>
         </View>
 
-        <Pressable onPress={() => setHelp((h) => !h)} style={styles.helpBtn}>
+        <Tap onPress={() => setHelp((h) => !h)} style={styles.helpBtn}>
           <Text style={[styles.helpBtnText, { color: palette.accent }]}>
             {vi ? 'Cách thêm widget' : 'How to add the widget'}
           </Text>
           <Ionicons name={help ? 'chevron-up' : 'chevron-down'} size={14} color={palette.accent} />
-        </Pressable>
+        </Tap>
         {help && (
           <View style={styles.helpBox}>
             <Text style={styles.helpText}>
@@ -469,7 +466,7 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
               </Text>
             )}
             {native && (
-              <Pressable
+              <Tap
                 onPress={() => {
                   Clipboard.setStringAsync(diag).catch(() => {});
                   haptic('light');
@@ -488,7 +485,7 @@ export const WidgetSettingsCard: React.FC<{ fontFamily?: string }> = ({ fontFami
                   size={14}
                   color={copied ? '#34D399' : UI.text3}
                 />
-              </Pressable>
+              </Tap>
             )}
             {status === 'noExtension' && (
               <Text style={[styles.helpText, styles.fixText]}>

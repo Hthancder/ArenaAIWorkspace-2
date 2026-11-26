@@ -3,15 +3,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
@@ -23,6 +15,8 @@ import { TrackRow } from '../TrackRow';
 import { useLocalLibrary } from '../local/LocalLibraryScreen';
 import { LocalLibrary } from '../../services/local/localLibrary';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { useTabScrollToTop } from '../../services/ui/tabBus';
+import { Tap } from '../ui/Tap';
 
 const SOURCE_FILTERS: { id: 'all' | MusicSourceId; label: string }[] = [
   { id: 'all', label: 'All Sources' },
@@ -140,6 +134,7 @@ export const SearchScreen: React.FC = () => {
     addSearchHistory(q);
   };
 
+  const scrollRef = useTabScrollToTop('search');
   return (
     <View style={styles.container}>
       {/* Sticky Search Input */}
@@ -158,9 +153,9 @@ export const SearchScreen: React.FC = () => {
             style={[styles.searchInput, { fontFamily }]}
           />
           {query.length > 0 && (
-            <Pressable hitSlop={8} onPress={() => setQuery('')}>
+            <Tap hitSlop={8} onPress={() => setQuery('')}>
               <Ionicons name="close-circle" size={19} color={UI.text3} />
-            </Pressable>
+            </Tap>
           )}
         </View>
 
@@ -182,7 +177,7 @@ export const SearchScreen: React.FC = () => {
                     : 'Songs play now; playlists/albums are imported')}
               </Text>
             </View>
-            <Pressable
+            <Tap
               onPress={runLink}
               disabled={linkBusy}
               style={[styles.linkBtn, { backgroundColor: palette.accent }]}
@@ -194,13 +189,13 @@ export const SearchScreen: React.FC = () => {
                   {vi ? 'Mở' : 'Open'}
                 </Text>
               )}
-            </Pressable>
+            </Tap>
           </View>
         )}
 
         {/* Several songs typed at once → "Search a list" */}
         {listCount > 1 && (
-          <Pressable onPress={() => openImport('list', query)} style={styles.linkCard}>
+          <Tap onPress={() => openImport('list', query)} style={styles.linkCard}>
             <Ionicons name="list" size={20} color="#FBBF24" />
             <Text style={{ color: UI.text, fontWeight: '700', flex: 1 }}>
               {vi
@@ -208,27 +203,27 @@ export const SearchScreen: React.FC = () => {
                 : `Search each song in the list (${listCount})`}
             </Text>
             <Ionicons name="chevron-forward" size={16} color={UI.text3} />
-          </Pressable>
+          </Tap>
         )}
 
         {/* Suggestions while typing */}
         {suggestions.length > 0 && (
           <View style={styles.suggestBox}>
             {suggestions.map((s) => (
-              <Pressable key={s} onPress={() => submitQuery(s)} style={styles.suggestRow}>
+              <Tap key={s} onPress={() => submitQuery(s)} style={styles.suggestRow}>
                 <Ionicons name="search-outline" size={14} color={UI.text3} />
                 <Text numberOfLines={1} style={{ color: UI.fg(0.88), flex: 1, fontSize: 14 }}>
                   {s}
                 </Text>
-                <Pressable hitSlop={8} onPress={() => setQuery(s + ' ')}>
+                <Tap hitSlop={8} onPress={() => setQuery(s + ' ')}>
                   <Ionicons
                     name="arrow-up-outline"
                     size={14}
                     color={UI.text3}
                     style={{ transform: [{ rotate: '-45deg' }] }}
                   />
-                </Pressable>
-              </Pressable>
+                </Tap>
+              </Tap>
             ))}
           </View>
         )}
@@ -242,7 +237,7 @@ export const SearchScreen: React.FC = () => {
           {SOURCE_FILTERS.map((f) => {
             const active = sourceFilter === f.id;
             return (
-              <Pressable
+              <Tap
                 key={f.id}
                 onPress={() => setSourceFilter(f.id)}
                 style={[
@@ -261,13 +256,14 @@ export const SearchScreen: React.FC = () => {
                 >
                   {f.label}
                 </Text>
-              </Pressable>
+              </Tap>
             );
           })}
         </ScrollView>
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -294,7 +290,7 @@ export const SearchScreen: React.FC = () => {
                       ? `Trên máy (${localTracks.length})`
                       : `On this device (${localTracks.length})`}
                   </Text>
-                  <Pressable
+                  <Tap
                     onPress={() => LocalLibrary.open('')}
                     hitSlop={8}
                     accessibilityLabel={vi ? 'Mở Nhạc trên máy' : 'Open Local Files'}
@@ -302,7 +298,7 @@ export const SearchScreen: React.FC = () => {
                     <Text style={[styles.localMore, { color: palette.accent }]}>
                       {vi ? 'Mở thư viện' : 'Open'}
                     </Text>
-                  </Pressable>
+                  </Tap>
                 </View>
                 {localTracks.slice(0, 6).map((song) => (
                   <TrackRow key={song.id} track={song} queueContext={localTracks} />
@@ -319,7 +315,7 @@ export const SearchScreen: React.FC = () => {
                   contentContainerStyle={{ paddingHorizontal: 16, gap: 12, marginBottom: 14 }}
                 >
                   {albumResults.map((alb) => (
-                    <Pressable
+                    <Tap
                       key={alb.id}
                       onPress={() => openCollection({ kind: 'album', id: alb.id, summary: alb })}
                       style={styles.albumCard}
@@ -331,7 +327,7 @@ export const SearchScreen: React.FC = () => {
                       <Text numberOfLines={1} style={styles.albumArtist}>
                         {alb.artist}
                       </Text>
-                    </Pressable>
+                    </Tap>
                   ))}
                 </ScrollView>
               </>
@@ -365,20 +361,16 @@ export const SearchScreen: React.FC = () => {
                   <Text style={[styles.subHeading, { marginHorizontal: 0, fontFamily }]}>
                     {vi ? 'Tìm kiếm gần đây' : 'Recent Searches'}
                   </Text>
-                  <Pressable onPress={clearSearchHistory}>
+                  <Tap onPress={clearSearchHistory}>
                     <Text style={{ color: UI.text3, fontSize: 12.5 }}>{vi ? 'Xoá' : 'Clear'}</Text>
-                  </Pressable>
+                  </Tap>
                 </View>
                 <View style={styles.historyChips}>
                   {searchHistory.map((item) => (
-                    <Pressable
-                      key={item}
-                      onPress={() => submitQuery(item)}
-                      style={styles.historyChip}
-                    >
+                    <Tap key={item} onPress={() => submitQuery(item)} style={styles.historyChip}>
                       <Ionicons name="time-outline" size={14} color={UI.text2} />
                       <Text style={styles.historyChipText}>{item}</Text>
-                    </Pressable>
+                    </Tap>
                   ))}
                 </View>
               </View>
@@ -394,7 +386,7 @@ export const SearchScreen: React.FC = () => {
               contentContainerStyle={{ paddingHorizontal: 16, gap: 12, marginBottom: 18 }}
             >
               {FEATURED_ARTISTS.map((art) => (
-                <Pressable
+                <Tap
                   key={art.name}
                   onPress={() => openCollection({ kind: 'artist', id: art.name, name: art.name })}
                   style={styles.artistPillCard}
@@ -412,7 +404,7 @@ export const SearchScreen: React.FC = () => {
                   <Text numberOfLines={1} style={styles.artistTag}>
                     {art.tag}
                   </Text>
-                </Pressable>
+                </Tap>
               ))}
             </ScrollView>
 
@@ -422,11 +414,7 @@ export const SearchScreen: React.FC = () => {
             </Text>
             <View style={styles.genreGrid}>
               {MOOD_CATEGORIES.map((cat) => (
-                <Pressable
-                  key={cat.id}
-                  onPress={() => submitQuery(cat.query)}
-                  style={styles.genreCell}
-                >
+                <Tap key={cat.id} onPress={() => submitQuery(cat.query)} style={styles.genreCell}>
                   <LinearGradient
                     colors={cat.colors}
                     start={{ x: 0, y: 0 }}
@@ -438,7 +426,7 @@ export const SearchScreen: React.FC = () => {
                       {vi ? cat.labelVi : cat.labelEn}
                     </Text>
                   </LinearGradient>
-                </Pressable>
+                </Tap>
               ))}
             </View>
 
@@ -453,7 +441,7 @@ export const SearchScreen: React.FC = () => {
                   contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
                 >
                   {featuredAlbums.map((alb) => (
-                    <Pressable
+                    <Tap
                       key={alb.id}
                       onPress={() => openCollection({ kind: 'album', id: alb.id, summary: alb })}
                       style={styles.albumCard}
@@ -465,7 +453,7 @@ export const SearchScreen: React.FC = () => {
                       <Text numberOfLines={1} style={styles.albumArtist}>
                         {alb.artist}
                       </Text>
-                    </Pressable>
+                    </Tap>
                   ))}
                 </ScrollView>
               </>

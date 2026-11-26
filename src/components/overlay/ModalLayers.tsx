@@ -10,7 +10,8 @@
 // view controller — on top of the player, the charts, an album page, etc.
 
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHolySic } from '../../context/HolySicContext';
 import { GlassSurface } from '../GlassSurface';
@@ -136,26 +137,71 @@ export const SheetSlot: React.FC<{ layer: LayerId }> = ({ layer }) => {
   );
 };
 
-/** The app's toast, drawn in whichever layer is on top (it used to hide behind open modals). */
+/** The app's toast, drawn in whichever layer is on top (it used to hide behind open modals).
+ *  Drops in from the top with a spring and lifts away when it ends, like an iOS banner. */
 const ToastPill: React.FC = () => {
   const { toastMessage, palette } = useHolySic();
   const insets = useSafeAreaInsets();
-  if (!toastMessage) return null;
+  const [shown, setShown] = useState<string | null>(toastMessage);
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (toastMessage) {
+      setShown(toastMessage);
+      v.setValue(0);
+      Animated.spring(v, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 9 }).start();
+    } else {
+      Animated.timing(v, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }).start(({ finished }) => finished && setShown(null));
+    }
+  }, [toastMessage, v]);
+  if (!shown) return null;
+  const bad = /lỗi|không thể|thất bại|error|fail|couldn|can.t/i.test(shown);
   return (
-    <View pointerEvents="none" style={[styles.toastWrap, { top: Math.max(insets.top + 12, 22) }]}>
+    <Animated.View
+      pointerEvents="none"
+      accessibilityLiveRegion="polite"
+      style={[
+        styles.toastWrap,
+        {
+          top: Math.max(insets.top + 12, 22),
+          opacity: v,
+          transform: [
+            { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [-28, 0] }) },
+            { scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
+          ],
+        },
+      ]}
+    >
       <GlassSurface
         intensity={75}
         tintColor={UI.shade(22, 22, 32, 0.92)}
         style={[styles.toastPill, { borderColor: palette.accent + '44' }]}
       >
-        <Text style={styles.toastText}>{toastMessage}</Text>
+        <Ionicons
+          name={bad ? 'alert-circle' : 'checkmark-circle'}
+          size={16}
+          color={bad ? '#FBBF24' : palette.accent}
+        />
+        <Text style={styles.toastText}>{shown}</Text>
       </GlassSurface>
-    </View>
+    </Animated.View>
   );
 };
 
 const styles = themedSheet(() => ({
   toastWrap: { position: 'absolute', left: 20, right: 20, alignItems: 'center', zIndex: 999 },
-  toastPill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 99, borderWidth: 1 },
-  toastText: { color: UI.text, fontSize: 13, fontWeight: '700' },
+  toastPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 99,
+    borderWidth: 1,
+  },
+  toastText: { color: UI.text, fontSize: 13, fontWeight: '700', flexShrink: 1 },
 }));

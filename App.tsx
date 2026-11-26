@@ -6,12 +6,20 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useSyncExternalStore } from 'react';
-import { Appearance, Platform, Pressable, Text, useColorScheme, View } from 'react-native';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  Animated,
+  Appearance,
+  Easing,
+  Platform,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  View,
+} from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GlassSurface } from './src/components/GlassSurface';
 import { MiniPlayer } from './src/components/MiniPlayer';
-import { HolySicMarkIcon } from './src/components/HolySicIcons';
+import { TabBar, TabDef } from './src/components/TabBar';
 import { FullPlayerModal } from './src/components/player/FullPlayerModal';
 import { HomeScreen } from './src/components/screens/HomeScreen';
 import { LibraryScreen } from './src/components/screens/LibraryScreen';
@@ -45,9 +53,6 @@ const HolySicShell: React.FC = () => {
     activeTab,
     setActiveTab,
     prefs,
-    palette,
-    toastMessage,
-    haptic,
     isOnline,
     importSheet,
     closeImport,
@@ -80,13 +85,13 @@ const HolySicShell: React.FC = () => {
 
   const bg = prefs.pureBlack ? UI.surface('#000000') : UI.surface('#0A0A0E');
 
-  const tabs: {
-    id: MainTab;
-    label: string;
-    icon: keyof typeof Ionicons.glyphMap;
-    iconActive: keyof typeof Ionicons.glyphMap;
-    isBrandMark?: boolean;
-  }[] = [
+  // tabs are mounted on first visit and then kept alive
+  const [visited, setVisited] = useState<MainTab[]>([activeTab]);
+  useEffect(() => {
+    setVisited((v) => (v.includes(activeTab) ? v : [...v, activeTab]));
+  }, [activeTab]);
+
+  const tabs: TabDef<MainTab>[] = [
     {
       id: 'home',
       label: t(prefs.language, 'home'),
@@ -140,10 +145,23 @@ const HolySicShell: React.FC = () => {
           </View>
         )}
         <View style={{ flex: 1 }}>
-          {activeTab === 'home' && <HomeScreen />}
-          {activeTab === 'search' && <SearchScreen />}
-          {activeTab === 'library' && <LibraryScreen />}
-          {activeTab === 'settings' && <SettingsScreen />}
+          {/* tabs stay alive once visited (scroll position, search text, open filters survive a
+              tab switch, like a native UITabBarController); the shown one fades in */}
+          {TAB_IDS.map((id) =>
+            visited.includes(id) ? (
+              <TabPane key={id} active={activeTab === id}>
+                {id === 'home' ? (
+                  <HomeScreen />
+                ) : id === 'search' ? (
+                  <SearchScreen />
+                ) : id === 'library' ? (
+                  <LibraryScreen />
+                ) : (
+                  <SettingsScreen />
+                )}
+              </TabPane>
+            ) : null
+          )}
           {localOpen && <LocalLibraryScreen />}
         </View>
 
@@ -151,38 +169,15 @@ const HolySicShell: React.FC = () => {
         <View style={[styles.bottomDock, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <MiniPlayer />
 
-          <GlassSurface intensity={65} tintColor={UI.shade(14, 14, 20, 0.84)} style={styles.tabBar}>
-            {tabs.map((tab) => {
-              const selected = activeTab === tab.id;
-              const tint = selected ? palette.accent : UI.text3;
-              return (
-                <Pressable
-                  key={tab.id}
-                  onPress={() => {
-                    haptic('selection');
-                    if (localOpen) LocalLibrary.close();
-                    setActiveTab(tab.id);
-                  }}
-                  style={styles.tabItem}
-                >
-                  {tab.isBrandMark ? (
-                    <HolySicMarkIcon size={23} color={tint} filled={selected} />
-                  ) : (
-                    <Ionicons name={selected ? tab.iconActive : tab.icon} size={22} color={tint} />
-                  )}
-                  <Text
-                    style={[
-                      styles.tabLabel,
-                      { color: tint, fontFamily },
-                      selected && { fontWeight: '800' },
-                    ]}
-                  >
-                    {tab.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </GlassSurface>
+          <TabBar
+            tabs={tabs}
+            active={activeTab}
+            fontFamily={fontFamily}
+            onSelect={(id) => {
+              if (localOpen) LocalLibrary.close();
+              setActiveTab(id);
+            }}
+          />
         </View>
 
         {/* Non-intrusive Toast Pill */}
@@ -255,22 +250,48 @@ const styles = themedSheet(() => ({
     right: 0,
     bottom: 0,
   },
-  tabBar: {
-    marginHorizontal: 10,
-    borderRadius: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingVertical: 9,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
-  tabLabel: {
-    fontSize: 10.5,
-    fontWeight: '600',
-  },
 }));
+
+const TAB_IDS: MainTab[] = ['home', 'search', 'library', 'settings'];
+
+/** One tab's screen: kept mounted, hidden when inactive, fades + rises in when shown. The
+ *  animated layer is dropped once settled, so the idle screen is a plain view (no lingering
+ *  compositing layer over the blurred glass). */
+const TabPane: React.FC<{ active: boolean; children: React.ReactNode }> = ({
+  active,
+  children,
+}) => {
+  const v = useRef(new Animated.Value(1)).current;
+  const [moving, setMoving] = useState(false);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      // the first tab simply appears
+      first.current = false;
+      return;
+    }
+    if (!active) return;
+    v.setValue(0);
+    setMoving(true);
+    Animated.timing(v, {
+      toValue: 1,
+      duration: 210,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => setMoving(false));
+  }, [active, v]);
+  return (
+    <Animated.View
+      style={[
+        StyleSheet.absoluteFill,
+        { display: active ? 'flex' : 'none' },
+        moving && {
+          opacity: v,
+          transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+        },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+};

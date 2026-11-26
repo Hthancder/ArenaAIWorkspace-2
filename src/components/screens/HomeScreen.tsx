@@ -5,7 +5,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -35,6 +34,8 @@ import {
   ShelfItem,
 } from '../../services/library/smartShelves';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { useTabScrollToTop } from '../../services/ui/tabBus';
+import { Tap } from '../ui/Tap';
 
 export const HomeScreen: React.FC = () => {
   const {
@@ -174,6 +175,7 @@ export const HomeScreen: React.FC = () => {
   const { width: winW } = useWindowDimensions();
   // a quick-pick column fills the screen minus a peek of the next one, so rows never overflow
   const pickColW = Math.min(360, Math.max(250, winW - 52));
+  const scrollRef = useTabScrollToTop('home');
   const pickColumns: Track[][] = [];
   for (let i = 0; i < Math.min(activePicks.length, 12); i += 3) {
     pickColumns.push(activePicks.slice(i, i + 3));
@@ -181,6 +183,7 @@ export const HomeScreen: React.FC = () => {
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
@@ -216,15 +219,15 @@ export const HomeScreen: React.FC = () => {
         </View>
 
         <View style={styles.headerActions}>
-          <Pressable onPress={() => setIsAudioLabOpen(true)} style={styles.headerIconBtn}>
+          <Tap onPress={() => setIsAudioLabOpen(true)} style={styles.headerIconBtn}>
             <Ionicons name="options-outline" size={20} color={UI.text} />
-          </Pressable>
-          <Pressable onPress={() => setIsRecapOpen(true)} style={styles.headerIconBtn}>
+          </Tap>
+          <Tap onPress={() => setIsRecapOpen(true)} style={styles.headerIconBtn}>
             <Ionicons name="stats-chart" size={19} color={palette.accent} />
-          </Pressable>
-          <Pressable onPress={refreshHomeFeeds} style={styles.headerIconBtn}>
+          </Tap>
+          <Tap onPress={refreshHomeFeeds} style={styles.headerIconBtn}>
             <Ionicons name="refresh" size={19} color={UI.text} />
-          </Pressable>
+          </Tap>
         </View>
       </View>
 
@@ -237,7 +240,7 @@ export const HomeScreen: React.FC = () => {
         {MOOD_CATEGORIES.map((m) => {
           const active = selectedMood === m.id;
           return (
-            <Pressable
+            <Tap
               key={m.id}
               onPress={() => handleMoodSelect(m.id, m.query)}
               style={[
@@ -256,7 +259,7 @@ export const HomeScreen: React.FC = () => {
               >
                 {vi ? m.labelVi : m.labelEn}
               </Text>
-            </Pressable>
+            </Tap>
           );
         })}
       </ScrollView>
@@ -319,7 +322,7 @@ export const HomeScreen: React.FC = () => {
               onPress: () => LocalLibrary.open(),
             },
           ].map((qa) => (
-            <Pressable key={qa.label} onPress={qa.onPress} style={styles.qaCard}>
+            <Tap key={qa.label} onPress={qa.onPress} style={styles.qaCard}>
               <View style={[styles.qaIcon, { backgroundColor: qa.tint + '22' }]}>
                 <Ionicons name={qa.icon as any} size={18} color={qa.tint} />
               </View>
@@ -331,7 +334,7 @@ export const HomeScreen: React.FC = () => {
                   {qa.sub}
                 </Text>
               </View>
-            </Pressable>
+            </Tap>
           ))}
         </ScrollView>
       )}
@@ -357,7 +360,13 @@ export const HomeScreen: React.FC = () => {
             {pickColumns.map((col, colIdx) => (
               <View key={colIdx} style={[styles.quickColumn, { width: pickColW }]}>
                 {col.map((song) => (
-                  <TrackRow key={song.id} track={song} queueContext={activePicks} compact />
+                  <TrackRow
+                    key={song.id}
+                    track={song}
+                    queueContext={activePicks}
+                    compact
+                    swipeable={false}
+                  />
                 ))}
               </View>
             ))}
@@ -367,7 +376,7 @@ export const HomeScreen: React.FC = () => {
 
       {/* Mix It Instant DJ Flow + Recap Dual Feature Cards */}
       <View style={styles.dualCardsRow}>
-        <Pressable onPress={() => startInstantMix()} style={{ flex: 1 }}>
+        <Tap onPress={() => startInstantMix()} style={{ flex: 1 }}>
           <LinearGradient
             colors={[darkPalette.gradient[0], '#1A1630']}
             start={{ x: 0, y: 0 }}
@@ -385,9 +394,9 @@ export const HomeScreen: React.FC = () => {
               {t(prefs.language, 'mixItDesc')}
             </Text>
           </LinearGradient>
-        </Pressable>
+        </Tap>
 
-        <Pressable onPress={() => setIsRecapOpen(true)} style={{ flex: 1 }}>
+        <Tap onPress={() => setIsRecapOpen(true)} style={{ flex: 1 }}>
           <LinearGradient
             colors={['#1E293B', '#0F172A']}
             start={{ x: 0, y: 0 }}
@@ -405,7 +414,7 @@ export const HomeScreen: React.FC = () => {
               {t(prefs.language, 'recapBannerDesc')}
             </Text>
           </LinearGradient>
-        </Pressable>
+        </Tap>
       </View>
 
       {/* Keep Listening (if history exists) */}
@@ -422,7 +431,7 @@ export const HomeScreen: React.FC = () => {
             contentContainerStyle={styles.horizontalCards}
           >
             {recentUnique.map((ev) => (
-              <Pressable
+              <Tap
                 key={ev.id}
                 onPress={() =>
                   playTrack(
@@ -443,7 +452,7 @@ export const HomeScreen: React.FC = () => {
                 <Text numberOfLines={1} style={styles.squareSub}>
                   {ev.track.artist}
                 </Text>
-              </Pressable>
+              </Tap>
             ))}
           </ScrollView>
         </>
@@ -513,7 +522,7 @@ export const HomeScreen: React.FC = () => {
             contentContainerStyle={styles.horizontalCards}
           >
             {featuredAlbums.map((alb) => (
-              <Pressable
+              <Tap
                 key={alb.id}
                 onPress={() => openCollection({ kind: 'album', id: alb.id, summary: alb })}
                 style={styles.squareCard}
@@ -525,7 +534,7 @@ export const HomeScreen: React.FC = () => {
                 <Text numberOfLines={1} style={styles.squareSub}>
                   {alb.artist}
                 </Text>
-              </Pressable>
+              </Tap>
             ))}
           </ScrollView>
         </>
@@ -535,7 +544,7 @@ export const HomeScreen: React.FC = () => {
       {shown('charts') && (
         <>
           <View style={styles.sectionHeader}>
-            <Pressable
+            <Tap
               onPress={() => openCharts(null)}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
             >
@@ -545,22 +554,22 @@ export const HomeScreen: React.FC = () => {
                   : `Trending ${country.flag} ${country.en}`}
               </SectionTitle>
               <Ionicons name="chevron-down" size={15} color={UI.text3} />
-            </Pressable>
-            <Pressable onPress={() => chartLocal[0] && playTrack(chartLocal[0], chartLocal)}>
+            </Tap>
+            <Tap onPress={() => chartLocal[0] && playTrack(chartLocal[0], chartLocal)}>
               <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
                 {t(prefs.language, 'playAll')}
               </Text>
-            </Pressable>
+            </Tap>
           </View>
           <View style={styles.listCard}>
             {chartLocal.slice(0, 6).map((song, idx) => (
               <TrackRow key={song.id} track={song} queueContext={chartLocal} indexBadge={idx + 1} />
             ))}
-            <Pressable onPress={() => openCharts(null)} style={styles.seeAll}>
+            <Tap onPress={() => openCharts(null)} style={styles.seeAll}>
               <Text style={{ color: palette.accent, fontWeight: '700' }}>
                 {vi ? 'Xem top 50 & đổi quốc gia' : 'See top 50 & change country'}
               </Text>
-            </Pressable>
+            </Tap>
           </View>
         </>
       )}
@@ -575,7 +584,7 @@ export const HomeScreen: React.FC = () => {
             {CHART_GENRES.filter((g) => g.id !== null)
               .slice(0, 12)
               .map((g) => (
-                <Pressable
+                <Tap
                   key={String(g.id)}
                   onPress={() => openCharts(g.id)}
                   style={[
@@ -587,7 +596,7 @@ export const HomeScreen: React.FC = () => {
                   <Text numberOfLines={1} style={[styles.genreText, { fontFamily }]}>
                     {vi ? g.vi : g.en}
                   </Text>
-                </Pressable>
+                </Tap>
               ))}
           </View>
         </>
@@ -600,11 +609,11 @@ export const HomeScreen: React.FC = () => {
             <SectionTitle fontFamily={fontFamily}>
               {vi ? 'Radio trực tuyến' : 'Live radio'}
             </SectionTitle>
-            <Pressable onPress={openRadio}>
+            <Tap onPress={openRadio}>
               <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
                 {vi ? 'Tất cả đài' : 'All stations'}
               </Text>
-            </Pressable>
+            </Tap>
           </View>
           <ScrollView
             horizontal
@@ -614,7 +623,7 @@ export const HomeScreen: React.FC = () => {
             {radioShelf.map((st) => {
               const on = currentTrack?.id === st.id;
               return (
-                <Pressable
+                <Tap
                   key={st.id}
                   onPress={() => playTrack(st, radioShelf)}
                   onLongPress={() => toggleFavoriteStation(st)}
@@ -640,7 +649,7 @@ export const HomeScreen: React.FC = () => {
                   <Text numberOfLines={1} style={styles.squareSub}>
                     {st.genre || st.artist}
                   </Text>
-                </Pressable>
+                </Tap>
               );
             })}
           </ScrollView>
@@ -654,11 +663,11 @@ export const HomeScreen: React.FC = () => {
             <SectionTitle fontFamily={fontFamily}>
               {vi ? 'Indie thịnh hành · Audius' : 'Indie trending · Audius'}
             </SectionTitle>
-            <Pressable onPress={() => audius[0] && playTrack(audius[0], audius)}>
+            <Tap onPress={() => audius[0] && playTrack(audius[0], audius)}>
               <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
                 {t(prefs.language, 'playAll')}
               </Text>
-            </Pressable>
+            </Tap>
           </View>
           <ScrollView
             horizontal
@@ -668,7 +677,7 @@ export const HomeScreen: React.FC = () => {
             {AUDIUS_GENRES.map((g) => {
               const active = audiusGenre === g.id;
               return (
-                <Pressable
+                <Tap
                   key={g.id || 'all'}
                   onPress={() => setAudiusGenre(g.id)}
                   style={[
@@ -679,7 +688,7 @@ export const HomeScreen: React.FC = () => {
                   <Text style={[styles.audiusChipText, active && { color: palette.onAccent }]}>
                     {vi ? g.vi : g.en}
                   </Text>
-                </Pressable>
+                </Tap>
               );
             })}
           </ScrollView>
@@ -704,11 +713,11 @@ export const HomeScreen: React.FC = () => {
             <SectionTitle fontFamily={fontFamily}>
               {t(prefs.language, 'globalCharts')} {globalCountry.flag}
             </SectionTitle>
-            <Pressable onPress={() => chartGlobal[0] && playTrack(chartGlobal[0], chartGlobal)}>
+            <Tap onPress={() => chartGlobal[0] && playTrack(chartGlobal[0], chartGlobal)}>
               <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
                 {t(prefs.language, 'playAll')}
               </Text>
-            </Pressable>
+            </Tap>
           </View>
           <View style={styles.listCard}>
             {chartGlobal.slice(0, 6).map((song, idx) => (
@@ -750,7 +759,7 @@ const SmartShelf: React.FC<{
         contentContainerStyle={styles.horizontalCards}
       >
         {items.map((it, i) => (
-          <Pressable
+          <Tap
             key={it.track.id}
             onPress={() => onPlay(i)}
             style={styles.squareCard}
@@ -777,7 +786,7 @@ const SmartShelf: React.FC<{
             <Text numberOfLines={1} style={[styles.shelfNote, { color: accent }]}>
               {it.note}
             </Text>
-          </Pressable>
+          </Tap>
         ))}
       </ScrollView>
     </>
