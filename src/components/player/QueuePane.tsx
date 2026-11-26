@@ -1,9 +1,18 @@
 // Up Next — HolySic's queue with the editing tools of Spotube & Musike:
-// tap to jump, move up/down, remove, clear everything after the current song, save as playlist.
+// tap to jump, drag the grip to reorder (lifts, neighbours slide aside — like Music's Up Next),
+// remove, clear everything after the current song, save as playlist.
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  PanResponder,
+  PanResponderInstance,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { ArtworkImage } from '../ArtworkImage';
@@ -24,6 +33,7 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     showToast,
     darkPalette: palette,
     prefs,
+    haptic,
   } = useHolySic();
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -36,6 +46,85 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     const t = setTimeout(() => scrollRef.current?.scrollTo({ y, animated: false }), 30);
     return () => clearTimeout(t);
   }, [queueIndex]);
+
+  // ── drag to reorder ──
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const dragY = useRef(new Animated.Value(0)).current;
+  const shifts = useRef<Animated.Value[]>([]);
+  while (shifts.current.length < queue.length) shifts.current.push(new Animated.Value(0));
+  const live = useRef({ len: queue.length, to: -1, from: -1 });
+  live.current.len = queue.length;
+  const fns = useRef({ haptic, moveInQueue });
+  fns.current = { haptic, moveInQueue };
+
+  const resetPending = useRef(false);
+  useLayoutEffect(() => {
+    if (!resetPending.current || dragFrom !== null) return;
+    resetPending.current = false;
+    shifts.current.forEach((v) => v.setValue(0));
+    dragY.setValue(0);
+  }, [queue, dragFrom, dragY]);
+
+  const settleShifts = (from: number, to: number) => {
+    shifts.current.forEach((v, i) => {
+      let target = 0;
+      if (i !== from) {
+        if (from < to && i > from && i <= to) target = -ROW_H;
+        else if (from > to && i >= to && i < from) target = ROW_H;
+      }
+      Animated.spring(v, {
+        toValue: target,
+        useNativeDriver: true,
+        speed: 22,
+        bounciness: 2,
+      }).start();
+    });
+  };
+  const responders = useRef<Record<number, PanResponderInstance>>({});
+  const grip = (idx: number) => {
+    if (!responders.current[idx]) {
+      responders.current[idx] = PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          live.current.from = idx;
+          live.current.to = idx;
+          dragY.setValue(0);
+          setDragFrom(idx);
+          fns.current.haptic('medium');
+        },
+        onPanResponderMove: (_e, g) => {
+          dragY.setValue(g.dy);
+          const to = Math.max(0, Math.min(live.current.len - 1, idx + Math.round(g.dy / ROW_H)));
+          if (to !== live.current.to) {
+            live.current.to = to;
+            fns.current.haptic('selection');
+            settleShifts(idx, to);
+          }
+        },
+        onPanResponderRelease: () => finish(),
+        onPanResponderTerminate: () => finish(),
+      });
+    }
+    return responders.current[idx].panHandlers;
+  };
+  const finish = () => {
+    const { from, to } = live.current;
+    if (from < 0) return;
+    Animated.spring(dragY, {
+      toValue: (to - from) * ROW_H,
+      useNativeDriver: true,
+      speed: 24,
+      bounciness: 0,
+    }).start(() => {
+      // commit; the offsets are zeroed in the same frame the new order lands (layout effect)
+      if (to !== from) fns.current.moveInQueue(from, to);
+      live.current.from = -1;
+      resetPending.current = true;
+      setDragFrom(null);
+    });
+  };
 
   const saveQueue = () => {
     if (queue.length === 0) return;
@@ -83,78 +172,99 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
         </Tap>
       </View>
 
-      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={dragFrom === null}
+      >
         {queue.map((item, idx) => {
           const current = idx === queueIndex;
           const past = idx < queueIndex;
+          const lifted = dragFrom === idx;
           return (
-            <Tap
+            <Animated.View
               key={`${item.id}-${idx}`}
-              onPress={() => !current && jumpToQueueIndex(idx)}
               style={[
-                styles.row,
-                current && { backgroundColor: palette.container + '66' },
-                past && { opacity: 0.5 },
+                lifted ? styles.lifted : null,
+                {
+                  zIndex: lifted ? 10 : 0,
+                  transform: [
+                    { translateY: lifted ? dragY : (shifts.current[idx] ?? 0) },
+                    { scale: lifted ? 1.03 : 1 },
+                  ],
+                },
               ]}
             >
-              <View>
-                <ArtworkImage
-                  source={{ uri: item.artworkUrl }}
-                  fallbackSeed={item.title}
-                  style={styles.art}
-                />
-                {current && (
-                  <View style={styles.nowOverlay}>
-                    <Ionicons
-                      name={isPlaying ? 'stats-chart' : 'pause'}
-                      size={14}
-                      color={palette.accent}
-                    />
-                  </View>
-                )}
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text
-                  numberOfLines={1}
-                  style={[styles.rowTitle, { fontFamily }, current && { color: palette.accent }]}
+              <Tap
+                onPress={() => !current && jumpToQueueIndex(idx)}
+                disabled={dragFrom !== null}
+                style={[
+                  styles.row,
+                  current && { backgroundColor: palette.container + '66' },
+                  lifted && { backgroundColor: '#24242F' },
+                  past && !lifted && { opacity: 0.5 },
+                ]}
+              >
+                <View>
+                  <ArtworkImage
+                    source={{ uri: item.artworkUrl }}
+                    fallbackSeed={item.title}
+                    style={styles.art}
+                  />
+                  {current && (
+                    <View style={styles.nowOverlay}>
+                      <Ionicons
+                        name={isPlaying ? 'stats-chart' : 'pause'}
+                        size={14}
+                        color={palette.accent}
+                      />
+                    </View>
+                  )}
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.rowTitle, { fontFamily }, current && { color: palette.accent }]}
+                  >
+                    {item.title}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.rowArtist}>
+                    {item.artist}
+                  </Text>
+                </View>
+
+                <Tap
+                  feedback="opacity"
+                  hitSlop={6}
+                  disabled={current}
+                  onPress={() => removeFromQueue(idx)}
+                  style={[styles.iconBtn, current && { opacity: 0.25 }]}
+                  accessibilityLabel={vi ? 'Xoá khỏi hàng chờ' : 'Remove'}
                 >
-                  {item.title}
-                </Text>
-                <Text numberOfLines={1} style={styles.rowArtist}>
-                  {item.artist}
-                </Text>
-              </View>
-              <Tap
-                feedback="opacity"
-                hitSlop={6}
-                disabled={idx === 0}
-                onPress={() => moveInQueue(idx, idx - 1)}
-                style={[styles.iconBtn, idx === 0 && { opacity: 0.25 }]}
-                accessibilityLabel={vi ? 'Lên' : 'Move up'}
-              >
-                <Ionicons name="chevron-up" size={17} color="#FFF" />
+                  <Ionicons name="close" size={17} color={HOLYSIC_COLORS.textSecondary} />
+                </Tap>
+                {/* the grip: press and drag to move the song; VoiceOver gets up / down actions */}
+                <View
+                  {...grip(idx)}
+                  style={styles.grip}
+                  accessible
+                  accessibilityRole="adjustable"
+                  accessibilityLabel={vi ? 'Kéo để sắp xếp' : 'Drag to reorder'}
+                  accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+                  onAccessibilityAction={(e) =>
+                    e.nativeEvent.actionName === 'increment'
+                      ? moveInQueue(idx, idx - 1)
+                      : moveInQueue(idx, idx + 1)
+                  }
+                >
+                  <Ionicons
+                    name="reorder-three"
+                    size={22}
+                    color={lifted ? palette.accent : HOLYSIC_COLORS.textMuted}
+                  />
+                </View>
               </Tap>
-              <Tap
-                feedback="opacity"
-                hitSlop={6}
-                disabled={idx === queue.length - 1}
-                onPress={() => moveInQueue(idx, idx + 1)}
-                style={[styles.iconBtn, idx === queue.length - 1 && { opacity: 0.25 }]}
-                accessibilityLabel={vi ? 'Xuống' : 'Move down'}
-              >
-                <Ionicons name="chevron-down" size={17} color="#FFF" />
-              </Tap>
-              <Tap
-                feedback="opacity"
-                hitSlop={6}
-                disabled={current}
-                onPress={() => removeFromQueue(idx)}
-                style={[styles.iconBtn, current && { opacity: 0.25 }]}
-                accessibilityLabel={vi ? 'Xoá khỏi hàng chờ' : 'Remove'}
-              >
-                <Ionicons name="close" size={17} color={HOLYSIC_COLORS.textSecondary} />
-              </Tap>
-            </Tap>
+            </Animated.View>
           );
         })}
         <View style={{ height: 24 }} />
@@ -197,6 +307,21 @@ const styles = StyleSheet.create({
   },
   rowTitle: { color: '#FFF', fontSize: 14.5, fontWeight: '700' },
   rowArtist: { color: HOLYSIC_COLORS.textSecondary, fontSize: 12.5, marginTop: 2 },
+  grip: {
+    width: 36,
+    height: ROW_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -6,
+  },
+  lifted: {
+    shadowColor: '#000',
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+    borderRadius: 14,
+  },
   iconBtn: {
     width: 30,
     height: 30,
