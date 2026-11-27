@@ -342,6 +342,10 @@ const PipCard: React.FC<{ fontFamily?: string }> = ({ fontFamily }) => {
   const { supported, active } = usePipState();
   const vi = prefs.language === 'vi';
   const style = prefs.pipStyle || 'lyrics';
+  const hasTrack = !!currentTrack;
+  useEffect(() => {
+    if (supported && hasTrack) Pip.prepare();
+  }, [supported, hasTrack]);
   const ios = Platform.OS === 'ios';
   const sw = (value: boolean, onChange: (v: boolean) => void, label: string) => (
     <Switch

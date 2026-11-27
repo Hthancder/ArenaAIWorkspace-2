@@ -4,6 +4,7 @@
 // Session handlers the app already sets.
 
 import type { PipCommandEvent, PipMeta } from '../../../modules/holysic-pip';
+import { PlaybackClock } from '../audio/playbackClock';
 
 const W = 960;
 const H = 540;
@@ -151,19 +152,40 @@ class WebPip {
     this.stateSubs.forEach((f) => f({ active: on, possible: this.supported(), error }));
   }
 
+  /** create the hidden video and get its first frame in, so a later tap floats it at once */
+  prepare(): void {
+    if (!this.ensure() || !this.video) return;
+    this.render(true);
+    if (this.video.paused) {
+      this.ours = true;
+      this.video.play().catch(() => undefined);
+      setTimeout(() => (this.ours = false), 120);
+    }
+  }
+
   async start(): Promise<boolean> {
     if (!this.ensure() || !this.video) return false;
     const v = this.video as HTMLVideoElement & { requestPictureInPicture(): Promise<unknown> };
     try {
-      this.render(true);
-      this.ours = true;
-      await v.play().catch(() => undefined);
-      this.ours = false;
+      this.prepare();
+      // the stream needs a frame before the video can float (the browser rejects it otherwise);
+      // usually there already is one (prepare() ran when the button showed up)
+      if (v.readyState < 1) {
+        await new Promise<void>((res) => {
+          const done = () => {
+            v.removeEventListener('loadedmetadata', done);
+            res();
+          };
+          v.addEventListener('loadedmetadata', done);
+          setTimeout(done, 1200);
+          // nudge the canvas so the stream emits a frame
+          setTimeout(() => this.render(true), 30);
+        });
+      }
       await v.requestPictureInPicture();
       this.syncVideo();
       return true;
     } catch (e) {
-      this.ours = false;
       this.setActive(false, e instanceof Error ? e.message : String(e));
       return false;
     }
@@ -222,9 +244,12 @@ class WebPip {
     setTimeout(() => (this.ours = false), 120);
   }
 
+  /** the engine's own position (reported 4×/s) — the bridge only sends play / pause / jumps */
   private clock(): number {
+    const live = PlaybackClock.now(this.playing);
+    if (Number.isFinite(live) && (live > 0 || !this.playing)) return live;
     if (!this.playing) return this.pos;
-    return this.pos + Math.min(2, (Date.now() - this.at) / 1000);
+    return this.pos + (Date.now() - this.at) / 1000;
   }
 
   private schedule() {
@@ -262,7 +287,11 @@ class WebPip {
     if (idx >= 0) {
       const start = this.lyr.starts[idx] + this.lyr.offset;
       const end =
-        idx + 1 < this.lyr.starts.length ? this.lyr.starts[idx + 1] + this.lyr.offset : start + 5;
+        idx + 1 < this.lyr.starts.length
+          ? this.lyr.starts[idx + 1] + this.lyr.offset
+          : m.duration > start
+            ? Math.min(start + 8, m.duration - 0.3)
+            : start + 5;
       fill = Math.max(0, Math.min(1, (pos - start) / Math.max(0.3, Math.min(end - start, 12))));
     }
     const progressPx = m.duration > 0 ? Math.floor((pos / m.duration) * 400) : 0;

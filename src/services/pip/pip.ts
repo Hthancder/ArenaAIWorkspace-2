@@ -120,6 +120,13 @@ export const Pip = {
     }
     return Pip.start();
   },
+  /** iOS: get the window ready (first frame drawn) so a tap opens it at once — iOS only
+   *  starts PiP right inside the tap, so the work must be done before */
+  prepare(): void {
+    if (!state.supported) return;
+    if (native) native.prepare().catch(() => undefined);
+    else if (isWeb) webPip.prepare();
+  },
   /** iOS: float by itself when the app goes to the background while music plays */
   setAutoStart(on: boolean): void {
     if (native) native.setAutoStart(on).catch(() => undefined);

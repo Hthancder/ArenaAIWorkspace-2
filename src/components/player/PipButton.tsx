@@ -2,7 +2,7 @@
 // Renders nothing where PiP isn't available (Expo Go, Android, browsers without video PiP).
 
 import { MaterialIcons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleProp, ViewStyle } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
 import { Pip, usePipState } from '../../services/pip/pip';
@@ -15,6 +15,11 @@ export const PipButton: React.FC<{
 }> = ({ size = 19, color = 'rgba(255,255,255,0.6)', style }) => {
   const { supported, active } = usePipState();
   const { prefs, palette, haptic, showToast, currentTrack } = useHolySic();
+  const hasTrack = !!currentTrack;
+  // the button is on screen: have the first frame ready so the tap starts PiP straight away
+  useEffect(() => {
+    if (supported && hasTrack) Pip.prepare();
+  }, [supported, hasTrack]);
   if (!supported) return null;
   const vi = prefs.language === 'vi';
   return (

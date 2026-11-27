@@ -72,7 +72,8 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
   private var artUri = ""
   private var lastKey = ""
   private var prepared = false
-  private let ci = CIContext(options: [.useSoftwareRenderer: false])
+  /// made on first use (blurring a cover) — not at app launch
+  private lazy var ci = CIContext(options: [.useSoftwareRenderer: false])
   var active = false
   var autoStart = false
   private var wantStart = false
@@ -120,8 +121,10 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       v.layer.addSublayer(layer)
       hostView = v
     }
-    if let v = hostView, v.superview == nil, let root = keyWindow()?.rootViewController?.view {
-      root.insertSubview(v, at: 0)
+    // on top of the window (AVKit wants the source layer on screen), 16×9 pt and ~transparent,
+    // touches pass through
+    if let v = hostView, v.superview == nil, let win = keyWindow() {
+      win.addSubview(v)
     }
     if controller == nil {
       let source = AVPictureInPictureController.ContentSource(
@@ -144,7 +147,10 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       controller = c
     }
     queue.async {
-      self.prepared = true
+      if !self.prepared {
+        self.prepared = true
+        if self.meta.artworkUri != self.artUri { self.loadArt(self.meta.artworkUri) }
+      }
       self.renderNow(force: true)
     }
     schedule()
@@ -208,7 +214,7 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       m.upNext = dict["upNext"] as? String ?? ""
       m.version += 1
       self.meta = m
-      if m.artworkUri != self.artUri { self.loadArt(m.artworkUri) }
+      if self.prepared && m.artworkUri != self.artUri { self.loadArt(m.artworkUri) }
       self.renderNow(force: true)
     }
     DispatchQueue.main.async { self.controller?.invalidatePlaybackState() }
@@ -242,12 +248,14 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
 
   /// Song position + whether it plays — from the AVPlayer when it is the one playing.
   private func clock() -> (pos: Double, playing: Bool) {
-    if let p = player, p.currentItem != nil, p.rate > 0 || !jsPlaying {
+    if let p = player, p.currentItem != nil {
       let t = p.currentTime().seconds
-      if t.isFinite { return (t, p.rate > 0) }
+      if t.isFinite { return (t, p.timeControlStatus == .playing || p.rate > 0) }
     }
     if !jsPlaying { return (jsPos, false) }
-    return (jsPos + min(2, CACurrentMediaTime() - jsAt), true)
+    // JS only reports play / pause / jumps, so run on from the last report
+    let t = jsPos + max(0, CACurrentMediaTime() - jsAt)
+    return (meta.duration > 0 ? min(t, meta.duration) : t, true)
   }
 
   private func syncTimebase() {
@@ -321,7 +329,8 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       let start = lyrics.starts[idx] + lyrics.offset
       let end =
         idx + 1 < lyrics.starts.count
-        ? lyrics.starts[idx + 1] + lyrics.offset : start + 5
+        ? lyrics.starts[idx + 1] + lyrics.offset
+        : (meta.duration > start ? min(start + 8, meta.duration - 0.3) : start + 5)
       fill = max(0, min(1, (c.pos - start) / max(0.3, min(end - start, 12))))
     }
     let progressPx = meta.duration > 0 ? Int(c.pos / meta.duration * 400) : 0
@@ -376,7 +385,7 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     }
     DispatchQueue.main.async { [weak self] in
       guard let layer = self?.displayLayer else { return }
-      if layer.status == .failed { layer.flush() }
+      if layer.status == .failed || layer.requiresFlushToResumeDecoding { layer.flush() }
       layer.enqueue(sb)
     }
   }
@@ -660,7 +669,12 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       let b64 = String(uri[uri.index(after: comma)...])
       done(Data(base64Encoded: b64).flatMap { UIImage(data: $0) })
     } else {
-      let path = URL(string: uri)?.isFileURL == true ? URL(string: uri)!.path : uri
+      var path = uri
+      if let u = URL(string: uri), u.isFileURL {
+        path = u.path
+      } else if uri.hasPrefix("file://") {
+        path = String(uri.dropFirst(7)).removingPercentEncoding ?? String(uri.dropFirst(7))
+      }
       done(UIImage(contentsOfFile: path))
     }
   }
@@ -765,7 +779,8 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
   func pictureInPictureControllerIsPlaybackPaused(
     _ pictureInPictureController: AVPictureInPictureController
   ) -> Bool {
-    return !queue.sync { clock().playing }
+    let playing = queue.sync { clock().playing }
+    return !playing
   }
 
   func pictureInPictureController(
