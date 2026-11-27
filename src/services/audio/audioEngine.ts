@@ -92,6 +92,16 @@ class HolySicAudioEngine {
   private nativeSub: { remove: () => void } | null = null;
 
   /** Where Audio Lab's EQ / bass / reverb / width / 8D really run */
+  /** How often the native spectrum is sent to JS (the full player wants 60, the rest 30) */
+  setSpectrumFps(fps: number): void {
+    if (Platform.OS === 'web' || !HolySicDSP?.setSpectrumFps) return;
+    try {
+      HolySicDSP.setSpectrumFps(fps);
+    } catch {
+      // older native build
+    }
+  }
+
   dspBackend(): 'native' | 'web' | 'none' {
     if (Platform.OS === 'web') return 'web';
     return HolySicDSP ? 'native' : 'none';

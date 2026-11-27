@@ -4,7 +4,6 @@
  * Licensed under GNU General Public License v3.0 (GPL-3.0) — Free & Open Source Forever.
  */
 
-import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
@@ -19,6 +18,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { OfflineBanner } from './src/components/OfflineBanner';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { TabBar, TabDef } from './src/components/TabBar';
 import { FullPlayerModal } from './src/components/player/FullPlayerModal';
@@ -176,17 +176,6 @@ const HolySicShell: React.FC = () => {
           },
         ]}
       >
-        {/* Offline banner (OpenSpot Music) — downloads & Files imports still play */}
-        {!isOnline && (
-          <View style={styles.offlineBanner}>
-            <Ionicons name="cloud-offline-outline" size={15} color={UI.inv} />
-            <Text style={styles.offlineText}>
-              {prefs.language === 'vi'
-                ? 'Đang ngoại tuyến · chỉ phát được bài đã tải & tệp trên máy'
-                : 'Offline · only downloads & local files can play'}
-            </Text>
-          </View>
-        )}
         <View style={{ flex: 1 }}>
           {/* tabs stay alive once visited (scroll position, search text, open filters survive a
               tab switch, like a native UITabBarController); the shown one fades in */}
@@ -223,6 +212,8 @@ const HolySicShell: React.FC = () => {
           />
         </View>
 
+        {/* Connection pill (10 s when the network drops, 5 s on launch while offline) */}
+        <OfflineBanner isOnline={isOnline} vi={prefs.language === 'vi'} />
         {/* Non-intrusive Toast Pill */}
         {/* Local Files sheets / prompts (above the dock) */}
         <LocalOverlayHost />
@@ -271,22 +262,6 @@ const styles = themedSheet(() => ({
     width: '100%',
     maxWidth: Platform.OS === 'web' ? 520 : undefined,
     position: 'relative',
-  },
-  offlineBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginHorizontal: 12,
-    marginBottom: 6,
-    paddingVertical: 6,
-    borderRadius: 99,
-    backgroundColor: '#FBBF24',
-  },
-  offlineText: {
-    color: UI.inv,
-    fontWeight: '700',
-    fontSize: 12.5,
   },
   bottomDock: {
     position: 'absolute',

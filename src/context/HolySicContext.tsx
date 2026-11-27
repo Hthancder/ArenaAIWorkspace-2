@@ -88,10 +88,12 @@ import { createStreamCandidateQueue } from '../services/providers/streamResolver
 import { AudioOutput, sourceFacts } from '../services/audio/audioOutput';
 import { DEFAULT_AUDIO_LAB, StorageService } from '../services/storage/storageService';
 import { PlaybackClock, usePositionStep } from '../services/audio/playbackClock';
+import { SleepClock } from '../services/audio/sleepClock';
 import {
   AlbumSummary,
   ArtistSummary,
   AudioLabSettings,
+  DiagnosticStep,
   DownloadedTrackMeta,
   ListeningEvent,
   LyricsData,
@@ -279,7 +281,8 @@ interface HolySicContextValue extends HolySicExtras {
   nudgeLyricsOffset: (deltaMs: number | 'reset') => void;
 
   // Sleep Timer
-  sleepRemainingSec: number | null;
+  /** a minutes countdown is running (the seconds left: useSleepRemaining()) */
+  sleepActive: boolean;
   sleepEndOfTrack: boolean;
   setSleepTimer: (minutes: number | 'end_of_track' | null) => void;
 
@@ -380,7 +383,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [lyricsAttempt, setLyricsAttempt] = useState(0);
   const reloadLyrics = useCallback(() => setLyricsAttempt((n) => n + 1), []);
 
-  const [sleepRemainingSec, setSleepRemainingSec] = useState<number | null>(null);
+  const [sleepActive, setSleepActive] = useState(false);
   const sleepEndAtRef = useRef<number | null>(null);
   const [sleepEndOfTrack, setSleepEndOfTrack] = useState(false);
 
@@ -476,6 +479,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const preloadRef = useRef<{ trackId: string; stream: ResolvedStream; at: number } | null>(null);
   const preloadingRef = useRef<string | null>(null);
   const isOnline = useConnectivity();
+  const isOnlineRef = useRef(isOnline);
+  isOnlineRef.current = isOnline;
 
   queueRef.current = queue;
   const currentTrackRef = useRef<Track | null>(null);
@@ -801,15 +806,60 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await SourceMemory.load();
       if (!isCurrent()) return;
 
-      const offlineMeta = downloadsRef.current[track.id];
-      // Local Files: play straight from the app folder (follows the file if it was moved)
-      const localUri = isLocalTrack(track) ? LocalLibrary.resolveUri(track) : undefined;
-      if (isLocalTrack(track) && !localUri) {
-        showToast(
-          prefsRef.current.language === 'vi'
-            ? 'Không tìm thấy tệp trên máy — đang thử tìm bài này trực tuyến'
-            : 'File not found on device — trying to find it online'
-        );
+      let offlineMeta: DownloadedTrackMeta | undefined = downloadsRef.current[track.id];
+      const preSteps: DiagnosticStep[] = [];
+      // Local Files: play straight from the app folder (follows the file if it was moved, even
+      // before the first library scan has finished)
+      const isLocal = isLocalTrack(track);
+      const located = isLocal ? await LocalLibrary.locate(track) : undefined;
+      if (!isCurrent()) return;
+      const localUri = located?.uri;
+      if (located) {
+        preSteps.push({
+          module: vi ? 'Tệp trên máy' : 'On this device',
+          step: located.uri
+            ? located.how === 'moved'
+              ? vi
+                ? 'Tìm thấy ở chỗ mới'
+                : 'Found in a new place'
+              : vi
+                ? 'Tìm thấy tệp'
+                : 'File found'
+            : vi
+              ? 'Không thấy tệp'
+              : 'File not found',
+          ok: !!located.uri,
+          detail: located.detail,
+          latencyMs: 1,
+        });
+        if (!located.uri)
+          showToast(
+            vi
+              ? 'Không tìm thấy tệp trên máy — đang thử tìm bài này trực tuyến'
+              : 'File not found on device — trying to find it online'
+          );
+      }
+      // Downloads: the file may have been moved into a folder of the on-device library
+      if (offlineMeta && Platform.OS !== 'web' && /^file:/i.test(offlineMeta.localUri)) {
+        const facts = StreamFileCache.sniffLocal(offlineMeta.localUri);
+        if (facts && !facts.exists) {
+          const name = decodeURIComponent(offlineMeta.localUri.split('/').pop() || '');
+          const found = name ? await LocalLibrary.locate({ ...track, id: 'lf:' + name }) : null;
+          if (!isCurrent()) return;
+          preSteps.push({
+            module: vi ? 'Bài đã tải' : 'Download',
+            step: found?.uri
+              ? vi
+                ? 'Tệp đã bị chuyển chỗ'
+                : 'File was moved'
+              : vi
+                ? 'Mất tệp'
+                : 'File missing',
+            ok: found?.uri ? true : false,
+            detail: found?.uri ? found.detail : name || offlineMeta.localUri,
+          });
+          offlineMeta = found?.uri ? { ...offlineMeta, localUri: found.uri } : undefined;
+        }
       }
       const baseQueue = createStreamCandidateQueue(
         track,
@@ -817,6 +867,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         serversRef.current,
         offlineMeta?.localUri || localUri
       );
+      baseQueue.diagnostics.unshift(...preSteps);
       // A stream preloaded while the previous song played goes first (unless offline exists)
       const pre = preloadRef.current;
       let preloaded: ResolvedStream | null =
@@ -903,6 +954,68 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
             }
           }
 
+          // Files on the device: check what they really are first — a misnamed file (AAC saved as
+          // .mp3, FLAC behind an ID3 block) is played from a correctly named copy
+          const facts = /^file:/i.test(playUrl) ? StreamFileCache.sniffLocal(playUrl) : null;
+          if (facts) {
+            if (!facts.exists) {
+              queue.diagnostics.push({
+                module: cand.sourceLabel,
+                step: vi ? 'Kiểm tra tệp' : 'File check',
+                ok: false,
+                detail: vi
+                  ? 'Tệp không còn ở đường dẫn đã lưu'
+                  : 'The file is no longer at its saved path',
+              });
+              setResolvedStream({ ...cand, diagnostics: [...queue.diagnostics] });
+              continue;
+            }
+            const real = facts.real;
+            if (real && !real.playable) {
+              queue.diagnostics.push({
+                module: cand.sourceLabel,
+                step: vi ? 'Định dạng không hỗ trợ' : 'Unsupported format',
+                ok: false,
+                detail: vi
+                  ? `${real.label} — iOS (AVPlayer) không phát được định dạng này`
+                  : `${real.label} — iOS (AVPlayer) can't play this format`,
+              });
+              setResolvedStream({ ...cand, diagnostics: [...queue.diagnostics] });
+              continue;
+            }
+            const misnamed =
+              !!real &&
+              real.ext !== facts.ext &&
+              !(real.ext === 'm4a' && /^(m4a|mp4|m4b|aac|alac|mov)$/.test(facts.ext)) &&
+              !(real.ext === 'aiff' && facts.ext === 'aif');
+            const fixLabel = real
+              ? `${real.label}${misnamed ? ` (.${facts.ext || '?'})` : ''}`
+              : `.${facts.ext || '?'}`;
+            if (misnamed || real?.label === 'FLAC + ID3') {
+              const copy = StreamFileCache.playableCopy(playUrl, real!.ext);
+              queue.diagnostics.push({
+                module: cand.sourceLabel,
+                step: vi ? 'Sửa tên định dạng' : 'Fix format name',
+                ok: copy ? true : false,
+                detail: copy
+                  ? vi
+                    ? `Thực chất là ${fixLabel} — phát từ bản sao đúng đuôi`
+                    : `Actually ${fixLabel} — playing a correctly named copy`
+                  : vi
+                    ? `Thực chất là ${fixLabel} — không tạo được bản sao`
+                    : `Actually ${fixLabel} — couldn't make a copy`,
+              });
+              if (copy) playUrl = copy;
+            } else {
+              queue.diagnostics.push({
+                module: cand.sourceLabel,
+                step: vi ? 'Kiểm tra tệp' : 'File check',
+                ok: true,
+                detail: `${fixLabel} · ${(facts.size / 1048576).toFixed(1)} MB`,
+              });
+            }
+          }
+
           // Loudness normalisation (ReplayGain-style, from Cog) — applied before audio starts
           audioEngine.setGainMultiplier(
             Loudness.multiplier(track, cand, prefsRef.current.normalizeVolume)
@@ -915,8 +1028,42 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
           const local = cand.isOffline || cand.source === 'synth' || /^file:/i.test(playUrl);
           const timeoutMs = local ? 7000 : 12000;
-          const result = await audioEngine.waitUntilAudible(timeoutMs);
+          let result = await audioEngine.waitUntilAudible(timeoutMs);
           if (!isCurrent() || result === 'superseded') return;
+
+          // A device file AVPlayer refused: one more go from a plain-named copy in Caches (odd
+          // characters in the name, a file still being written by the Files app, permissions…)
+          if (
+            result !== 'ok' &&
+            facts?.exists &&
+            Platform.OS !== 'web' &&
+            !/\/holysic-stream-cache\//.test(playUrl)
+          ) {
+            const copy = StreamFileCache.playableCopy(
+              playUrl,
+              facts.real?.ext || facts.ext || 'm4a'
+            );
+            queue.diagnostics.push({
+              module: cand.sourceLabel,
+              step: vi ? 'Thử lại từ bản sao' : 'Retry from a copy',
+              ok: null,
+              detail:
+                result === 'timeout'
+                  ? vi
+                    ? `Không có tiếng sau ${Math.round(timeoutMs / 1000)} giây`
+                    : `No audio after ${Math.round(timeoutMs / 1000)}s`
+                  : vi
+                    ? 'AVPlayer từ chối tệp gốc'
+                    : 'AVPlayer rejected the original file',
+            });
+            setResolvedStream({ ...cand, diagnostics: [...queue.diagnostics] });
+            if (copy) {
+              await audioEngine.loadAndPlay(copy, track, volumeRef.current);
+              if (!isCurrent()) return;
+              result = await audioEngine.waitUntilAudible(timeoutMs);
+              if (!isCurrent() || result === 'superseded') return;
+            }
+          }
 
           if (result === 'ok') {
             queue.diagnostics.push({
@@ -961,11 +1108,41 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         audioEngine.stop();
         setIsPlaying(false);
         setIsBuffering(false);
-        if (lastTried) setResolvedStream({ ...lastTried, diagnostics: [...queue.diagnostics] });
+        // Diagnostics must always explain the failure — even when no module produced a single
+        // candidate (that used to leave the pane on "Resolving modules…" forever)
+        if (!queue.diagnostics.some((d) => d.ok === false)) {
+          queue.diagnostics.push({
+            module: 'HolySic',
+            step: vi ? 'Không có nguồn phát' : 'No source',
+            ok: false,
+            detail: !isOnlineRef.current
+              ? vi
+                ? 'Đang ngoại tuyến và bài này chưa được tải về máy'
+                : 'Offline, and this song is not downloaded'
+              : vi
+                ? 'Không mô-đun nào tìm thấy bài này (kiểm tra Cài đặt → Mô-đun nguồn)'
+                : 'No module found this song (check Settings → Source modules)',
+          });
+        }
+        setResolvedStream({
+          ...(lastTried || {
+            url: '',
+            source: track.source,
+            sourceLabel: vi ? 'Không phát được' : 'Unplayable',
+            qualityLabel: '—',
+            codec: '—',
+          }),
+          failed: true,
+          diagnostics: [...queue.diagnostics],
+        });
         showToast(
-          vi
-            ? 'Không tìm được bản đầy đủ phát được cho bài này. Xem "Chẩn đoán luồng" trong trình phát để biết lý do.'
-            : 'No full-length source could play this track. Check Stream Diagnostics in the player.'
+          isLocal
+            ? vi
+              ? 'Không phát được tệp này trên máy. Mở “Chẩn đoán luồng” trong trình phát để xem lý do.'
+              : "This file couldn't be played. Open Stream Diagnostics in the player to see why."
+            : vi
+              ? 'Không tìm được bản đầy đủ phát được cho bài này. Xem “Chẩn đoán luồng” trong trình phát để biết lý do.'
+              : 'No full-length source could play this track. Check Stream Diagnostics in the player.'
         );
         return;
       }
@@ -1033,14 +1210,28 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [internalStartTrack]
   );
 
+  /** Offline, a swipe / skip lands only on songs that can play without the network */
+  const playableNow = useCallback(
+    (t: Track) =>
+      isOnlineRef.current ||
+      isLocalTrack(t) ||
+      !!downloadsRef.current[t.id] ||
+      t.source === 'synth' ||
+      !!t.synthPreset,
+    []
+  );
+
   const playNext = useCallback(() => {
     triggerHaptic('light');
     const q = queueRef.current;
     if (q.length === 0) return;
 
     if (shuffleRef.current && q.length > 1) {
-      let rand = Math.floor(Math.random() * q.length);
-      if (rand === queueIndexRef.current) rand = (rand + 1) % q.length;
+      const pool = q
+        .map((t, i) => i)
+        .filter((i) => i !== queueIndexRef.current && playableNow(q[i]));
+      if (pool.length === 0) return;
+      const rand = pool[Math.floor(Math.random() * pool.length)];
       setQueueIndex(rand);
       internalStartTrack(q[rand]);
       return;
@@ -1048,14 +1239,24 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     let nextIdx = queueIndexRef.current + 1;
     const bl = prefsRef.current.blacklist;
-    while (nextIdx < q.length && isBlacklisted(q[nextIdx], bl)) nextIdx += 1;
+    while (nextIdx < q.length && (isBlacklisted(q[nextIdx], bl) || !playableNow(q[nextIdx])))
+      nextIdx += 1;
+    if (nextIdx >= q.length && repeatRef.current === 'ALL' && !isOnlineRef.current) {
+      // offline + repeat all: wrap to the first song that can play
+      const first = q.findIndex((t) => playableNow(t) && !isBlacklisted(t, bl));
+      if (first >= 0 && first !== queueIndexRef.current) {
+        setQueueIndex(first);
+        internalStartTrack(q[first]);
+        return;
+      }
+    }
     if (nextIdx < q.length) {
       setQueueIndex(nextIdx);
       internalStartTrack(q[nextIdx]);
     } else if (repeatRef.current === 'ALL') {
       setQueueIndex(0);
       internalStartTrack(q[0]);
-    } else if (prefsRef.current.autoPlaySimilar && q.length > 0) {
+    } else if (prefsRef.current.autoPlaySimilar && isOnlineRef.current && q.length > 0) {
       // Autoplay radio (Musike): keep the music going with songs like the last one
       const seed = q[queueIndexRef.current] || q[q.length - 1];
       continueWithSimilarRef.current?.(seed);
@@ -1063,7 +1264,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       audioEngine.pause();
       setIsPlaying(false);
     }
-  }, [internalStartTrack]);
+  }, [internalStartTrack, playableNow]);
   const continueWithSimilarRef = useRef<((seed: Track) => void) | null>(null);
   /** play token of the song whose crossfade has already started */
   const crossfadeFiredRef = useRef(-1);
@@ -1077,10 +1278,13 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
     const q = queueRef.current;
     if (q.length === 0) return;
-    const prevIdx = queueIndexRef.current > 0 ? queueIndexRef.current - 1 : q.length - 1;
+    let prevIdx = queueIndexRef.current > 0 ? queueIndexRef.current - 1 : q.length - 1;
+    for (let n = 0; n < q.length && !playableNow(q[prevIdx]); n++)
+      prevIdx = prevIdx > 0 ? prevIdx - 1 : q.length - 1;
+    if (!playableNow(q[prevIdx])) return;
     setQueueIndex(prevIdx);
     internalStartTrack(q[prevIdx]);
-  }, [internalStartTrack]);
+  }, [internalStartTrack, playableNow]);
 
   // Subscribe to AudioEngine playback updates & Lock Screen remote commands
   useEffect(() => {
@@ -1129,8 +1333,11 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (st.didJustFinish) {
         if (sleepEndTrackRef.current) {
           setSleepEndOfTrack(false);
-          setSleepRemainingSec(null);
+          sleepEndAtRef.current = null;
+          SleepClock.set(null);
+          setSleepActive(false);
           audioEngine.pause();
+          setTimeout(() => audioEngine.setSleepFade(1), 400);
           showToast(
             prefsRef.current.language === 'vi'
               ? 'Đã dừng nhạc theo hẹn giờ cuối bài'
@@ -1241,7 +1448,6 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Sleep Timer — counts against the wall clock (a throttled background timer can't drift it),
   // and the final 20 s fade the music out gently instead of cutting it mid-phrase
-  const sleepActive = sleepRemainingSec !== null;
   useEffect(() => {
     if (!sleepActive) return;
     const FADE_SEC = 20;
@@ -1253,7 +1459,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         sleepEndAtRef.current = null;
         audioEngine.pause();
         setIsPlaying(false);
-        setSleepRemainingSec(null);
+        SleepClock.set(null);
+        setSleepActive(false);
         // restore the level once silent, so the next Play starts at the normal volume
         setTimeout(() => audioEngine.setSleepFade(1), 400);
         showToast(
@@ -1265,7 +1472,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       audioEngine.setSleepFade(left < FADE_SEC ? Math.max(0.04, left / FADE_SEC) : 1);
       const secs = Math.ceil(left);
-      setSleepRemainingSec((prev) => (prev === secs ? prev : secs));
+      SleepClock.set(secs);
     };
     tick();
     const timer = setInterval(tick, 250);
@@ -1498,11 +1705,13 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       audioEngine.setSleepFade(1);
       sleepEndAtRef.current = typeof val === 'number' ? Date.now() + val * 60_000 : null;
       if (val === null) {
-        setSleepRemainingSec(null);
+        SleepClock.set(null);
+        setSleepActive(false);
         setSleepEndOfTrack(false);
         showToast(prefs.language === 'vi' ? 'Đã tắt hẹn giờ ngủ' : 'Sleep timer off');
       } else if (val === 'end_of_track') {
-        setSleepRemainingSec(null);
+        SleepClock.set(null);
+        setSleepActive(false);
         setSleepEndOfTrack(true);
         showToast(
           prefs.language === 'vi'
@@ -1511,7 +1720,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         );
       } else {
         setSleepEndOfTrack(false);
-        setSleepRemainingSec(val * 60);
+        SleepClock.set(val * 60);
+        setSleepActive(true);
         showToast(
           prefs.language === 'vi'
             ? `Hẹn giờ tắt nhạc sau ${val} phút`
@@ -2518,7 +2728,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       activeLyricIndex,
       lyricsOffsetSec,
       nudgeLyricsOffset,
-      sleepRemainingSec,
+      sleepActive,
       sleepEndOfTrack,
       setSleepTimer,
       likedTracks,
@@ -2604,7 +2814,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       activeLyricIndex,
       lyricsOffsetSec,
       nudgeLyricsOffset,
-      sleepRemainingSec,
+      sleepActive,
       sleepEndOfTrack,
       setSleepTimer,
       likedTracks,

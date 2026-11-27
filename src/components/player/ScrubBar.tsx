@@ -2,6 +2,8 @@
  * HolySic — iOS music player. Based on Mochy Music by realidkroo (GPL-3.0).
  * https://github.com/realidkroo/Mochy-Music
  */
+import { TouchGuardOverlay } from '../ui/TouchGuard';
+import { ScrollLock } from '../../services/ui/scrollLock';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityActionEvent,
@@ -108,6 +110,7 @@ export const ScrubBar: React.FC<{
         startX.current = e.nativeEvent.locationX;
         lastEdge.current = null;
         live.current.onScrubStart?.();
+        ScrollLock.hold();
         animate(1);
         update(ratioAt(startX.current));
       },
@@ -115,12 +118,14 @@ export const ScrubBar: React.FC<{
       onPanResponderRelease: () => {
         live.current.onCommit?.(current.current);
         live.current.onScrubEnd?.();
+        ScrollLock.release();
         animate(0);
         setDrag(null);
       },
       onPanResponderTerminate: () => {
         live.current.onCommit?.(current.current);
         live.current.onScrubEnd?.();
+        ScrollLock.release();
         animate(0);
         setDrag(null);
       },
@@ -147,6 +152,7 @@ export const ScrubBar: React.FC<{
   return (
     <View
       {...responder.panHandlers}
+      collapsable={false}
       onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
       accessible
       accessibilityRole="adjustable"
@@ -210,6 +216,8 @@ export const ScrubBar: React.FC<{
           }}
         />
       )}
+      {/* a drag here never scrolls the page / pulls the sheet (iOS) */}
+      <TouchGuardOverlay enabled={!disabled} />
     </View>
   );
 };

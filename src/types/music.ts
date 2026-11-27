@@ -57,6 +57,8 @@ export interface ResolvedStream {
   gainDb?: number;
   /** Sample peak (0..1+) for clipping prevention */
   peak?: number;
+  /** every candidate failed — this only carries the diagnostics */
+  failed?: boolean;
   diagnostics: DiagnosticStep[];
 }
 

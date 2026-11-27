@@ -29,6 +29,9 @@ public class HolySicDSPModule: Module {
   private let spectrumQueue = DispatchQueue(label: "holysic.dsp.spectrum", qos: .userInteractive)
   private var bands = [Float](repeating: 0, count: 32)
   private var idleTicks = 0
+  /// spectrum events per second: 60 while the full player shows bars, 30 for the mini player /
+  /// ambient glow (half the JS work, looks the same at that size)
+  private var fps = 60
 
   public func definition() -> ModuleDefinition {
     Name("HolySicDSP")
@@ -90,6 +93,18 @@ public class HolySicDSPModule: Module {
     Function("setSpectrumEnabled") { (on: Bool) in
       HSDSPEngine.setSpectrum(on)
       DispatchQueue.main.async { self.setTimer(on) }
+    }
+
+    Function("setSpectrumFps") { (value: Int) in
+      DispatchQueue.main.async {
+        let clamped = max(15, min(60, value))
+        guard clamped != self.fps else { return }
+        self.fps = clamped
+        if self.timer != nil {
+          self.setTimer(false)
+          self.setTimer(true)
+        }
+      }
     }
 
     Function("getStatus") { () -> [String: Any] in
@@ -157,7 +172,8 @@ public class HolySicDSPModule: Module {
     if on {
       guard timer == nil else { return }
       let t = DispatchSource.makeTimerSource(queue: spectrumQueue)
-      t.schedule(deadline: .now(), repeating: .milliseconds(16), leeway: .milliseconds(2))
+      let ms = max(16, 1000 / max(1, fps))
+      t.schedule(deadline: .now(), repeating: .milliseconds(ms), leeway: .milliseconds(2))
       t.setEventHandler { [weak self] in self?.tick() }
       timer = t
       t.resume()
@@ -179,7 +195,7 @@ public class HolySicDSPModule: Module {
     } else {
       idleTicks += 1
       // paused / stalled: tell JS once so the bars can fall to rest
-      if idleTicks == 12 { sendEvent("onSpectrum", ["bands": [Double](), "sampleRate": 0]) }
+      if idleTicks == max(6, fps / 5) { sendEvent("onSpectrum", ["bands": [Double](), "sampleRate": 0]) }
     }
   }
 }

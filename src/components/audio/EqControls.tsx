@@ -18,6 +18,8 @@ import Svg, { Defs, LinearGradient, Line, Path, Stop, Text as SvgText } from 're
 import { responseCurve } from '../../services/audio/eqCurve';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { ScrubBar } from '../player/ScrubBar';
+import { TouchGuardOverlay } from '../ui/TouchGuard';
+import { ScrollLock } from '../../services/ui/scrollLock';
 
 const RANGE = 12;
 const noSelect = Platform.OS === 'web' ? ({ userSelect: 'none' } as object) : null;
@@ -162,7 +164,9 @@ export const EqFader: React.FC<{
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
       onPanResponderGrant: () => {
+        ScrollLock.hold();
         const now = Date.now();
         // double-tap a fader: back to 0 dB
         if (now - live.current.lastTap < 300) {
@@ -194,11 +198,13 @@ export const EqFader: React.FC<{
         cb.current.onPreview(v);
       },
       onPanResponderRelease: (_e, g) => {
+        ScrollLock.release();
         setHeld(false);
         if (Math.abs(g.dy) < 3 && Math.abs(g.dx) < 3) return; // a tap, not a drag
         cb.current.onCommit(live.current.last);
       },
       onPanResponderTerminate: () => {
+        ScrollLock.release();
         setHeld(false);
         cb.current.onCommit(live.current.last);
       },
@@ -222,6 +228,7 @@ export const EqFader: React.FC<{
       </Text>
       <View
         {...pan.panHandlers}
+        collapsable={false}
         style={[{ height, width: 38, alignItems: 'center' }, noSelect]}
         accessible
         accessibilityRole="adjustable"
@@ -246,6 +253,7 @@ export const EqFader: React.FC<{
             },
           ]}
         />
+        <TouchGuardOverlay />
       </View>
       <Text style={styles.faderHz}>{label}</Text>
     </View>

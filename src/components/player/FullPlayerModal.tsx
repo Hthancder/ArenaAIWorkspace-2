@@ -4,6 +4,9 @@ import { SignalPathList } from '../audio/SignalPathList';
 import { useSignalPath } from '../audio/useSignalPath';
 import { PlayerPaneBus } from '../../services/ui/playerPaneBus';
 import { usePositionSec } from '../../services/audio/playbackClock';
+import { SleepClock, useSleepRemaining } from '../../services/audio/sleepClock';
+import { audioEngine } from '../../services/audio/audioEngine';
+import * as Clipboard from 'expo-clipboard';
 import { FitStage } from './FitStage';
 import { ScrubBar } from './ScrubBar';
 import { AudioOutput, useAudioOutput } from '../../services/audio/audioOutput';
@@ -77,7 +80,8 @@ export const FullPlayerModal: React.FC = () => {
     setActionTrack,
     setIsAudioLabOpen,
     audioLab,
-    sleepRemainingSec,
+    sleepActive,
+    showToast,
     sleepEndOfTrack,
     setSleepTimer,
     darkPalette: palette,
@@ -98,6 +102,8 @@ export const FullPlayerModal: React.FC = () => {
   const ff = useHoldSeek(seekBy, 1);
   const rw = useHoldSeek(seekBy, -1);
   const trackMenu = useTrackMenu();
+  // minute-granular: the menu subtitle re-renders once a minute, not every second
+  const sleepMinutes = useSleepRemaining(60);
   const [nudge, setNudge] = useState({ back: 0, fwd: 0 });
 
   const [pane, setPane] = useState<SubPane>('artwork');
@@ -147,6 +153,8 @@ export const FullPlayerModal: React.FC = () => {
   useEffect(() => {
     if (isPlayerOpen) dragY.setValue(0);
     PlayerStack.setOpen(isPlayerOpen);
+    // full-size bars get every frame; the mini player / ambient glow are fine at half the rate
+    audioEngine.setSpectrumFps(isPlayerOpen ? 60 : 30);
   }, [isPlayerOpen, dragY]);
   const dismissPan = useRef(
     PanResponder.create({
@@ -220,7 +228,7 @@ export const FullPlayerModal: React.FC = () => {
   if (!currentTrack) return null;
   const vi = prefs.language === 'vi';
   const playerMenuItems = (): MenuItem[] => {
-    const sleepOn = sleepRemainingSec !== null || sleepEndOfTrack;
+    const sleepOn = sleepActive || sleepEndOfTrack;
     return [
       ...trackMenu.itemsFor(currentTrack).filter((it) => it.id !== 'more'),
       {
@@ -244,8 +252,10 @@ export const FullPlayerModal: React.FC = () => {
           ? vi
             ? 'Hết bài này'
             : 'End of song'
-          : sleepRemainingSec !== null
-            ? formatTimeSec(sleepRemainingSec)
+          : sleepMinutes !== null
+            ? vi
+              ? `Còn ${Math.round(sleepMinutes / 60)} phút`
+              : `${Math.round(sleepMinutes / 60)} min left`
             : undefined,
         icon: 'moon.zzz',
         section: 3,
@@ -450,7 +460,7 @@ export const FullPlayerModal: React.FC = () => {
             ) : pane === 'sleep' ? (
               // sized to its content and centred on the stage (a floating card, not a blank page)
               <View style={styles.centerStage}>
-                <View style={[styles.overlayCard, styles.overlayCardFit]}>
+                <View style={styles.sleepCard}>
                   <View>
                     <View style={styles.paneHeaderRow}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
@@ -473,14 +483,29 @@ export const FullPlayerModal: React.FC = () => {
                         ? vi
                           ? 'Đang bật: Tự dừng khi hết bài hiện tại'
                           : 'Active: Stops after current song'
-                        : sleepRemainingSec !== null
+                        : sleepActive
                           ? vi
-                            ? `Còn lại: ${formatTimeSec(sleepRemainingSec)}`
-                            : `Remaining: ${formatTimeSec(sleepRemainingSec)}`
+                            ? 'Đang đếm ngược'
+                            : 'Counting down'
                           : vi
                             ? 'Chọn thời gian để HolySic tự động dừng phát nhạc'
                             : 'Choose when HolySic gently pauses playback'}
                     </Text>
+                    {sleepActive && (
+                      <View style={styles.sleepLive}>
+                        <SleepCountdown big />
+                        <Tap
+                          onPress={() =>
+                            setSleepTimer(Math.ceil((SleepClock.get() || 0) / 60) + 10)
+                          }
+                          style={[styles.sleepExtend, { borderColor: palette.accent + '66' }]}
+                          accessibilityLabel={vi ? 'Thêm 10 phút' : 'Add 10 minutes'}
+                        >
+                          <Ionicons name="add" size={15} color="#FFF" />
+                          <Text style={styles.sleepOptionText}>{vi ? '10 phút' : '10 min'}</Text>
+                        </Tap>
+                      </View>
+                    )}
                     <View style={styles.sleepGrid}>
                       {[5, 15, 30, 45, 60].map((mins) => (
                         <Tap
@@ -508,7 +533,7 @@ export const FullPlayerModal: React.FC = () => {
                         </Text>
                       </Tap>
                     </View>
-                    {(sleepRemainingSec !== null || sleepEndOfTrack) && (
+                    {(sleepActive || sleepEndOfTrack) && (
                       <Tap onPress={() => setSleepTimer(null)} style={styles.turnOffSleepBtn}>
                         <Text style={{ color: '#F87171', fontWeight: '700' }}>
                           {vi ? 'Tắt hẹn giờ' : 'Turn Off Timer'}
@@ -528,11 +553,56 @@ export const FullPlayerModal: React.FC = () => {
                     <Ionicons name="close" size={22} color="#FFF" />
                   </Tap>
                 </View>
-                <Text style={styles.subHelper}>
-                  {resolvedStream
-                    ? `${resolvedStream.sourceLabel} · ${resolvedStream.qualityLabel} (${resolvedStream.codec})`
-                    : 'Resolving modules…'}
+                <Text style={[styles.subHelper, resolvedStream?.failed && { color: '#FCA5A5' }]}>
+                  {resolvedStream?.failed
+                    ? vi
+                      ? 'Không phát được — lý do ở các bước đỏ bên dưới'
+                      : "Couldn't play — the red steps below say why"
+                    : resolvedStream
+                      ? `${resolvedStream.sourceLabel} · ${resolvedStream.qualityLabel} (${resolvedStream.codec})`
+                      : isBuffering
+                        ? vi
+                          ? 'Đang tìm nguồn phát…'
+                          : 'Finding a source…'
+                        : vi
+                          ? 'Chưa có luồng nào — bấm phát để bắt đầu'
+                          : 'Nothing loaded yet — press play'}
                 </Text>
+                {!!resolvedStream?.diagnostics.length && (
+                  <View style={styles.diagActions}>
+                    {resolvedStream.failed && (
+                      <Tap
+                        onPress={() => {
+                          haptic('light');
+                          togglePlay();
+                        }}
+                        style={[styles.diagBtn, { backgroundColor: palette.accent }]}
+                      >
+                        <Ionicons name="refresh" size={14} color={palette.onAccent} />
+                        <Text style={[styles.diagBtnText, { color: palette.onAccent }]}>
+                          {vi ? 'Thử lại' : 'Retry'}
+                        </Text>
+                      </Tap>
+                    )}
+                    <Tap
+                      onPress={() => {
+                        const lines = resolvedStream.diagnostics.map(
+                          (d) =>
+                            `${d.ok === true ? '✓' : d.ok === false ? '✗' : '•'} ${d.module} · ${d.step}${d.latencyMs !== undefined ? ` (${d.latencyMs}ms)` : ''} — ${d.detail}`
+                        );
+                        Clipboard.setStringAsync(
+                          `HolySic · ${currentTrack.title} — ${currentTrack.artist}\n${lines.join('\n')}`
+                        ).catch(() => undefined);
+                        haptic('selection');
+                        showToast(vi ? 'Đã chép chẩn đoán' : 'Diagnostics copied');
+                      }}
+                      style={styles.diagBtn}
+                    >
+                      <Ionicons name="copy-outline" size={14} color="#FFF" />
+                      <Text style={styles.diagBtnText}>{vi ? 'Chép' : 'Copy'}</Text>
+                    </Tap>
+                  </View>
+                )}
                 <ScrollView style={{ marginTop: 12 }}>
                   {prefs.bitPerfect && (
                     <View style={styles.bpBox}>
@@ -564,7 +634,7 @@ export const FullPlayerModal: React.FC = () => {
                               : 'ellipse-outline'
                         }
                         size={18}
-                        color={d.ok ? '#34D399' : '#94A3B8'}
+                        color={d.ok ? '#34D399' : d.ok === false ? '#F87171' : '#94A3B8'}
                       />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.diagTitle}>
@@ -1011,7 +1081,7 @@ export const FullPlayerModal: React.FC = () => {
               style={[
                 styles.deckPill,
                 compactDeck && styles.deckPillCompact,
-                (sleepRemainingSec !== null || sleepEndOfTrack || pane === 'sleep') && {
+                (sleepActive || sleepEndOfTrack || pane === 'sleep') && {
                   backgroundColor: palette.container,
                 },
               ]}
@@ -1019,7 +1089,7 @@ export const FullPlayerModal: React.FC = () => {
               <Ionicons
                 name="moon-outline"
                 size={17}
-                color={sleepRemainingSec !== null || sleepEndOfTrack ? palette.accent : '#FFFFFF'}
+                color={sleepActive || sleepEndOfTrack ? palette.accent : '#FFFFFF'}
               />
               <Text
                 numberOfLines={1}
@@ -1027,13 +1097,15 @@ export const FullPlayerModal: React.FC = () => {
                 minimumFontScale={0.8}
                 style={[styles.deckLabel, tinyDeck && styles.deckLabelTiny]}
               >
-                {sleepRemainingSec !== null
-                  ? formatTimeSec(sleepRemainingSec)
-                  : sleepEndOfTrack
-                    ? '1x'
-                    : vi
-                      ? 'Hẹn giờ'
-                      : 'Sleep'}
+                {sleepActive ? (
+                  <SleepCountdown />
+                ) : sleepEndOfTrack ? (
+                  '1x'
+                ) : vi ? (
+                  'Hẹn giờ'
+                ) : (
+                  'Sleep'
+                )}
               </Text>
             </Tap>
           </View>
@@ -1042,6 +1114,13 @@ export const FullPlayerModal: React.FC = () => {
       <SheetSlot layer="player" />
     </Modal>
   );
+};
+
+/** Live sleep countdown — the only thing that re-renders every second while a timer runs */
+const SleepCountdown: React.FC<{ big?: boolean }> = ({ big }) => {
+  const left = useSleepRemaining();
+  if (left === null) return null;
+  return <Text style={big ? styles.sleepBig : undefined}>{formatTimeSec(left)}</Text>;
 };
 
 /**
@@ -1211,7 +1290,38 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   centerStage: { flex: 1, justifyContent: 'center' },
-  overlayCardFit: { flexGrow: 0, flexShrink: 1, flexBasis: 'auto', maxHeight: '100%' },
+  // its own style, not overlayCard + overrides: on iOS (Yoga) `flex: 1` with flexBasis 'auto' still
+  // means a 0 basis, so with flexGrow 0 the card collapsed to nothing — the empty sleep pane
+  sleepCard: {
+    backgroundColor: 'rgba(12, 12, 18, 0.72)',
+    borderRadius: 26,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  sleepLive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  sleepBig: {
+    color: '#FFFFFF',
+    fontSize: 34,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.5,
+  },
+  sleepExtend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 99,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
   overlayCard: {
     flex: 1,
     backgroundColor: 'rgba(12, 12, 18, 0.72)',
@@ -1264,6 +1374,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(248, 113, 113, 0.14)',
     alignItems: 'center',
   },
+  diagActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  diagBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 99,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  diagBtnText: { color: '#FFF', fontWeight: '700', fontSize: 12.5 },
   diagRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

@@ -5,6 +5,7 @@
 // While a control is held, the change is previewed straight on the audio engine (no app-wide
 // re-render per frame); it is saved to settings once, on release.
 
+import { useScrollLocked } from '../../services/ui/scrollLock';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -31,6 +32,7 @@ const SPEEDS = [
 
 export const AudioLabModal: React.FC = () => {
   const insets = useSafeAreaInsets();
+  const scrollLocked = useScrollLocked();
   const {
     isAudioLabOpen,
     setIsAudioLabOpen,
@@ -215,7 +217,7 @@ export const AudioLabModal: React.FC = () => {
         <ScrollView
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}
-          scrollEnabled
+          scrollEnabled={!scrollLocked}
         >
           {prefs.bitPerfect && (
             <View style={[styles.note, { borderColor: accent + '55' }]}>

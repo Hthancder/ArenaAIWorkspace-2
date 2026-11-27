@@ -30,6 +30,8 @@ export interface HolySicDSPNative {
   detach(player: object): Promise<void>;
   setParams(p: DSPParams): void;
   setSpectrumEnabled(on: boolean): void;
+  /** spectrum events per second (15…60) — older builds lack it */
+  setSpectrumFps?(fps: number): void;
   getStatus(): DSPStatus;
   addListener(
     event: 'onSpectrum',

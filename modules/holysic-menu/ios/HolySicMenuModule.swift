@@ -67,6 +67,36 @@ public class HolySicMenuModule: Module {
   }
 }
 
+/// UIButton that knows whether its menu is on screen: the menu must not be swapped out from under
+/// the finger (a submenu being browsed went blank when a live label re-sent the items)
+final class HolySicMenuButton: UIButton {
+  var menuVisible = false
+  var onMenuClosed: (() -> Void)?
+
+  override func contextMenuInteraction(
+    _ interaction: UIContextMenuInteraction,
+    willDisplayMenuFor configuration: UIContextMenuConfiguration,
+    animator: UIContextMenuInteractionAnimating?
+  ) {
+    super.contextMenuInteraction(interaction, willDisplayMenuFor: configuration, animator: animator)
+    menuVisible = true
+  }
+
+  override func contextMenuInteraction(
+    _ interaction: UIContextMenuInteraction,
+    willEndFor configuration: UIContextMenuConfiguration,
+    animator: UIContextMenuInteractionAnimating?
+  ) {
+    super.contextMenuInteraction(interaction, willEndFor: configuration, animator: animator)
+    menuVisible = false
+    if let animator {
+      animator.addCompletion { [weak self] in self?.onMenuClosed?() }
+    } else {
+      onMenuClosed?()
+    }
+  }
+}
+
 public final class HolySicMenuView: ExpoView, UIContextMenuInteractionDelegate {
   let onSelect = EventDispatcher()
   let onOpen = EventDispatcher()
@@ -85,7 +115,10 @@ public final class HolySicMenuView: ExpoView, UIContextMenuInteractionDelegate {
   var previewRadius: CGFloat = 14
   var previewBackground: UIColor?
 
-  private let button = UIButton(type: .custom)
+  private let button = HolySicMenuButton(type: .custom)
+  /// content of the menu currently installed — identical updates are ignored
+  private var installedSignature = ""
+  private var pendingRefresh = false
   private var interaction: UIContextMenuInteraction?
   private weak var host: UIView?
   private var dimmed = false
@@ -107,6 +140,11 @@ public final class HolySicMenuView: ExpoView, UIContextMenuInteractionDelegate {
         self?.undim()
         self?.onOpen()
       }, for: .menuActionTriggered)
+    button.onMenuClosed = { [weak self] in
+      guard let self, self.pendingRefresh else { return }
+      self.pendingRefresh = false
+      self.refreshButtonMenu()
+    }
     addSubview(button)
   }
 
@@ -174,11 +212,36 @@ public final class HolySicMenuView: ExpoView, UIContextMenuInteractionDelegate {
 
   // MARK: - menu
 
+  private func signature() -> String {
+    var out = menuTitle
+    func add(_ id: String, _ t: String, _ sub: String?, _ icon: String?, _ f: [Bool]) {
+      out += "|\(id)\u{1}\(t)\u{1}\(sub ?? "")\u{1}\(icon ?? "")\u{1}"
+      out += f.map { $0 ? "1" : "0" }.joined()
+    }
+    for it in items {
+      add(it.id, it.title, it.subtitle, it.icon, [it.destructive, it.disabled, it.checked])
+      out += "#\(it.section)"
+      for k in it.children ?? [] {
+        add(k.id, k.title, k.subtitle, k.icon, [k.destructive, k.disabled, k.checked])
+      }
+    }
+    return out
+  }
+
   private func refreshButtonMenu() {
     if trigger == "longPress" || items.isEmpty {
       button.menu = nil
+      installedSignature = ""
       return
     }
+    let sig = signature()
+    if sig == installedSignature, button.menu != nil { return }
+    // never replace a menu the user is looking at — apply the change once it closes
+    if button.menuVisible {
+      pendingRefresh = true
+      return
+    }
+    installedSignature = sig
     button.menu = buildMenu()
   }
 

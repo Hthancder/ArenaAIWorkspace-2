@@ -15,6 +15,51 @@ const MAX_BYTES = 900 * 1024 * 1024;
 
 const inflight = new Map<string, Promise<string>>();
 
+export interface LocalFacts {
+  exists: boolean;
+  size: number;
+  /** extension in the file name (lower-case, no dot) */
+  ext: string;
+  /** container found in the bytes */
+  real?: { ext: string; label: string; playable: boolean };
+}
+
+const extOf = (uri: string) => (uri.match(/\.([a-z0-9]{2,5})(?:[?#]|$)/i)?.[1] || '').toLowerCase();
+
+function hashOf(s: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return (h >>> 0).toString(36);
+}
+
+function containerOf(b: Uint8Array): LocalFacts['real'] {
+  const at = (o: number, txt: string) =>
+    b.length >= o + txt.length && [...txt].every((c, i) => b[o + i] === c.charCodeAt(0));
+  if (at(0, 'fLaC')) return { ext: 'flac', label: 'FLAC', playable: true };
+  if (at(4, 'ftyp')) return { ext: 'm4a', label: 'MPEG-4 (AAC/ALAC)', playable: true };
+  if (at(0, 'RIFF') && at(8, 'WAVE')) return { ext: 'wav', label: 'WAV', playable: true };
+  if (at(0, 'FORM') && (at(8, 'AIFF') || at(8, 'AIFC')))
+    return { ext: 'aiff', label: 'AIFF', playable: true };
+  if (at(0, 'caff')) return { ext: 'caf', label: 'CAF', playable: true };
+  if (at(0, 'OggS')) return { ext: 'ogg', label: 'Ogg (Vorbis/Opus)', playable: false };
+  if (at(0, '#EXTM3U')) return { ext: 'm3u', label: 'Playlist text, not audio', playable: false };
+  if (at(0, '<')) return { ext: 'html', label: 'Web page, not audio', playable: false };
+  if (at(0, 'ID3')) {
+    // ID3v2 block (synch-safe size) — FLAC behind it is the classic "won't play" case
+    const size = ((b[6] & 127) << 21) | ((b[7] & 127) << 14) | ((b[8] & 127) << 7) | (b[9] & 127);
+    return size + 10 < b.length && at(size + 10, 'fLaC')
+      ? { ext: 'flac', label: 'FLAC + ID3', playable: true }
+      : { ext: 'mp3', label: 'MP3', playable: true };
+  }
+  if (b.length > 1 && b[0] === 0xff && (b[1] & 0xe0) === 0xe0) {
+    // MPEG audio frame sync: layer bits 00 = ADTS AAC, otherwise MP3
+    return (b[1] & 0x06) === 0
+      ? { ext: 'aac', label: 'AAC (ADTS)', playable: true }
+      : { ext: 'mp3', label: 'MP3', playable: true };
+  }
+  return undefined;
+}
+
 function cacheDir(): Directory {
   const dir = new Directory(Paths.cache, DIR_NAME);
   if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
@@ -132,6 +177,51 @@ export const StreamFileCache = {
         }
       );
     });
+  },
+
+  /**
+   * What a file on the device really is, from its first bytes — songs are often misnamed
+   * (an AAC ".mp3", a FLAC with an ID3 block in front), and AVPlayer trusts the extension.
+   */
+  sniffLocal(uri: string): LocalFacts | null {
+    if (Platform.OS === 'web' || !/^file:/i.test(uri)) return null;
+    try {
+      const f = new File(uri);
+      if (!f.exists) return { exists: false, size: 0, ext: extOf(uri) };
+      const size = f.size || 0;
+      const h = f.open();
+      let b: Uint8Array;
+      try {
+        b = h.readBytes(Math.min(64, size));
+      } finally {
+        h.close();
+      }
+      return { exists: true, size, ext: extOf(uri), real: containerOf(b) };
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Plays-anywhere copy of a local file: plain ASCII name in Caches with the extension that
+   * matches its real container. Fixes misnamed files and odd names / permissions on the original.
+   */
+  playableCopy(uri: string, ext: string): string | null {
+    if (Platform.OS === 'web') return null;
+    try {
+      const src = new File(uri);
+      if (!src.exists) return null;
+      const key = `play-${hashOf(uri + (src.size || 0) + (src.modificationTime || 0))}`;
+      const dst = fileFor(key, ext);
+      if (!dst.exists || (dst.size || 0) !== (src.size || 0)) {
+        if (dst.exists) dst.delete();
+        src.copy(dst);
+        evict();
+      }
+      return dst.uri;
+    } catch {
+      return null;
+    }
   },
 
   clear() {

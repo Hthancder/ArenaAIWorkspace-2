@@ -134,6 +134,9 @@ interface Backend {
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 const dirOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '');
 const baseOf = (rel: string) => rel.slice(rel.lastIndexOf('/') + 1);
+/** file-name key: case- and Unicode-form-insensitive (Files / AirDrop / Finder may hand over
+ *  decomposed "ơ" while the playlist saved the composed one — APFS treats them as one name) */
+const nameKey = (name: string) => name.normalize('NFC').toLowerCase();
 /** lower-case, no diacritics (đ → d) — for accent-insensitive search */
 export const foldText = (s: string) =>
   s
@@ -568,8 +571,60 @@ class LocalLibraryStore {
     if (!track.id.startsWith(LOCAL_ID_PREFIX)) return undefined;
     const rel = track.id.slice(LOCAL_ID_PREFIX.length);
     if (this.backend.exists(rel)) return this.backend.uri(rel);
-    const moved = this.byName.get(baseOf(rel).toLowerCase());
+    const moved = this.byName.get(nameKey(baseOf(rel)));
     if (moved && this.backend.exists(moved)) return this.backend.uri(moved);
+    return undefined;
+  }
+
+  /**
+   * Finds a local song for playback and says how (or why not) — shown in Stream Diagnostics.
+   * Order: the saved path → the same path in the other Unicode form → the file name anywhere in
+   * the library index → a quick name-only walk of the folders (before the first scan finished, or
+   * after a move in the Files app).
+   */
+  async locate(
+    track: Track
+  ): Promise<{ uri?: string; rel: string; how: 'path' | 'moved' | 'missing'; detail: string }> {
+    const rel = track.id.startsWith(LOCAL_ID_PREFIX) ? track.id.slice(LOCAL_ID_PREFIX.length) : '';
+    if (!rel) return { rel, how: 'missing', detail: 'Not a local song' };
+    const ok = (r?: string) => (r && this.backend.exists(r) ? r : undefined);
+    const hit = ok(rel) || ok(rel.normalize('NFC')) || ok(rel.normalize('NFD'));
+    if (hit) return { uri: this.backend.uri(hit), rel: hit, how: 'path', detail: hit };
+    let moved = ok(this.byName.get(nameKey(baseOf(rel))));
+    if (!moved) moved = await this.findByName(baseOf(rel));
+    if (moved) {
+      this.byName.set(nameKey(baseOf(moved)), moved);
+      return {
+        uri: this.backend.uri(moved),
+        rel: moved,
+        how: 'moved',
+        detail: `${rel} → ${moved}`,
+      };
+    }
+    return { rel, how: 'missing', detail: rel };
+  }
+
+  /** Name-only search of the folder tree (no tag reading — fast even on big libraries) */
+  private async findByName(name: string): Promise<string | undefined> {
+    const want = nameKey(name);
+    const queue: { rel: string; depth: number }[] = [{ rel: '', depth: 0 }];
+    let visited = 0;
+    while (queue.length && visited < 400) {
+      const { rel, depth } = queue.shift()!;
+      visited++;
+      let entries: Entry[] = [];
+      try {
+        entries = await this.backend.list(rel);
+      } catch {
+        continue;
+      }
+      for (const e of entries) {
+        if (e.name.startsWith('.')) continue;
+        const child = join(rel, e.name);
+        if (!e.isDir && nameKey(e.name) === want) return child;
+        if (e.isDir && depth < 6) queue.push({ rel: child, depth: depth + 1 });
+      }
+    }
     return undefined;
   }
 
@@ -745,7 +800,7 @@ class LocalLibraryStore {
         const lf = this.toLocalFile(rel, e, coverUri || parentCover);
         node.files.push(lf);
         files.push(lf);
-        this.byName.set(e.name.toLowerCase(), rel);
+        this.byName.set(nameKey(e.name), rel);
         node.totalSec += lf.track.durationSec || 0;
         node.mtime = Math.max(node.mtime, lf.meta.addedAt);
       }
@@ -1233,7 +1288,7 @@ class LocalLibraryStore {
   async lyricsFor(track: Track): Promise<{ text: string; from: 'lrc' | 'tags' } | null> {
     if (!isLocalTrack(track)) return null;
     let rel = localPathOf(track);
-    if (!this.backend.exists(rel)) rel = this.byName.get(baseOf(rel).toLowerCase()) || rel;
+    if (!this.backend.exists(rel)) rel = this.byName.get(nameKey(baseOf(rel))) || rel;
     const lrc = this.lrcByBase.get(stripExt(rel).toLowerCase());
     if (lrc) {
       try {
