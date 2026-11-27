@@ -3,8 +3,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { Linking, StyleSheet, Text, View } from 'react-native';
-import { HOLYSIC_COLORS } from '../constants/theme';
+import { Linking, Text, View } from 'react-native';
 import { ArtistBio, fetchArtistBio } from '../services/discovery/wikipedia';
 import { SectionTitle } from './brand/HaloGlow';
 import { T as UI, themedSheet } from '../theme/ui';

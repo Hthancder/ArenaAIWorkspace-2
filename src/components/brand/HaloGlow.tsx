@@ -2,7 +2,7 @@
 // titles, and a halo ring for the active tab. Gold halo + the current accent colour.
 
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { T as UI, themedSheet } from '../../theme/ui';
 

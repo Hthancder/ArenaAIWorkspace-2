@@ -1542,7 +1542,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (shuffleRef.current && q.length > 1) {
       const pool = q
-        .map((t, i) => i)
+        .map((_t, i) => i)
         .filter((i) => i !== queueIndexRef.current && playableNow(q[i]));
       if (pool.length === 0) return;
       const rand = pool[Math.floor(Math.random() * pool.length)];
@@ -2279,7 +2279,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
             stream.headers
           )),
           withLyrics,
-          withMv,
+          // a video saved earlier on its own stays when the download is removed
+          withMv: withMv && !MvCache.byTrack(track.id),
         };
         setDownloads((prev) => {
           const next = { ...prev, [track.id]: meta };

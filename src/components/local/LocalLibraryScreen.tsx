@@ -736,7 +736,7 @@ export const LocalLibraryScreen: React.FC = () => {
   };
 
   const listTracks = files.map((f) => f.track);
-  const renderFile = (f: LocalFile, idx: number) => {
+  const renderFile = (f: LocalFile) => {
     const sel = selected.has(f.path);
     const playing = currentTrack?.id === f.track.id;
     return (
@@ -1252,7 +1252,7 @@ export const LocalLibraryScreen: React.FC = () => {
               ? renderFolder(item.node)
               : item.pl
                 ? renderPlaylist(item.pl)
-                : renderFile(item.file!, item.idx || 0)
+                : renderFile(item.file!)
         }
         contentContainerStyle={{ paddingBottom: 190 + insets.bottom }}
         keyboardShouldPersistTaps="handled"

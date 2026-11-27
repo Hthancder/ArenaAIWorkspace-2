@@ -49,7 +49,6 @@ export const TrackActionSheet: React.FC = () => {
     setIsPlayerOpen,
     prefs,
     palette,
-    showToast,
     blockTrack,
     blockArtist,
     startInstantMix,

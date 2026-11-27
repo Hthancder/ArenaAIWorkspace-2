@@ -13,7 +13,6 @@ import {
   Image,
   Platform,
   StyleSheet,
-  Text,
   useColorScheme,
   useWindowDimensions,
   View,

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
-import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { resolveFontFamily } from '../../constants/theme';
 import { SearchFilter, useHolySic } from '../../context/HolySicContext';
 import { looksLikeLink } from '../../services/import/linkImport';
 import { MOOD_CATEGORIES } from '../../data/curatedCatalog';

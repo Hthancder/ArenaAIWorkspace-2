@@ -136,11 +136,24 @@ export const TagStore = {
     if (!loading)
       loading = AsyncStorage.getItem(KEY)
         .then((s) => {
-          // something tagged before the load finished wins over an empty start
           const fromDisk = sanitize(s ? JSON.parse(s) : null);
           if (data === EMPTY) {
             data = fromDisk;
             version++;
+          } else {
+            // something was tagged before the load finished: keep both (never drop the saved
+            // tags), then save the union
+            const tags = [...fromDisk.tags];
+            for (const t of data.tags) if (!tags.some((x) => x.id === t.id)) tags.push(t);
+            const songs = { ...fromDisk.songs };
+            for (const [k, v] of Object.entries(data.songs)) {
+              const d = songs[k];
+              songs[k] = d ? { ...v, ids: Array.from(new Set([...d.ids, ...v.ids])), at: d.at } : v;
+            }
+            const playlists = { ...fromDisk.playlists };
+            for (const [k, ids] of Object.entries(data.playlists))
+              playlists[k] = Array.from(new Set([...(playlists[k] || []), ...ids]));
+            commit({ v: 1, tags, songs, playlists });
           }
         })
         .catch(() => {})

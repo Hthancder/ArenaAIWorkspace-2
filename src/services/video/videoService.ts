@@ -27,6 +27,8 @@ export interface VideoStream {
   /** "720p · H.264 · YouTube visionOS" */
   label: string;
   isHls: boolean;
+  /** file size when the host says (InnerTube): lets a save fetch it in ranged chunks */
+  bytes?: number;
 }
 
 const INVIDIOUS_INSTANCES = ['https://inv.nadeko.net', 'https://invidious.nerdvpn.de'];
@@ -171,6 +173,7 @@ async function fromInnerTube(videoId: string, maxH: number): Promise<VideoStream
         height: Number(f.height),
         label: `${f.height}p · H.264 · YouTube ${res.client}`,
         isHls: false,
+        bytes: Number(f.contentLength) || undefined,
       };
     }
   }

@@ -3,17 +3,9 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Modal, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { CHART_COUNTRIES, CHART_GENRES } from '../../services/discovery/chartsService';
 import { Track } from '../../types/music';

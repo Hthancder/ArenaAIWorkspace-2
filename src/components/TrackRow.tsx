@@ -7,7 +7,6 @@ import {
   PanResponder,
   Platform,
   Pressable,
-  StyleSheet,
   Text,
   useWindowDimensions,
   View,

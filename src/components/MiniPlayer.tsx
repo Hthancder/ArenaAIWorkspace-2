@@ -1,17 +1,8 @@
 // Floating Glass MiniPlayer with HolySic's MiniLyricsTicker & Artwork Tonal Progress
 
 import { usePositionSec } from '../services/audio/playbackClock';
-import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Animated,
-  PanResponder,
-  Platform,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Animated, PanResponder, Platform, Text, View } from 'react-native';
 import { ArtworkImage } from './ArtworkImage';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../constants/theme';
 import { useHolySic } from '../context/HolySicContext';

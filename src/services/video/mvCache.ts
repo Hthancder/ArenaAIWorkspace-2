@@ -12,6 +12,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { useSyncExternalStore } from 'react';
 import { Platform } from 'react-native';
 import { Track } from '../../types/music';
+import { rebaseDocumentUri } from '../library/libraryTools';
 import { findMusicVideo, resolveVideoStream } from './videoService';
 
 export interface SavedMv {
@@ -88,10 +89,17 @@ async function saveOne(track: Track, quality: number): Promise<MvSaveResult> {
       const dir = new Directory(Paths.document, MV_DIR);
       if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
       const dest = new File(dir, `${safeName(videoId)}.mp4`);
-      const f = await File.downloadFileAsync(stream.url, dest, {
+      let f: File | null = await File.downloadFileAsync(stream.url, dest, {
         idempotent: true,
         ...(stream.headers ? { headers: stream.headers } : {}),
-      });
+      }).catch(() => null);
+      // YouTube serves big adaptive files in ranges: a one-shot request can be refused or cut
+      // short — then fetch it in 8 MB pieces and join them
+      const want = stream.bytes || 0;
+      const short = !f || (f.size || 0) < 50_000 || (want > 0 && (f.size || 0) < want * 0.98);
+      if (short && want > 0 && /googlevideo\.com/.test(stream.url))
+        f = await rangedDownload(stream.url, stream.headers, want, dest).catch(() => null);
+      if (!f) return 'failed';
       const bytes = f.size || 0;
       // a tiny file is an error page, not a video
       if (bytes < 50_000) {
@@ -123,6 +131,51 @@ async function saveOne(track: Track, quality: number): Promise<MvSaveResult> {
   persist();
   emit();
   return 'saved';
+}
+
+/** download `url` in byte ranges (YouTube's `range=` parameter) and append them into `dest` */
+async function rangedDownload(
+  url: string,
+  headers: Record<string, string> | undefined,
+  total: number,
+  dest: File
+): Promise<File | null> {
+  const CHUNK = 8 * 1024 * 1024;
+  const part = new File(Paths.cache, `mv-part-${Date.now().toString(36)}`);
+  try {
+    if (dest.exists) dest.delete();
+    dest.create();
+    const out = dest.open();
+    try {
+      for (let at = 0; at < total; at += CHUNK) {
+        const end = Math.min(total, at + CHUNK) - 1;
+        const sep = url.includes('?') ? '&' : '?';
+        const got = await File.downloadFileAsync(`${url}${sep}range=${at}-${end}`, part, {
+          idempotent: true,
+          ...(headers ? { headers } : {}),
+        });
+        const bytes = await got.bytes();
+        if (bytes.length !== end - at + 1) throw new Error('short range');
+        out.writeBytes(bytes);
+      }
+    } finally {
+      out.close();
+    }
+    return dest;
+  } catch {
+    try {
+      if (dest.exists) dest.delete();
+    } catch {
+      // ignore
+    }
+    return null;
+  } finally {
+    try {
+      if (part.exists) part.delete();
+    } catch {
+      // ignore
+    }
+  }
 }
 
 async function exists(s: SavedMv): Promise<boolean> {
@@ -167,10 +220,28 @@ export const MvCache = {
           if (!isWeb)
             for (const [id, m] of Object.entries(index))
               try {
-                if (!new File(m.file).exists) delete index[id];
+                // iOS moves the app's container on every IPA update: re-point the file
+                const file = rebaseDocumentUri(m.file);
+                if (file !== m.file) index[id] = { ...m, file };
+                if (!new File(file).exists) delete index[id];
               } catch {
                 delete index[id];
               }
+          if (!isWeb && raw && Object.keys(raw).length) persist();
+          // …and files no entry points at (a save cut short by the app closing)
+          if (!isWeb && !running)
+            try {
+              const dir = new Directory(Paths.document, MV_DIR);
+              if (dir.exists) {
+                // by file name: the same file can show up as /var/… or /private/var/…
+                const nameOf = (u: string) => decodeURIComponent(u.split('/').pop() || '');
+                const keep = new Set(Object.values(index).map((m) => nameOf(m.file)));
+                for (const e of dir.list())
+                  if (e instanceof File && !keep.has(nameOf(e.uri))) e.delete();
+              }
+            } catch {
+              // ignore
+            }
         })
         .catch(() => {})
         .finally(emit);

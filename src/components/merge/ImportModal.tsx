@@ -20,7 +20,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { parseTextList, TextItem } from '../../services/import/linkImport';
 import { Track } from '../../types/music';

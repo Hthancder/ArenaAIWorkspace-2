@@ -445,7 +445,12 @@ const MPEG_RATES: Record<number, number[]> = {
 };
 
 /** Duration from the first MPEG audio frame (Xing/Info, VBRI, else CBR estimate). */
-function mp3Duration(buf: Uint8Array, audioStart: number, audioBytes: number, meta: TagMeta): void {
+function mp3Duration(
+  buf: Uint8Array,
+  _audioStart: number,
+  audioBytes: number,
+  meta: TagMeta
+): void {
   for (let i = 0; i + 4 < buf.length; i++) {
     if (buf[i] !== 0xff || (buf[i + 1] & 0xe0) !== 0xe0) continue;
     const verBits = (buf[i + 1] >> 3) & 3; // 0=2.5, 2=2, 3=1

@@ -87,7 +87,6 @@ export const FullPlayerModal: React.FC = () => {
     toggleShuffle,
     repeatMode,
     cycleRepeat,
-    queue,
     isLiked,
     toggleLike,
     setActionTrack,
@@ -526,8 +525,8 @@ export const FullPlayerModal: React.FC = () => {
               </Tap>
 
               {nativeMenuAvailable ? (
-                // native pull-down: the song menu + the player's own options (lyrics, queue,
-                // sleep timer submenu with the running one ticked)
+                // native pull-down: the song menu + the player's own doors (lyrics editor,
+                // music video, player style); lyrics / queue / sleep have buttons below
                 <NativeMenu
                   items={playerMenuItems()}
                   onSelect={onPlayerMenu}

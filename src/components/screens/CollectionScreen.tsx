@@ -23,7 +23,7 @@ import {
 import { ArtworkImage } from '../ArtworkImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '../../constants/i18n';
-import { buildArtworkPalette, HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { buildArtworkPalette, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { AlbumSummary, ArtistSummary, Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
@@ -68,7 +68,6 @@ export const CollectionModal: React.FC = () => {
     queueTracks,
     removeTracksFromPlaylist,
     removeDownloads,
-    downloadTrack,
     downloadingIds,
     searchTracks,
     showToast,
