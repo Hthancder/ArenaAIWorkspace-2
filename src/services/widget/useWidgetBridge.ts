@@ -1,8 +1,8 @@
 // Keeps the iOS widget in sync with playback and handles its buttons (holysic://widget/…).
 
 import { usePositionStep } from '../audio/playbackClock';
-import { useEffect, useRef } from 'react';
-import { Linking, Platform } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, Linking, Platform } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
 import { PlayerPaneBus } from '../ui/playerPaneBus';
 import {
@@ -15,6 +15,41 @@ import {
   widgetSupported,
 } from './nowPlayingWidget';
 import type { LyricLine } from '../../types/music';
+
+/** how long the widget trusts "playing" without hearing from the app (renewed every 20 s) */
+const LEASE_SEC = 50;
+const LEASE_RENEW_MS = 20_000;
+
+/** true once `value` has stayed true for `ms` */
+function useLongTrue(value: boolean, ms: number): boolean {
+  const [long, setLong] = useState(false);
+  useEffect(() => {
+    if (!value) {
+      setLong(false);
+      return;
+    }
+    const t = setTimeout(() => setLong(true), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return value && long;
+}
+
+/** ticks every LEASE_RENEW_MS while playing, and when the app returns to the front */
+function useLeaseTick(playing: boolean): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!playing) return;
+    const iv = setInterval(() => setTick((n) => n + 1), LEASE_RENEW_MS);
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') setTick((n) => n + 1);
+    });
+    return () => {
+      clearInterval(iv);
+      sub.remove();
+    };
+  }, [playing]);
+  return tick;
+}
 
 const BRAND_TOP = '#2A1452';
 const BRAND_BOTTOM = '#06050B';
@@ -95,7 +130,14 @@ export function useWidgetBridge() {
     isLoadingLyrics,
     lyricsOffsetSec,
     setIsPlayerOpen,
+    isBuffering,
   } = useHolySic();
+  // what the widget calls "playing": sound is actually coming out. A stream that has stalled for
+  // more than a moment counts as paused, so the widget's lyrics don't run ahead of silence.
+  const stalled = useLongTrue(isPlaying && isBuffering, 1500);
+  const playingNow = isPlaying && !stalled;
+  // lease: renewed every 20 s while playing (and when the app comes back to the front)
+  const leaseTick = useLeaseTick(playingNow);
   // coarse on purpose: the widget extrapolates the time itself, only drift > 3 s matters
   const positionSec = usePositionStep(2);
 
@@ -162,7 +204,8 @@ export function useWidgetBridge() {
       currentTrack.title,
       currentTrack.artist,
       currentTrack.artworkUrl,
-      isPlaying,
+      playingNow,
+      leaseTick,
       liked,
       upKey,
       Math.round(durationSec),
@@ -177,14 +220,14 @@ export function useWidgetBridge() {
       const expected = prev.playing ? prev.pos + (now - prev.at) : prev.pos;
       if (Math.abs(expected - positionSec) < 3) return; // the widget is extrapolating fine
     }
-    last.current = { key, pos: positionSec, at: now, playing: isPlaying };
+    last.current = { key, pos: positionSec, at: now, playing: playingNow };
     const top = artColors ? shade(artColors.primary, 0.55) : undefined;
     const bottom = artColors ? shade(artColors.dark, 0.6) : undefined;
     publishNowPlaying({
       title: currentTrack.title,
       artist: currentTrack.artist,
       album: currentTrack.album,
-      isPlaying,
+      isPlaying: playingNow,
       position: Math.max(0, positionSec),
       duration: currentTrack.isLive ? 0 : Math.max(0, durationSec || currentTrack.durationSec || 0),
       updatedAt: now,
@@ -198,12 +241,14 @@ export function useWidgetBridge() {
       lang: prefs.language,
       lyricsId,
       lyricsState,
+      liveUntil: playingNow ? Math.round(now + LEASE_SEC) : undefined,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     enabled,
     currentTrack,
-    isPlaying,
+    playingNow,
+    leaseTick,
     positionSec,
     durationSec,
     liked,

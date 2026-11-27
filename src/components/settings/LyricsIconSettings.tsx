@@ -2,10 +2,20 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect } from 'react';
-import { Image, Platform, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import { APP_ICON_SKINS, nativeIconName, skinIdFromNative } from '../../constants/appIcons';
 import { LyricsEffect, LyricsPosition, LyricsSize } from '../../constants/preferences';
 import { useHolySic } from '../../context/HolySicContext';
+import { LocalLibrary } from '../../services/local/localLibrary';
+import { LYRICS_SOURCES } from '../../services/lyrics/lyricsSources';
+import {
+  cancelLyricsJob,
+  clearSavedLyrics,
+  startLyricsJob,
+  storedLyricsCount,
+  useLyricsJob,
+  useStoredLyrics,
+} from '../../services/lyrics/lyricsStore';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { LYRICS_EFFECTS } from '../player/LyricsView';
 import { Tap } from '../ui/Tap';
@@ -206,6 +216,8 @@ export const LyricsIconSettings: React.FC<{ fontFamily?: string }> = ({ fontFami
         )}
       </View>
 
+      <LyricsSourcesCard fontFamily={fontFamily} />
+
       {/* ───────── App icon ───────── */}
       <Text style={[styles.sectionTitle, { fontFamily }]}>
         {vi ? 'Biểu tượng ứng dụng' : 'App icon'}
@@ -250,7 +262,195 @@ export const LyricsIconSettings: React.FC<{ fontFamily?: string }> = ({ fontFami
   );
 };
 
+/** Where lyrics come from, and lyrics kept on the device for offline listening */
+const LyricsSourcesCard: React.FC<{ fontFamily?: string }> = ({ fontFamily }) => {
+  const { prefs, updatePrefs, palette, haptic, showToast, downloads } = useHolySic();
+  const vi = prefs.language === 'vi';
+  useStoredLyrics();
+  const job = useLyricsJob();
+  const counts = storedLyricsCount();
+  const sources = prefs.lyricsSources || {};
+  const keep = prefs.lyricsKeepOffline !== false;
+  const offlineTracks = () => {
+    const seen = new Set<string>();
+    const out = [
+      ...Object.values(downloads).map((m) => m.track),
+      ...LocalLibrary.getState().files.map((f) => f.track),
+    ].filter((t) => t && !seen.has(t.id) && (seen.add(t.id), true));
+    return out;
+  };
+  const offlineCount = Object.keys(downloads).length + LocalLibrary.getState().files.length;
+  const sw = (value: boolean, onChange: (v: boolean) => void, label: string) => (
+    <Switch
+      value={value}
+      onValueChange={(v) => {
+        haptic('selection');
+        onChange(v);
+      }}
+      trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+      accessibilityLabel={label}
+    />
+  );
+  const startAll = async () => {
+    haptic('light');
+    const list = offlineTracks();
+    if (!list.length) {
+      showToast(
+        vi ? 'Chưa có bài nào tải về hoặc trên máy' : 'No downloaded or on-device songs yet'
+      );
+      return;
+    }
+    const r = await startLyricsJob(list, sources);
+    showToast(
+      vi
+        ? `Đã lưu lời cho ${r.saved} bài${r.missing ? ` · ${r.missing} bài không tìm thấy` : ''}`
+        : `Saved lyrics for ${r.saved} songs${r.missing ? ` · ${r.missing} not found` : ''}`
+    );
+  };
+  return (
+    <>
+      <Text style={[styles.sectionTitle, { fontFamily }]}>
+        {vi ? 'Nguồn lời & lời offline' : 'Lyrics sources & offline'}
+      </Text>
+      <View style={styles.card}>
+        <Text style={styles.rowDesc}>
+          {vi
+            ? 'Lời được so khớp tên bài, nghệ sĩ và độ dài để tránh nhầm bài. Lời sai? Chạm nhãn nguồn trong màn hình Lời để chọn lời khác hoặc tự nhập — lựa chọn được nhớ cho lần sau.'
+            : 'Lyrics are matched on title, artist and length to avoid the wrong song. Wrong lyrics? Tap the source label on the Lyrics screen to pick others or write your own — it is remembered.'}
+        </Text>
+        {LYRICS_SOURCES.map((src, i) => (
+          <View
+            key={src.id}
+            style={[styles.switchRow, i === LYRICS_SOURCES.length - 1 && { borderBottomWidth: 0 }]}
+          >
+            <View style={{ flex: 1, paddingRight: 10 }}>
+              <Text style={styles.rowTitle}>{src.name}</Text>
+              <Text style={styles.rowDesc}>{vi ? src.vi : src.en}</Text>
+            </View>
+            {sw(
+              sources[src.id] !== false,
+              (v) => updatePrefs({ lyricsSources: { ...sources, [src.id]: v } }),
+              src.name
+            )}
+          </View>
+        ))}
+        <View style={styles.divider} />
+        <View style={[styles.switchRow, { borderBottomWidth: 0, paddingTop: 0 }]}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.rowTitle}>
+              {vi ? 'Tự lưu lời cho bài offline' : 'Keep lyrics for offline songs'}
+            </Text>
+            <Text style={styles.rowDesc}>
+              {vi
+                ? 'Bài đã tải về và bài trên máy giữ lời ngay trên iPhone, nghe không mạng vẫn có lời.'
+                : 'Downloaded and on-device songs keep their lyrics on the iPhone, so they work without internet.'}
+            </Text>
+          </View>
+          {sw(
+            keep,
+            (v) => updatePrefs({ lyricsKeepOffline: v }),
+            vi ? 'Tự lưu lời' : 'Keep lyrics'
+          )}
+        </View>
+        <Tap
+          onPress={job.running ? cancelLyricsJob : startAll}
+          style={[styles.bigBtn, { backgroundColor: job.running ? UI.fg(0.08) : palette.accent }]}
+          accessibilityRole="button"
+        >
+          {job.running ? (
+            <ActivityIndicator size="small" color={palette.accent} />
+          ) : (
+            <Ionicons name="cloud-download-outline" size={17} color={palette.onAccent} />
+          )}
+          <Text style={[styles.bigBtnText, { color: job.running ? UI.text : palette.onAccent }]}>
+            {job.running
+              ? vi
+                ? `Đang tải lời ${job.done}/${job.total || '…'} · chạm để dừng`
+                : `Getting lyrics ${job.done}/${job.total || '…'} · tap to stop`
+              : vi
+                ? `Tải lời cho bài offline (${offlineCount})`
+                : `Download lyrics for offline songs (${offlineCount})`}
+          </Text>
+        </Tap>
+        {job.running && job.total > 0 && (
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width: `${Math.round((job.done / job.total) * 100)}%`,
+                  backgroundColor: palette.accent,
+                },
+              ]}
+            />
+          </View>
+        )}
+        <View style={styles.statRow}>
+          <Text style={styles.statText}>
+            {vi
+              ? `${counts.saved} bài có lời offline · ${counts.overrides} bài bạn đã chọn/sửa lời`
+              : `${counts.saved} songs with offline lyrics · ${counts.overrides} you chose or edited`}
+          </Text>
+          {counts.saved > 0 && !job.running && (
+            <Tap
+              feedback="opacity"
+              hitSlop={8}
+              onPress={async () => {
+                const n = await clearSavedLyrics();
+                haptic('light');
+                showToast(
+                  vi ? `Đã xoá lời offline của ${n} bài` : `Removed offline lyrics of ${n} songs`
+                );
+              }}
+            >
+              <Text style={[styles.statText, { color: palette.accent, fontWeight: '800' }]}>
+                {vi ? 'Xoá' : 'Clear'}
+              </Text>
+            </Tap>
+          )}
+        </View>
+      </View>
+    </>
+  );
+};
+
 const styles = themedSheet(() => ({
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: UI.fg(0.08),
+  },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: UI.fg(0.1), marginVertical: 12 },
+  bigBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginTop: 12,
+  },
+  bigBtnText: { fontSize: 14, fontWeight: '800', flexShrink: 1 },
+  progressTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: UI.fg(0.08),
+    marginTop: 10,
+    overflow: 'hidden',
+  },
+  progressFill: { height: 4, borderRadius: 2 },
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 10,
+  },
+  statText: { color: UI.text3, fontSize: 12, flexShrink: 1 },
   sectionTitle: {
     color: UI.text,
     fontSize: 17.5,

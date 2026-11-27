@@ -186,6 +186,10 @@ export interface HolySicPreferences {
   // ── Lyrics & icon ──
   lyricsEffect: LyricsEffect;
   lyricsSize: LyricsSize;
+  /** lyrics sources that may be asked (LyricsSourceId → on) */
+  lyricsSources: Record<string, boolean>;
+  /** keep lyrics on the device for downloaded and on-device songs (offline listening) */
+  lyricsKeepOffline: boolean;
   /** Home Screen icon skin (APP_ICON_SKINS id) */
   appIcon: string;
 
@@ -268,6 +272,8 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   openPlayerOnPlay: false,
   lyricsEffect: 'glow',
   lyricsSize: 'M',
+  lyricsSources: {},
+  lyricsKeepOffline: true,
   appIcon: 'default',
   musicVideo: false,
   videoAmbient: true,

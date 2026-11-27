@@ -62,12 +62,29 @@ struct NowPlaying: Codable {
   var lyricsId: String?
   /// synced | loading | plain | none
   var lyricsState: String?
+  /// unix seconds: the app vouches for "playing" until then and renews it while it plays. Past it
+  /// the app has stopped without saying so (closed from the app switcher, crashed): show paused.
+  var liveUntil: Double?
 
   var vi: Bool { (lang ?? "vi") == "vi" }
 
   /// When the song (would have) started, from the sampled position
   var startDate: Date { Date(timeIntervalSince1970: updatedAt - position) }
   var endDate: Date { startDate.addingTimeInterval(max(duration, 1)) }
+  /// how long the clock / lyrics may run on their own: the song's end, or the app's lease
+  var playEnd: Date {
+    guard let lease = liveUntil else { return endDate }
+    return min(endDate, Date(timeIntervalSince1970: lease))
+  }
+
+  /// the same song, paused where it would be at `date`
+  func frozen(at date: Date) -> NowPlaying {
+    var n = self
+    n.position = elapsed(at: date)
+    n.isPlaying = false
+    n.updatedAt = date.timeIntervalSince1970
+    return n
+  }
 
   func elapsed(at date: Date) -> Double {
     guard duration > 0 else { return 0 }
@@ -128,8 +145,13 @@ enum SharedStore {
     } else {
       data = d.data(forKey: "nowPlaying")
     }
-    guard let json = data else { return nil }
-    return try? JSONDecoder().decode(NowPlaying.self, from: json)
+    guard let json = data, let np = try? JSONDecoder().decode(NowPlaying.self, from: json)
+    else { return nil }
+    // the lease ran out: the app isn't playing any more, whatever the last snapshot said
+    if np.isPlaying, let lease = np.liveUntil, Date().timeIntervalSince1970 > lease {
+      return np.frozen(at: Date(timeIntervalSince1970: lease))
+    }
+    return np
   }
 
   static func lyrics(for np: NowPlaying?) -> [LyricLine]? {
@@ -210,17 +232,15 @@ struct NowPlayingProvider: TimelineProvider {
     // Playing: iOS 16+ animates the bar & clock itself (timer views); these entries keep the
     // bar moving on iOS 15 and flip to "paused" look once the song should have ended.
     var entries: [NowPlayingEntry] = []
-    let end = np.endDate
+    let end = np.playEnd
     var t = now
     let step: TimeInterval = 10
     while t < end && entries.count < 60 {
       entries.append(NowPlayingEntry(date: t, np: np, art: art))
       t = t.addingTimeInterval(step)
     }
-    var ended = np
-    ended.isPlaying = false
-    ended.position = np.duration
-    ended.updatedAt = end.timeIntervalSince1970
+    // song over or lease over: paused where it got to (the app reloads us when it carries on)
+    let ended = np.frozen(at: end)
     entries.append(NowPlayingEntry(date: max(end, now.addingTimeInterval(1)), np: ended, art: art))
     completion(Timeline(entries: entries, policy: .never))
   }
@@ -432,7 +452,7 @@ struct ProgressBar: View {
   }
 
   /// iOS 16+ animates a running song by itself; otherwise the bar is drawn at the entry's position
-  var live: Bool { np.isPlaying && np.duration > 0 && np.isLive != true && date < np.endDate }
+  var live: Bool { np.isPlaying && np.duration > 0 && np.isLive != true && date < np.playEnd }
 
   @ViewBuilder var bar: some View {
     if #available(iOSApplicationExtension 16.0, *) {
@@ -785,7 +805,7 @@ struct AccessoryView: View {
         ZStack {
           AccessoryWidgetBackground()
           if let np = np, np.duration > 0, np.isLive != true {
-            if np.isPlaying, entry.date < np.endDate {
+            if np.isPlaying, entry.date < np.playEnd {
               ProgressView(
                 timerInterval: np.startDate...np.endDate, countsDown: false,
                 label: { EmptyView() },
@@ -829,7 +849,7 @@ struct AccessoryView: View {
               .lineLimit(1)
               .opacity(0.75)
             if np.duration > 0, np.isLive != true {
-              if np.isPlaying, entry.date < np.endDate {
+              if np.isPlaying, entry.date < np.playEnd {
                 ProgressView(
                   timerInterval: np.startDate...np.endDate, countsDown: false,
                   label: { EmptyView() }, currentValueLabel: { EmptyView() }
@@ -978,7 +998,7 @@ struct LyricsProvider: TimelineProvider {
     // doing anything. Word steps keep ≥ 0.45 s apart; a word that would crowd the previous step
     // simply lands on the next one.
     let start = song.startDate
-    let end = song.endDate
+    let end = song.playEnd
     let cap = 420
     let minStep = 0.45
     var lastAt = now
@@ -1019,14 +1039,14 @@ struct LyricsProvider: TimelineProvider {
       // very long lyrics: ask for the rest when this batch runs out
       policy = .after(last.date)
     } else {
-      var ended = song
-      ended.isPlaying = false
-      ended.position = song.duration
-      ended.updatedAt = end.timeIntervalSince1970
+      // song over or the app stopped renewing: the lyrics stop on the line they reached
+      let ended = song.frozen(at: end)
+      let el = ended.position
+      let idx = lyricIndex(ls, at: el)
       entries.append(
         LyricsEntry(
           date: max(end, now.addingTimeInterval(1)), np: ended, art: art, lines: ls,
-          index: ls.count - 1))
+          index: idx, word: idx >= 0 ? ls[idx].wordsLit(at: el) : -1))
     }
     completion(Timeline(entries: entries, policy: policy))
   }

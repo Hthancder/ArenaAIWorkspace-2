@@ -21,6 +21,7 @@ import { useHolySic } from '../context/HolySicContext';
 import { GlassSurface } from './GlassSurface';
 import { isLocalTrack, LocalLibrary, localDirOf } from '../services/local/localLibrary';
 import { openSongEditor } from './local/SongInfoEditor';
+import { openLyricsEditor } from './player/LyricsEditor';
 import { T as UI, themedSheet } from '../theme/ui';
 import { Tap } from './ui/Tap';
 
@@ -291,6 +292,20 @@ export const TrackActionSheet: React.FC = () => {
                         {vi ? 'Thêm vào Playlist…' : 'Add to Playlist…'}
                       </Text>
                     </Tap>
+
+                    {!sheetTrack.isLive && (
+                      <Tap
+                        style={styles.menuItem}
+                        onPress={() => closeThen(() => openLyricsEditor(sheetTrack))}
+                      >
+                        <Ionicons name="chatbox-ellipses-outline" size={21} color="#60A5FA" />
+                        <Text style={styles.menuLabel}>
+                          {vi
+                            ? 'Lời bài hát: chọn, sửa, lưu offline…'
+                            : 'Lyrics: choose, edit, keep offline…'}
+                        </Text>
+                      </Tap>
+                    )}
 
                     {isLocalTrack(sheetTrack) && (
                       <Tap

@@ -130,7 +130,21 @@ export interface LyricLine {
 
 export interface LyricsData {
   trackId: string;
-  provider: 'LRCLib' | 'YouLyPlus' | 'BetterLyrics' | 'Built-in' | 'Local' | 'None';
+  /** LRCLib · YouLyPlus · NetEase · Kugou · Lyrics.ovh · Built-in · Local · None, or what the user
+   *  typed / picked (see `origin`) */
+  provider:
+    | 'LRCLib'
+    | 'YouLyPlus'
+    | 'BetterLyrics'
+    | 'NetEase'
+    | 'Kugou'
+    | 'Lyrics.ovh'
+    | 'Built-in'
+    | 'Local'
+    | 'User'
+    | 'None';
+  /** override = chosen / written by the user; saved = the offline copy kept on the device */
+  origin?: 'override' | 'saved';
   synced: boolean;
   wordSynced: boolean;
   lines: LyricLine[];

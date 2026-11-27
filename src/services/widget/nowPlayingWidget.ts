@@ -42,6 +42,9 @@ export interface WidgetNowPlaying {
   lyricsId?: string;
   /** what the lyrics widget should say when there is no timed pack */
   lyricsState?: 'synced' | 'loading' | 'plain' | 'none';
+  /** unix seconds: "playing" is only trusted until then — the app renews it while it plays, so a
+   *  closed / crashed app can't leave the widget's clock and lyrics running */
+  liveUntil?: number;
 }
 
 export interface WidgetLyricLine {
@@ -114,20 +117,26 @@ function setKey(key: string, value: string | null) {
 }
 
 let reloadTimer: ReturnType<typeof setTimeout> | null = null;
-function reloadSoon() {
+function reloadNow() {
   if (reloadTimer) clearTimeout(reloadTimer);
-  reloadTimer = setTimeout(() => {
-    reloadTimer = null;
-    try {
-      // both widgets (Now Playing + Lyrics) read the same snapshot
-      mod()?.reload(null);
-    } catch {
-      // WidgetKit unavailable
-    }
-  }, 350);
+  reloadTimer = null;
+  try {
+    // both widgets (Now Playing + Lyrics) read the same snapshot
+    mod()?.reload(null);
+  } catch {
+    // WidgetKit unavailable
+  }
+}
+function reloadSoon(urgent = false) {
+  // play / pause goes out at once: after a pause from the lock screen the app may be suspended
+  // within moments, and a debounced reload would never fire
+  if (urgent) return reloadNow();
+  if (reloadTimer) clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(reloadNow, 350);
 }
 
 let lastJson = '';
+let lastPlaying: boolean | null = null;
 
 /** Publish the playing state (null = nothing loaded). Cheap to call: identical snapshots are skipped. */
 export function publishNowPlaying(np: WidgetNowPlaying | null) {
@@ -135,9 +144,12 @@ export function publishNowPlaying(np: WidgetNowPlaying | null) {
   const json = np ? JSON.stringify(np) : '';
   if (json === lastJson) return;
   lastJson = json;
+  const playing = np ? np.isPlaying : null;
+  const urgent = playing !== lastPlaying;
+  lastPlaying = playing;
   try {
     setKey('nowPlaying', np ? json : null);
-    reloadSoon();
+    reloadSoon(urgent);
   } catch {
     // ignore
   }

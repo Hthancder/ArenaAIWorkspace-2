@@ -1,8 +1,6 @@
 // Synchronized Lyrics Engine — ported from LrcLib.kt, YouLyPlus.kt & BetterLyrics.kt in realidkroo/Mochy-Music
 
-import { BUILTIN_LYRICS_MAP } from '../../data/curatedCatalog';
-import { LyricLine, LyricsData, LyricWord, Track } from '../../types/music';
-import { isLocalTrack, LocalLibrary } from '../local/localLibrary';
+import { LyricLine, LyricsData, LyricWord } from '../../types/music';
 
 const TITLE_CLEANUP_PATTERNS = [
   /\s*\(.*?(official|video|audio|lyrics|lyric|visualizer|hd|hq|4k|remaster|remix|live|acoustic|version|edit|extended|radio|clean|explicit).*?\)/gi,
@@ -35,7 +33,6 @@ const YOULYPLUS_SERVERS = [
   'https://lyricsplus.binimum.org',
 ];
 
-const lyricsCache = new Map<string, LyricsData>();
 
 export function cleanLyricsTitle(title: string): string {
   let cleaned = title.trim();
@@ -248,83 +245,14 @@ async function tryYouLyPlus(
   return null;
 }
 
-async function tryLrcLib(
+/** YouLyPlus (word-timed) for a cleaned title / artist — used by the lyrics sources */
+export async function tryYouLyPlusLyrics(
   title: string,
   artist: string,
   durationSec: number,
   album?: string
 ): Promise<LyricsData | null> {
-  const cleanedTitle = cleanLyricsTitle(title);
-  const cleanedArtist = cleanLyricsArtist(artist);
-
-  const attempts: URLSearchParams[] = [
-    new URLSearchParams({
-      track_name: cleanedTitle,
-      artist_name: cleanedArtist,
-      ...(album ? { album_name: album } : {}),
-    }),
-    new URLSearchParams({
-      q: `${cleanedArtist} ${cleanedTitle}`.trim(),
-    }),
-    new URLSearchParams({
-      track_name: cleanedTitle,
-    }),
-  ];
-
-  for (const params of attempts) {
-    try {
-      const res = await fetchTimeout(`https://lrclib.net/api/search?${params.toString()}`, 4800);
-      if (!res.ok) continue;
-      const list: any[] = await res.json();
-      if (!Array.isArray(list) || list.length === 0) continue;
-
-      const withSynced = list.filter((item) => typeof item?.syncedLyrics === 'string' && item.syncedLyrics.trim());
-      if (withSynced.length > 0) {
-        withSynced.sort((a, b) => {
-          const da = Math.abs((Number(a.duration) || durationSec) - durationSec);
-          const db = Math.abs((Number(b.duration) || durationSec) - durationSec);
-          return da - db;
-        });
-        const best = withSynced[0];
-        const parsed = parseLrcText(best.syncedLyrics);
-        if (parsed.lines.length > 0) {
-          return {
-            trackId: '',
-            provider: 'LRCLib',
-            synced: true,
-            wordSynced: parsed.wordSynced,
-            lines: parsed.lines,
-            plainText: best.plainLyrics || undefined,
-          };
-        }
-      }
-
-      const withPlain = list.find((item) => typeof item?.plainLyrics === 'string' && item.plainLyrics.trim());
-      if (withPlain) {
-        const rawLines = String(withPlain.plainLyrics)
-          .split(/\r?\n/)
-          .map((s) => s.trim())
-          .filter(Boolean);
-        const step = Math.max(3, (durationSec || 180) / Math.max(1, rawLines.length));
-        return {
-          trackId: '',
-          provider: 'LRCLib',
-          synced: false,
-          wordSynced: false,
-          plainText: withPlain.plainLyrics,
-          lines: rawLines.map((text, idx) => ({
-            id: `plain-${idx}`,
-            startSec: idx * step,
-            endSec: (idx + 1) * step,
-            text,
-          })),
-        };
-      }
-    } catch {
-      // try next search query
-    }
-  }
-  return null;
+  return tryYouLyPlus(title, artist, durationSec, album);
 }
 
 /**
@@ -388,56 +316,4 @@ export function lyricsFromText(text: string, durationSec: number): LyricsData | 
       text: t,
     })),
   };
-}
-
-export async function fetchLyricsForTrack(track: Track): Promise<LyricsData> {
-  const cached = lyricsCache.get(track.id);
-  if (cached) return cached;
-
-  if (BUILTIN_LYRICS_MAP[track.id]) {
-    const builtIn: LyricsData = {
-      trackId: track.id,
-      provider: 'Built-in',
-      synced: true,
-      wordSynced: true,
-      lines: BUILTIN_LYRICS_MAP[track.id],
-    };
-    lyricsCache.set(track.id, builtIn);
-    return builtIn;
-  }
-
-  // Local Files: a sidecar .lrc next to the song, or lyrics embedded in its tags, win over online
-  if (isLocalTrack(track)) {
-    const own = await LocalLibrary.lyricsFor(track).catch(() => null);
-    const local = own ? lyricsFromText(own.text, track.durationSec) : null;
-    if (local) {
-      const finalLocal = { ...local, trackId: track.id };
-      lyricsCache.set(track.id, finalLocal);
-      return finalLocal;
-    }
-  }
-
-  // Race / cascade: YouLyPlus (word-timed syllable lyrics) -> LRCLib (LRC synced lyrics)
-  const ylp = await tryYouLyPlus(track.title, track.artist, track.durationSec, track.album);
-  if (ylp) {
-    const finalYlp = { ...ylp, trackId: track.id };
-    lyricsCache.set(track.id, finalYlp);
-    return finalYlp;
-  }
-
-  const lrc = await tryLrcLib(track.title, track.artist, track.durationSec, track.album);
-  if (lrc) {
-    const finalLrc = { ...lrc, trackId: track.id };
-    lyricsCache.set(track.id, finalLrc);
-    return finalLrc;
-  }
-
-  const none: LyricsData = {
-    trackId: track.id,
-    provider: 'None',
-    synced: false,
-    wordSynced: false,
-    lines: [],
-  };
-  return none;
 }

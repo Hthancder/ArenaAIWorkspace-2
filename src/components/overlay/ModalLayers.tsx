@@ -18,6 +18,7 @@ import { GlassSurface } from '../GlassSurface';
 import { AudioLabModal } from '../screens/AudioLabModal';
 import { SongInfoEditor, useSongEditorTarget } from '../local/SongInfoEditor';
 import { PlaylistEditor, usePlaylistEditorTarget } from '../library/PlaylistEditor';
+import { LyricsEditor, useLyricsEditorTarget } from '../player/LyricsEditor';
 import { CollectionModal } from '../screens/CollectionScreen';
 import { TrackActionSheet } from '../TrackActionSheet';
 import { T as UI, themedSheet } from '../../theme/ui';
@@ -33,7 +34,7 @@ export type LayerId =
   | 'recap'
   | 'welcome';
 
-type SheetId = 'collection' | 'audiolab' | 'action' | 'editor' | 'plEditor';
+type SheetId = 'collection' | 'audiolab' | 'action' | 'editor' | 'plEditor' | 'lyEditor';
 
 let stack: LayerId[] = ['root'];
 const subs = new Set<() => void>();
@@ -99,6 +100,7 @@ const anchors: Record<SheetId, { layer: LayerId; open: boolean }> = {
   action: { layer: 'root', open: false },
   editor: { layer: 'root', open: false },
   plEditor: { layer: 'root', open: false },
+  lyEditor: { layer: 'root', open: false },
 };
 const OWN_LAYER: Record<SheetId, LayerId | undefined> = {
   collection: 'collection',
@@ -106,6 +108,7 @@ const OWN_LAYER: Record<SheetId, LayerId | undefined> = {
   action: undefined,
   editor: undefined,
   plEditor: undefined,
+  lyEditor: undefined,
 };
 
 function anchorFor(sheet: SheetId, visible: boolean): LayerId {
@@ -131,6 +134,8 @@ export const SheetSlot: React.FC<{ layer: LayerId }> = ({ layer }) => {
   const ed = anchorFor('editor', !!editing) === layer;
   const plEditing = usePlaylistEditorTarget();
   const ple = anchorFor('plEditor', !!plEditing) === layer;
+  const lyEditing = useLyricsEditorTarget();
+  const lye = anchorFor('lyEditor', !!lyEditing) === layer;
   return (
     <>
       {col && <CollectionModal />}
@@ -138,6 +143,7 @@ export const SheetSlot: React.FC<{ layer: LayerId }> = ({ layer }) => {
       {act && <TrackActionSheet />}
       {ed && <SongInfoEditor />}
       {ple && <PlaylistEditor />}
+      {lye && <LyricsEditor />}
       {top === layer && <ToastPill />}
     </>
   );

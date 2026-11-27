@@ -64,7 +64,7 @@ import { exportDownloadToFiles, shareTrack as shareTrackSheet } from '../service
 import { AUTO_EQ_PRESETS, OFFLINE_SHOWCASE_TRACKS } from '../data/curatedCatalog';
 import { audioEngine } from '../services/audio/audioEngine';
 import { StreamFileCache } from '../services/audio/streamFileCache';
-import { fetchLyricsForTrack } from '../services/lyrics/lyricsService';
+import { loadLyrics } from '../services/lyrics/lyricsStore';
 import {
   fetchInnerTubeSuggestions,
   refreshRemoteStreamClients,
@@ -743,20 +743,36 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load lyrics whenever currentTrack changes
+  // Load lyrics when the song changes (by id: a refreshed track object must not re-fetch and
+  // re-mount the lyrics list), or when asked to (retry / the user changed this song's lyrics)
+  const lyricsTrackId = currentTrack?.id;
+  const lyricsTrackRef = useRef(currentTrack);
+  lyricsTrackRef.current = currentTrack;
+  const lyricsLoadedRef = useRef<{ id?: string; attempt: number }>({ attempt: 0 });
   useEffect(() => {
-    if (!currentTrack) {
+    const track = lyricsTrackRef.current;
+    if (!track) {
       setLyrics(null);
       return;
     }
-    if (currentTrack.isLive) {
+    if (track.isLive) {
       setLyrics(null);
       setIsLoadingLyrics(false);
       return;
     }
+    const prev = lyricsLoadedRef.current;
+    const refresh = prev.id === track.id && prev.attempt !== lyricsAttempt;
+    lyricsLoadedRef.current = { id: track.id, attempt: lyricsAttempt };
     let cancelled = false;
     setIsLoadingLyrics(true);
-    fetchLyricsForTrack(currentTrack)
+    if (!refresh) setLyrics((cur) => (cur && cur.trackId === track.id ? cur : null));
+    const p = prefsRef.current;
+    loadLyrics(track, {
+      refresh,
+      keepOffline:
+        p.lyricsKeepOffline !== false && (!!downloadsRef.current[track.id] || isLocalTrack(track)),
+      sources: p.lyricsSources,
+    })
       .then((res) => {
         if (!cancelled) {
           setLyrics(res);
@@ -769,7 +785,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => {
       cancelled = true;
     };
-  }, [currentTrack, lyricsAttempt]);
+  }, [lyricsTrackId, lyricsAttempt]);
 
   const lyricsOffsetSec = currentTrack ? (prefs.lyricsOffsets?.[currentTrack.id] ?? 0) / 1000 : 0;
   // the active line only changes a few times a minute: follow the clock, re-render on change
@@ -1998,6 +2014,9 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
           StorageService.saveDownloads(next);
           return next;
         });
+        // the lyrics come along, so the song is complete offline
+        if (prefs.lyricsKeepOffline !== false)
+          loadLyrics(track, { keepOffline: true, sources: prefs.lyricsSources }).catch(() => {});
         showToast(
           prefs.language === 'vi'
             ? `Đã tải ngoại tuyến: ${track.title}`

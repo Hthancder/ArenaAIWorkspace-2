@@ -17,8 +17,23 @@ import { LyricsEffect, LyricsPosition, LyricsSize } from '../../constants/prefer
 import { LyricLine, LyricWord } from '../../types/music';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
+import { storedLyricsInfo, useStoredLyrics } from '../../services/lyrics/lyricsStore';
+import { openLyricsEditor, providerLabel } from './LyricsEditor';
 import { usePositionSec } from '../../services/audio/playbackClock';
 import { Tap } from '../ui/Tap';
+
+// a fresh key per lyrics object (re-fetched lyrics re-mount the list, so every line re-measures)
+const lyricsKeys = new WeakMap<object, string>();
+let lyricsSeq = 0;
+function lyricsKey(l: object | null | undefined): string {
+  if (!l) return 'none';
+  let k = lyricsKeys.get(l);
+  if (!k) {
+    k = `lyr-${++lyricsSeq}`;
+    lyricsKeys.set(l, k);
+  }
+  return k;
+}
 
 export const LyricsView: React.FC = () => {
   const {
@@ -39,6 +54,13 @@ export const LyricsView: React.FC = () => {
   } = useHolySic();
   const vi = prefs.language === 'vi';
   const effect: LyricsEffect = prefs.lyricsEffect || 'glow';
+  useStoredLyrics();
+  const stored = storedLyricsInfo(currentTrack);
+  const openEditor = (tab?: 'search' | 'write') => {
+    if (!currentTrack) return;
+    haptic('selection');
+    openLyricsEditor(currentTrack, tab);
+  };
   const size = SIZES[prefs.lyricsSize || 'M'] ?? SIZES.M;
 
   const scrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
@@ -47,18 +69,82 @@ export const LyricsView: React.FC = () => {
   // Follow the singer: the active line glides to ~⅓ from the top, measured from the real line
   // positions (wrapped lines included). Scrolling by hand pauses the follow for a few seconds,
   // like Music, so you can read ahead without being yanked back.
-  const lineYs = useRef<number[]>([]);
+  //
+  // Positions are kept per line id and only ever filled by the lines' own layout events — never
+  // guessed. (A guess of "index × row height" is what threw the view into the margins: wrapped
+  // lines are taller, and re-fetched lyrics with identical rows don't report their layout again.)
+  // The list is re-mounted for every new lyrics object, so each one measures itself afresh.
+  const lineYs = useRef(new Map<string, number>());
   const viewH = useRef(0);
   const handUntil = useRef(0);
+  const pendingFollow = useRef(false);
+  // where our own scrollTo is heading — any other movement is the user (finger, wheel, trackpad)
+  const autoScroll = useRef({ from: 0, y: 0, until: 0 });
+  const lastY = useRef(0);
+  const [detached, setDetached] = useState(false);
+  const listKey = useMemo(() => lyricsKey(lyrics), [lyrics]);
+  // new lyrics: follow as soon as the active line has measured itself. Decided during render (not
+  // in an effect) so it can't run after — and wipe — the first layout events. Positions are stored
+  // under "<lyrics key>|<line id>", so nothing measured for other lyrics is ever used.
+  const seenKey = useRef('');
+  if (seenKey.current !== listKey) {
+    seenKey.current = listKey;
+    pendingFollow.current = true;
+    if (lineYs.current.size > 3000) lineYs.current = new Map();
+  }
+
+  const activeRef = useRef(activeLyricIndex);
+  activeRef.current = activeLyricIndex;
+  const lyricsRef = useRef(lyrics);
+  lyricsRef.current = lyrics;
+  const keyRef = useRef(listKey);
+  keyRef.current = listKey;
+  const follow = (animated: boolean) => {
+    const ls = lyricsRef.current?.lines;
+    const idx = activeRef.current;
+    if (!ls || !scrollRef.current) return;
+    if (idx < 0) {
+      // before the first line: the top
+      autoScroll.current = { from: lastY.current, y: 0, until: Date.now() + 900 };
+      scrollRef.current.scrollTo({ y: 0, animated });
+      pendingFollow.current = false;
+      return;
+    }
+    const y = ls[idx] ? lineYs.current.get(`${keyRef.current}|${ls[idx].id}`) : undefined;
+    if (y === undefined || viewH.current <= 0) {
+      // not measured yet: wait for that line's layout instead of guessing
+      pendingFollow.current = true;
+      return;
+    }
+    pendingFollow.current = false;
+    const to = Math.max(0, y - viewH.current * 0.3);
+    autoScroll.current = { from: lastY.current, y: to, until: Date.now() + 900 };
+    scrollRef.current.scrollTo({ y: to, animated });
+  };
   useEffect(() => {
-    lineYs.current = [];
-  }, [lyrics]);
-  useEffect(() => {
-    if (activeLyricIndex < 0 || !scrollRef.current) return;
     if (Date.now() < handUntil.current) return;
-    const y = lineYs.current[activeLyricIndex] ?? activeLyricIndex * 62;
-    scrollRef.current.scrollTo({ y: Math.max(0, y - viewH.current * 0.3), animated: true });
+    if (detached) setDetached(false);
+    follow(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLyricIndex]);
+  // reading by hand: the "back to the singer" pill shows until the follow resumes
+  useEffect(() => {
+    if (!detached) return;
+    const t = setInterval(() => {
+      if (Date.now() >= handUntil.current) {
+        setDetached(false);
+        follow(true);
+      }
+    }, 500);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detached]);
+  const backToSinger = () => {
+    haptic('selection');
+    handUntil.current = 0;
+    setDetached(false);
+    follow(true);
+  };
 
   const cycleAlign = () => {
     haptic('selection');
@@ -100,22 +186,49 @@ export const LyricsView: React.FC = () => {
             ? vi
               ? 'Radio trực tiếp không có lời bài hát'
               : 'Live radio has no lyrics'
-            : t(prefs.language, 'noLyrics')}
+            : stored?.kind === 'none'
+              ? vi
+                ? 'Bạn đã tắt lời cho bài này'
+                : 'You turned lyrics off for this song'
+              : t(prefs.language, 'noLyrics')}
         </Text>
         {!live && currentTrack && (
-          <Tap
-            onPress={() => {
-              haptic('light');
-              reloadLyrics();
-            }}
-            style={[styles.retryBtn, { borderColor: palette.accent + '55' }]}
-            accessibilityRole="button"
-          >
-            <Ionicons name="refresh" size={15} color={palette.accent} />
-            <Text style={[styles.retryText, { color: palette.accent }]}>
-              {vi ? 'Tìm lại' : 'Search again'}
-            </Text>
-          </Tap>
+          <View style={styles.emptyActions}>
+            {stored?.kind !== 'none' && (
+              <Tap
+                onPress={() => {
+                  haptic('light');
+                  reloadLyrics();
+                }}
+                style={[styles.retryBtn, { borderColor: palette.accent + '55' }]}
+                accessibilityRole="button"
+              >
+                <Ionicons name="refresh" size={15} color={palette.accent} />
+                <Text style={[styles.retryText, { color: palette.accent }]}>
+                  {vi ? 'Tìm lại' : 'Search again'}
+                </Text>
+              </Tap>
+            )}
+            <Tap
+              onPress={() => openEditor()}
+              style={[
+                styles.retryBtn,
+                { borderColor: palette.accent, backgroundColor: palette.accent + '22' },
+              ]}
+              accessibilityRole="button"
+            >
+              <Ionicons name="create-outline" size={15} color={palette.accent} />
+              <Text style={[styles.retryText, { color: palette.accent }]}>
+                {stored?.kind === 'none'
+                  ? vi
+                    ? 'Chọn lời'
+                    : 'Choose lyrics'
+                  : vi
+                    ? 'Chọn / nhập lời'
+                    : 'Find or write lyrics'}
+              </Text>
+            </Tap>
+          </View>
         )}
       </View>
     );
@@ -131,29 +244,37 @@ export const LyricsView: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.toolbar}>
-        <View style={styles.providerBadge}>
-          <Ionicons name="sparkles" size={12} color={palette.accent} />
+        <Tap
+          onPress={() => openEditor()}
+          style={styles.providerBadge}
+          accessibilityRole="button"
+          accessibilityLabel={vi ? 'Đổi hoặc sửa lời bài hát' : 'Change or edit the lyrics'}
+        >
+          <Ionicons
+            name={
+              lyrics.origin === 'override'
+                ? 'person-circle-outline'
+                : stored?.kind === 'saved' || lyrics.origin === 'saved'
+                  ? 'cloud-done-outline'
+                  : 'sparkles'
+            }
+            size={12}
+            color={palette.accent}
+          />
           <Text numberOfLines={1} style={[styles.providerText, { color: palette.accent }]}>
-            {lyrics.provider === 'Local'
-              ? vi
-                ? 'Tệp trên máy'
-                : 'Local file'
-              : lyrics.provider === 'Built-in'
-                ? 'HolySic'
-                : lyrics.provider}
+            {providerLabel(lyrics, vi)}
             {lyrics.wordSynced
               ? vi
-                ? ' · Theo từng chữ'
-                : ' · Word-synced'
+                ? ' · Từng chữ'
+                : ' · Word'
               : lyrics.synced
-                ? vi
-                  ? ' · Đồng bộ'
-                  : ' · Synced'
+                ? ''
                 : vi
-                  ? ' · Không đồng bộ'
+                  ? ' · Lời thường'
                   : ' · Plain'}
           </Text>
-        </View>
+          <Ionicons name="chevron-down" size={11} color={palette.accent} style={{ opacity: 0.8 }} />
+        </Tap>
 
         {lyrics.synced && (
           <View style={styles.offsetGroup}>
@@ -216,15 +337,40 @@ export const LyricsView: React.FC = () => {
       </View>
 
       <ScrollView
+        key={listKey}
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        onLayout={(e) => (viewH.current = e.nativeEvent.layout.height)}
-        onScrollBeginDrag={() => (handUntil.current = Date.now() + 60_000)}
-        onScrollEndDrag={() => (handUntil.current = Date.now() + 3500)}
-        onMomentumScrollEnd={() => {
-          if (handUntil.current > Date.now() + 3500) handUntil.current = Date.now() + 3500;
+        onLayout={(e) => {
+          const first = viewH.current <= 0;
+          viewH.current = e.nativeEvent.layout.height;
+          if (first || pendingFollow.current) follow(false);
         }}
+        onScrollBeginDrag={() => {
+          handUntil.current = Date.now() + 60_000;
+          if (!detached) setDetached(true);
+        }}
+        onScrollEndDrag={() => (handUntil.current = Date.now() + 4000)}
+        onMomentumScrollEnd={() => {
+          if (handUntil.current > Date.now() + 4000) handUntil.current = Date.now() + 4000;
+        }}
+        onScroll={(e) => {
+          const y = e.nativeEvent.contentOffset.y;
+          lastY.current = y;
+          const a = autoScroll.current;
+          // our own glide: somewhere between where it started and where it is heading
+          const onPath =
+            Date.now() < a.until &&
+            y >= Math.min(a.from, a.y) - 6 &&
+            y <= Math.max(a.from, a.y) + 6;
+          if (onPath || Math.abs(y - a.y) < 6) return;
+          // moved by hand (also wheel / trackpad, which send no drag events)
+          handUntil.current = Math.max(handUntil.current, Date.now() + 4000);
+          a.y = y;
+          a.until = 0;
+          if (!detached) setDetached(true);
+        }}
+        scrollEventThrottle={32}
       >
         {lyrics.lines.map((line, idx) => {
           const isActive = idx === activeLyricIndex;
@@ -245,7 +391,16 @@ export const LyricsView: React.FC = () => {
             <Tap
               feedback="opacity"
               key={line.id}
-              onLayout={(e) => (lineYs.current[idx] = e.nativeEvent.layout.y)}
+              onLayout={(e) => {
+                lineYs.current.set(`${listKey}|${line.id}`, e.nativeEvent.layout.y);
+                // the line we were waiting for has its place now
+                if (
+                  pendingFollow.current &&
+                  idx === activeRef.current &&
+                  Date.now() >= handUntil.current
+                )
+                  follow(false);
+              }}
               onPress={() => {
                 haptic('selection');
                 seekTo(Math.max(0, line.startSec + lyricsOffsetSec));
@@ -289,9 +444,26 @@ export const LyricsView: React.FC = () => {
         <Text style={styles.footerText}>
           {lyrics.provider === 'Local'
             ? 'Lyrics from the song file (.lrc / embedded tags) · HolySic'
-            : `Lyrics powered by ${lyrics.provider} · HolySic Open Lyrics`}
+            : lyrics.provider === 'User'
+              ? vi
+                ? 'Lời do bạn nhập · lưu trên máy này'
+                : 'Your own lyrics · saved on this device'
+              : `Lyrics powered by ${lyrics.provider} · HolySic Open Lyrics`}
         </Text>
       </ScrollView>
+      {detached && lyrics.synced && activeLyricIndex >= 0 && (
+        <Tap
+          onPress={backToSinger}
+          style={[styles.backPill, { borderColor: palette.accent + '66' }]}
+          accessibilityRole="button"
+          accessibilityLabel={vi ? 'Về dòng đang hát' : 'Back to the current line'}
+        >
+          <Ionicons name="locate" size={14} color={palette.accent} />
+          <Text style={[styles.backPillText, { color: palette.accent }]}>
+            {vi ? 'Dòng đang hát' : 'Current line'}
+          </Text>
+        </Tap>
+      )}
     </View>
   );
 };
@@ -631,6 +803,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  backPill: {
+    position: 'absolute',
+    bottom: 14,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 99,
+    borderWidth: 1,
+    backgroundColor: 'rgba(12,12,18,0.82)',
+  },
+  backPillText: { fontSize: 13, fontWeight: '700' },
   centerBox: {
     flex: 1,
     alignItems: 'center',
@@ -655,6 +841,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   retryText: { fontSize: 13.5, fontWeight: '700' },
+  emptyActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+  },
   toolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
