@@ -383,6 +383,8 @@ const TrackRowBody = React.memo(function TrackRowBody({
             actions.current.remove();
           }}
           style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel={(vi ? 'Xoá khỏi playlist: ' : 'Remove from playlist: ') + track.title}
         >
           <Ionicons name="close-circle-outline" size={19} color={UI.text3} />
         </Tap>

@@ -5,6 +5,7 @@
 //  artwork     the page takes the colours of the playing song, crossfading on every change
 //  ambient     the blurred cover glows across the top of every screen, breathing with the bass
 //  visualizer  song-coloured page + a soft spectrum along the bottom
+//  media       your own photo / GIF / video, framed and styled in the background editor
 //
 // Performance: one layer under all tabs (not per screen). Motion is opacity / transform on the
 // native driver; nothing re-renders per audio frame. While the full player is open, the app is
@@ -27,6 +28,7 @@ import {
   useCrossfade,
 } from './AmbientLight';
 import { SpectrumBars, useSpectrumBars } from './SpectrumBars';
+import { MediaBackdrop } from './MediaBackdrop';
 import { perfCount } from '../../services/perfProbe';
 import { useAppActive } from '../../services/appActivity';
 
@@ -45,7 +47,8 @@ export { useAppActive };
 
 export const AppBackdrop: React.FC = () => {
   perfCount('render:Backdrop');
-  const { prefs, currentTrack, isPlaying, isPlayerOpen, ambient } = useHolySic();
+  const { prefs, currentTrack, isPlaying, isPlayerOpen, ambient, collectionTarget, palette } =
+    useHolySic();
   const ui = useUi();
   const colors = useAmbientColors();
   const appActive = useAppActive();
@@ -60,9 +63,13 @@ export const AppBackdrop: React.FC = () => {
     appActive &&
     !isPlayerOpen;
 
-  // the bass "energy" only matters for the glowing modes
+  const media = mode === 'media' ? prefs.appBgMedia : null;
+  // a page (album / playlist) slides over the tabs: the background behind it holds still
+  const mediaSeen = !!media && appActive && !isPlayerOpen && !collectionTarget;
+  // the bass "energy" only matters for the glowing modes (and the photo's "beat pulse")
   const energy = useAmbientEnergy(
-    live && (mode === 'artwork' || mode === 'ambient'),
+    (live && (mode === 'artwork' || mode === 'ambient')) ||
+      (mediaSeen && media?.motion === 'pulse' && !ambient.lowPower && !ambient.reduceMotion),
     true,
     isPlaying
   );
@@ -74,6 +81,22 @@ export const AppBackdrop: React.FC = () => {
   );
 
   if (mode === 'plain') return null;
+
+  if (mode === 'media') {
+    if (!media) return null;
+    return (
+      <MediaBackdrop
+        media={media}
+        active={mediaSeen && !ambient.lowPower}
+        scheme={ui.scheme}
+        bg={ui.bg}
+        accent={palette.accent}
+        energy={energy}
+        isPlaying={isPlaying}
+        reduceMotion={ambient.reduceMotion}
+      />
+    );
+  }
 
   if (mode === 'color') {
     const c1 = resolveBackdropColor(prefs.appBgColor, ui.scheme) ?? ui.bg;

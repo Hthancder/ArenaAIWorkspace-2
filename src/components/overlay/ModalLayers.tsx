@@ -20,9 +20,10 @@ import { SongInfoEditor, useSongEditorTarget } from '../local/SongInfoEditor';
 import { PlaylistEditor, usePlaylistEditorTarget } from '../library/PlaylistEditor';
 import { LyricsEditor, useLyricsEditorTarget } from '../player/LyricsEditor';
 import { CollectionModal } from '../screens/CollectionScreen';
+import { BackdropEditor, useBackdropEditorTarget } from '../backdrop/BackdropEditor';
 import { TrackActionSheet } from '../TrackActionSheet';
 import { T as UI, themedSheet } from '../../theme/ui';
-import { ToastStore, useToastMessage } from '../../services/ui/toastStore';
+import { ToastAction, ToastStore, useToastMessage } from '../../services/ui/toastStore';
 
 export type LayerId =
   | 'root'
@@ -35,7 +36,8 @@ export type LayerId =
   | 'recap'
   | 'welcome';
 
-type SheetId = 'collection' | 'audiolab' | 'action' | 'editor' | 'plEditor' | 'lyEditor';
+type SheetId =
+  'collection' | 'audiolab' | 'action' | 'editor' | 'plEditor' | 'lyEditor' | 'bgEditor';
 
 let stack: LayerId[] = ['root'];
 const subs = new Set<() => void>();
@@ -102,6 +104,7 @@ const anchors: Record<SheetId, { layer: LayerId; open: boolean }> = {
   editor: { layer: 'root', open: false },
   plEditor: { layer: 'root', open: false },
   lyEditor: { layer: 'root', open: false },
+  bgEditor: { layer: 'root', open: false },
 };
 const OWN_LAYER: Record<SheetId, LayerId | undefined> = {
   collection: 'collection',
@@ -110,6 +113,7 @@ const OWN_LAYER: Record<SheetId, LayerId | undefined> = {
   editor: undefined,
   plEditor: undefined,
   lyEditor: undefined,
+  bgEditor: undefined,
 };
 
 function anchorFor(sheet: SheetId, visible: boolean): LayerId {
@@ -137,6 +141,8 @@ export const SheetSlot: React.FC<{ layer: LayerId }> = ({ layer }) => {
   const ple = anchorFor('plEditor', !!plEditing) === layer;
   const lyEditing = useLyricsEditorTarget();
   const lye = anchorFor('lyEditor', !!lyEditing) === layer;
+  const bgEditing = useBackdropEditorTarget();
+  const bge = anchorFor('bgEditor', !!bgEditing) === layer;
   return (
     <>
       {col && <CollectionModal />}
@@ -145,6 +151,7 @@ export const SheetSlot: React.FC<{ layer: LayerId }> = ({ layer }) => {
       {ed && <SongInfoEditor />}
       {ple && <PlaylistEditor />}
       {lye && <LyricsEditor />}
+      {bge && <BackdropEditor />}
       {top === layer && <ToastPill />}
     </>
   );
@@ -157,10 +164,12 @@ const ToastPill: React.FC = () => {
   const toastMessage = useToastMessage();
   const insets = useSafeAreaInsets();
   const [shown, setShown] = useState<string | null>(toastMessage);
+  const [act, setAct] = useState<ToastAction | null>(null);
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (toastMessage) {
       setShown(toastMessage);
+      setAct(ToastStore.action());
       v.setValue(0);
       Animated.spring(v, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 9 }).start();
     } else {
@@ -190,12 +199,17 @@ const ToastPill: React.FC = () => {
         },
       ]}
     >
-      {/* tap to dismiss early */}
-      <Pressable onPress={ToastStore.hide} accessibilityRole="button" accessibilityLabel={shown}>
-        <GlassSurface
-          intensity={75}
-          tintColor={UI.shade(22, 22, 32, 0.92)}
-          style={[styles.toastPill, { borderColor: palette.accent + '44' }]}
+      <GlassSurface
+        intensity={75}
+        tintColor={UI.shade(22, 22, 32, 0.92)}
+        style={[styles.toastPill, { borderColor: palette.accent + '44' }]}
+      >
+        {/* tap the message to dismiss early; the action (e.g. Undo) is its own button */}
+        <Pressable
+          onPress={ToastStore.hide}
+          accessibilityRole="button"
+          accessibilityLabel={shown}
+          style={styles.toastMsg}
         >
           <Ionicons
             name={bad ? 'alert-circle' : 'checkmark-circle'}
@@ -203,8 +217,22 @@ const ToastPill: React.FC = () => {
             color={bad ? '#FBBF24' : palette.accent}
           />
           <Text style={styles.toastText}>{shown}</Text>
-        </GlassSurface>
-      </Pressable>
+        </Pressable>
+        {act && (
+          <Pressable
+            onPress={() => {
+              act.onPress();
+              ToastStore.hide();
+            }}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={act.label}
+            style={({ pressed }) => [styles.toastAction, pressed && { opacity: 0.6 }]}
+          >
+            <Text style={[styles.toastActionText, { color: palette.accent }]}>{act.label}</Text>
+          </Pressable>
+        )}
+      </GlassSurface>
     </Animated.View>
   );
 };
@@ -220,5 +248,13 @@ const styles = themedSheet(() => ({
     borderRadius: 99,
     borderWidth: 1,
   },
+  toastMsg: { flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 1 },
   toastText: { color: UI.text, fontSize: 13, fontWeight: '700', flexShrink: 1 },
+  toastAction: {
+    marginLeft: 4,
+    paddingLeft: 10,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: UI.fg(0.25),
+  },
+  toastActionText: { fontSize: 13, fontWeight: '800' },
 }));

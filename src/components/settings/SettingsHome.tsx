@@ -65,6 +65,224 @@ const PAGES: Record<SettingsPageId, { vi: string; en: string; icon: IconName; ti
 
 export const pageTitle = (id: SettingsPageId, vi: boolean) => (vi ? PAGES[id].vi : PAGES[id].en);
 
+// What lives on each page, so the search finds a setting by what it does, not only by page name.
+const KEYWORDS: Record<SettingsPageId, string[]> = {
+  player: [
+    'kiểu trình phát',
+    'player style',
+    'flagship',
+    'turntable',
+    'đĩa than',
+    'ipod',
+    'poster',
+    'bedside',
+    'đồng hồ',
+    'clock',
+    'nền trình phát',
+    'player background',
+  ],
+  look: [
+    'giao diện',
+    'sáng',
+    'tối',
+    'light',
+    'dark',
+    'màu nhấn',
+    'accent',
+    'font',
+    'phông chữ',
+    'oled',
+    'đen tuyệt đối',
+    'pure black',
+    'theme',
+    'chủ đề',
+  ],
+  backdrop: [
+    'nền',
+    'background',
+    'ảnh nền',
+    'wallpaper',
+    'hình nền',
+    'video nền',
+    'gif',
+    'ảnh riêng',
+    'photo',
+    'ambient',
+    'visualizer',
+    'màu nền',
+    'thanh tab',
+    'tab bar',
+    'mờ',
+    'blur',
+  ],
+  lyrics: [
+    'lời',
+    'lyrics',
+    'karaoke',
+    'hiệu ứng lời',
+    'cỡ chữ',
+    'size',
+    'nguồn lời',
+    'offline lyrics',
+    'giữ màn hình',
+    'keep awake',
+  ],
+  video: ['mv', 'music video', 'video', '720p', 'chất lượng video', 'ambient video'],
+  icon: ['biểu tượng', 'icon', 'app icon', 'skin'],
+  playback: [
+    'chất lượng',
+    'quality',
+    'lossless',
+    'flac',
+    'bit-perfect',
+    'crossfade',
+    'gapless',
+    'chuyển bài',
+    'âm lượng',
+    'normalize',
+    'preview',
+    '30 giây',
+    'bộ nhớ đệm',
+    'cache',
+    'tải xuống',
+    'download',
+  ],
+  controls: [
+    'rung',
+    'haptic',
+    'vuốt',
+    'swipe',
+    'hẹn giờ',
+    'sleep timer',
+    'nhãn tab',
+    'tab labels',
+    'ngoại tuyến',
+    'offline',
+    'mở trình phát',
+    'phím tắt',
+    'shortcuts',
+  ],
+  sources: [
+    'nguồn',
+    'source',
+    'module',
+    'monochrome',
+    'jiosaavn',
+    'innertube',
+    'youtube',
+    'itunes',
+    'netease',
+    'kugou',
+    'thứ tự nguồn',
+  ],
+  scrobble: ['scrobble', 'last.fm', 'lastfm', 'listenbrainz'],
+  library: [
+    'sao lưu',
+    'backup',
+    'khôi phục',
+    'restore',
+    'chặn',
+    'block',
+    'xuất',
+    'export',
+    'nhập',
+    'import',
+    'xoá dữ liệu',
+  ],
+  language: ['ngôn ngữ', 'language', 'tiếng việt', 'english'],
+  credits: [
+    'giới thiệu',
+    'about',
+    'ghi công',
+    'credits',
+    'giấy phép',
+    'license',
+    'gpl',
+    'phiên bản',
+    'version',
+  ],
+};
+
+/** lower-case, no accents (đ → d): "Nen" finds "Nền" */
+const fold = (t: string) =>
+  t
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .trim();
+
+export function searchSettings(q: string, vi: boolean): { id: SettingsPageId; hit?: string }[] {
+  const n = fold(q);
+  if (!n) return [];
+  const out: { id: SettingsPageId; hit?: string; score: number }[] = [];
+  (Object.keys(PAGES) as SettingsPageId[]).forEach((id) => {
+    const title = fold(vi ? PAGES[id].vi : PAGES[id].en);
+    const other = fold(vi ? PAGES[id].en : PAGES[id].vi);
+    if (title.startsWith(n)) out.push({ id, score: 0 });
+    else if (title.includes(n) || other.includes(n)) out.push({ id, score: 1 });
+    else {
+      const k = KEYWORDS[id].find((w) => fold(w).includes(n));
+      if (k) out.push({ id, hit: k, score: fold(k).startsWith(n) ? 2 : 3 });
+    }
+  });
+  return out.sort((a, b) => a.score - b.score).map(({ id, hit }) => ({ id, hit }));
+}
+
+/** Search results: same rows as the front page, with what matched underneath. */
+export const SettingsSearchResults: React.FC<{
+  query: string;
+  vi: boolean;
+  open: (id: SettingsPageId) => void;
+}> = ({ query, vi, open }) => {
+  const results = searchSettings(query, vi);
+  if (!results.length)
+    return (
+      <View style={styles.noResults}>
+        <Ionicons name="search" size={28} color={UI.fg(0.3)} />
+        <Text style={styles.noResultsText}>
+          {vi
+            ? `Không có cài đặt nào khớp “${query.trim()}”`
+            : `No settings match “${query.trim()}”`}
+        </Text>
+      </View>
+    );
+  return (
+    <View style={[styles.group, { marginTop: 14 }]}>
+      {results.map((r, i) => {
+        const m = PAGES[r.id];
+        return (
+          <Tap
+            key={r.id}
+            feedback="opacity"
+            onPress={() => open(r.id)}
+            style={styles.row}
+            accessibilityRole="button"
+            accessibilityLabel={vi ? m.vi : m.en}
+          >
+            <View style={[styles.iconBox, { backgroundColor: m.tint }]}>
+              <Ionicons name={m.icon} size={16} color="#FFFFFF" />
+            </View>
+            <View style={[styles.rowBody, i > 0 && styles.rowDivider, { paddingVertical: 8 }]}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.rowTitle, { flex: 0 }]} numberOfLines={1}>
+                  {vi ? m.vi : m.en}
+                </Text>
+                {r.hit ? (
+                  <Text style={styles.hitText} numberOfLines={1}>
+                    {r.hit}
+                  </Text>
+                ) : null}
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={UI.fg(0.32)} />
+            </View>
+          </Tap>
+        );
+      })}
+    </View>
+  );
+};
+
 export const SettingsHome: React.FC<{
   vi: boolean;
   fontFamily?: string;
@@ -79,7 +297,29 @@ export const SettingsHome: React.FC<{
       rows: [
         { id: 'player', detail: style ? (vi ? style.titleVi : style.titleEn) : undefined },
         { id: 'look' },
-        { id: 'backdrop' },
+        {
+          id: 'backdrop',
+          detail: prefs.pureBlack
+            ? undefined
+            : (
+                {
+                  plain: undefined,
+                  color: vi ? 'Màu riêng' : 'Colour',
+                  artwork: vi ? 'Bài hát' : 'Song',
+                  ambient: 'Ambient',
+                  visualizer: 'Visualizer',
+                  media: prefs.appBgMedia
+                    ? prefs.appBgMedia.kind === 'video'
+                      ? 'Video'
+                      : prefs.appBgMedia.kind === 'gif'
+                        ? 'GIF'
+                        : vi
+                          ? 'Ảnh'
+                          : 'Photo'
+                    : undefined,
+                } as Record<string, string | undefined>
+              )[prefs.appBackdrop || 'plain'],
+        },
         { id: 'lyrics', detail: effect ? (vi ? effect.vi : effect.en) : undefined },
         { id: 'video', detail: prefs.musicVideo ? (vi ? 'Bật' : 'On') : vi ? 'Tắt' : 'Off' },
         { id: 'icon' },
@@ -218,6 +458,9 @@ const styles = themedSheet(() => ({
     fontSize: 16,
     fontWeight: '500',
   },
+  hitText: { color: UI.fg(0.5), fontSize: 13, marginTop: 2 },
+  noResults: { alignItems: 'center', gap: 10, paddingVertical: 40 },
+  noResultsText: { color: UI.fg(0.55), fontSize: 15, textAlign: 'center' },
   rowDetail: {
     flexShrink: 1,
     maxWidth: '45%',

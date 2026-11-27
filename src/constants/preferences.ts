@@ -1,6 +1,7 @@
 // HolySic Preferences & Enums — faithfully ported from PreferenceKeys.kt in realidkroo/Mochy-Music
 
 import type { CrossfadeCurve } from '../services/audio/crossfadeCurves';
+import type { BgMedia } from '../services/backdrop/backdropMedia';
 
 export type MainTab = 'home' | 'search' | 'library' | 'settings';
 
@@ -17,7 +18,7 @@ export type BedsideNightTint = 'OFF' | 'ORANGE' | 'COVER';
 export type LyricsPosition = 'LEFT' | 'CENTER' | 'RIGHT';
 
 /** What sits behind the tabs (Home, Search, Library, HolySic) */
-export type AppBackdrop = 'plain' | 'color' | 'artwork' | 'ambient' | 'visualizer';
+export type AppBackdrop = 'plain' | 'color' | 'artwork' | 'ambient' | 'visualizer' | 'media';
 export type BackdropVisualizer = 'bars' | 'mirror' | 'wave';
 export type DockVisualizer = 'off' | 'bars' | 'glow';
 /** how the synced lyrics come alive */
@@ -164,6 +165,12 @@ export interface HolySicPreferences {
   /** artwork / ambient / visualizer backgrounds move with the music */
   appBgReactive: boolean;
   appBgVisualizer: BackdropVisualizer;
+  /** 'media' backdrop: your photo / GIF / video and how it is framed and styled */
+  appBgMedia: BgMedia | null;
+  /** a page's own background (album / playlist / artist / liked / offline — see pageBgKey) */
+  pageBackdrops: Record<string, BgMedia>;
+  /** pages without their own background show the app's photo / video too */
+  pagesUseAppBg: boolean;
   /** a visualizer inside the tab bar */
   dockVisualizer: DockVisualizer;
   /** spectrum frame rate (30 saves battery) */
@@ -261,6 +268,9 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   appBgStrength: 'medium',
   appBgReactive: true,
   appBgVisualizer: 'mirror',
+  appBgMedia: null,
+  pageBackdrops: {},
+  pagesUseAppBg: false,
   dockVisualizer: 'off',
   visualizerFps: 60,
   haptics: 'full',

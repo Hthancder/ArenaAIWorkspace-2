@@ -10,6 +10,7 @@ import {
   Image,
   Linking,
   PanResponder,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -42,7 +43,13 @@ import { T as UI, themedSheet } from '../../theme/ui';
 import { TabBus, useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
 import { ScrollEdgeBar } from '../ui/ScrollEdgeBar';
-import { PageHeader, SettingsHome, SettingsPageId, pageTitle } from '../settings/SettingsHome';
+import {
+  PageHeader,
+  SettingsHome,
+  SettingsPageId,
+  SettingsSearchResults,
+  pageTitle,
+} from '../settings/SettingsHome';
 import { perfCount } from '../../services/perfProbe';
 
 export const SettingsScreen: React.FC = () => {
@@ -75,6 +82,9 @@ export const SettingsScreen: React.FC = () => {
   // Settings is a short list of doors; each opens its own page (like iOS Settings) instead of
   // one endless scroll. Every option still exists — just one tap deeper, grouped by purpose.
   const [page, setPage] = useState<SettingsPageId | null>(null);
+  // search the settings (iOS Settings style); kept when you open a result and come back
+  const [query, setQuery] = useState('');
+  const searching = page === null && query.trim().length > 0;
   const enter = useRef(new Animated.Value(1)).current;
   const openPage = (id: SettingsPageId | null) => {
     haptic('selection');
@@ -156,7 +166,35 @@ export const SettingsScreen: React.FC = () => {
             ],
           }}
         >
-          {page === null ? (
+          {page === null && (
+            <View style={styles.searchBox}>
+              <Ionicons name="search" size={16} color={UI.fg(0.45)} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder={vi ? 'Tìm cài đặt' : 'Search settings'}
+                placeholderTextColor={UI.fg(0.4)}
+                style={styles.searchInput}
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+                accessibilityLabel={vi ? 'Tìm cài đặt' : 'Search settings'}
+              />
+              {query.length > 0 && Platform.OS !== 'ios' && (
+                <Tap
+                  onPress={() => setQuery('')}
+                  hitSlop={10}
+                  accessibilityLabel={vi ? 'Xoá' : 'Clear'}
+                >
+                  <Ionicons name="close-circle" size={16} color={UI.fg(0.4)} />
+                </Tap>
+              )}
+            </View>
+          )}
+          {searching ? (
+            <SettingsSearchResults query={query} vi={vi} open={openPage} />
+          ) : page === null ? (
             <>
               {/* Hero Brand Banner */}
               <View style={[styles.brandBanner, { borderColor: palette.accent + '35' }]}>
@@ -220,7 +258,9 @@ export const SettingsScreen: React.FC = () => {
             />
           )}
 
-          {page === null && <SettingsHome vi={vi} fontFamily={fontFamily} open={openPage} />}
+          {page === null && !searching && (
+            <SettingsHome vi={vi} fontFamily={fontFamily} open={openPage} />
+          )}
           {page === 'player' && (
             <>
               {/* Player Style Selector */}
@@ -939,6 +979,17 @@ const styles = themedSheet(() => ({
     padding: 16,
     paddingBottom: 185,
   },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: UI.fg(0.08),
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    height: 38,
+    marginBottom: 14,
+  },
+  searchInput: { flex: 1, color: UI.text, fontSize: 16, paddingVertical: 0 },
   brandBanner: {
     flexDirection: 'row',
     gap: 14,

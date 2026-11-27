@@ -3,7 +3,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   AppBackdrop as BackdropMode,
@@ -19,6 +19,8 @@ import { T as UI, themedSheet, useUi } from '../../theme/ui';
 import { useAmbientColors } from '../ambient/AmbientLight';
 import { resolveBackdropColor } from '../ambient/AppBackdrop';
 import { Tap } from '../ui/Tap';
+import { openBackdropEditor } from '../backdrop/BackdropEditor';
+import { resolveBgUri, styleMeta, sweepBackdropFiles } from '../../services/backdrop/backdropMedia';
 
 type Opt<T> = readonly (readonly [T, string])[];
 
@@ -118,8 +120,18 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
         colors: [songMid, ui.bg],
         bars: true,
       },
+      {
+        id: 'media' as const,
+        vi: 'Ảnh riêng',
+        en: 'Your photo',
+        colors: [mix(ui.bg, palette.accent, 0.35), ui.bg],
+        media: true,
+      },
     ];
-  }, [ui, art, customTop, customBottom]);
+  }, [ui, art, customTop, customBottom, palette.accent]);
+  const appMedia = prefs.appBgMedia;
+  const mediaThumb = appMedia && appMedia.kind !== 'video' ? resolveBgUri(appMedia.ref) : '';
+  const pageCount = Object.keys(prefs.pageBackdrops || {}).length;
 
   const applyHex = (which: 1 | 2) => {
     const raw = (which === 1 ? hex1 : hex2).trim();
@@ -163,7 +175,15 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
                   return (
                     <Tap
                       key={t.id}
-                      onPress={() => set({ appBackdrop: t.id })}
+                      onPress={() => {
+                        // no picture chosen yet: go straight to the editor (it sets the mode on Done)
+                        if (t.id === 'media' && !appMedia) {
+                          haptic('selection');
+                          openBackdropEditor({ scope: 'app' });
+                          return;
+                        }
+                        set({ appBackdrop: t.id });
+                      }}
                       style={styles.tileWrap}
                       accessibilityRole="radio"
                       accessibilityState={{ selected: on }}
@@ -204,6 +224,22 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
                             ))}
                           </View>
                         )}
+                        {t.media &&
+                          (mediaThumb ? (
+                            <Image
+                              source={{ uri: mediaThumb }}
+                              style={StyleSheet.absoluteFill}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View style={styles.tileMediaIcon}>
+                              <Ionicons
+                                name={appMedia?.kind === 'video' ? 'videocam' : 'images'}
+                                size={22}
+                                color={palette.accent}
+                              />
+                            </View>
+                          ))}
                         {/* a fake list so the preview reads as "a screen" */}
                         <View style={styles.tileLines}>
                           <View style={[styles.tileLine, { width: '70%' }]} />
@@ -334,7 +370,77 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
               </View>
             )}
 
-            {mode !== 'plain' && (
+            {mode === 'media' && (
+              <View style={{ marginTop: 14 }}>
+                <Tap
+                  onPress={() => openBackdropEditor({ scope: 'app' })}
+                  style={styles.mediaRow}
+                  accessibilityLabel={vi ? 'Chỉnh ảnh nền' : 'Edit background'}
+                >
+                  <View style={styles.mediaThumb}>
+                    {mediaThumb ? (
+                      <Image
+                        source={{ uri: mediaThumb }}
+                        style={StyleSheet.absoluteFill}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Ionicons
+                        name={appMedia?.kind === 'video' ? 'videocam' : 'image'}
+                        size={20}
+                        color={palette.accent}
+                      />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>
+                      {appMedia
+                        ? `${appMedia.kind === 'video' ? 'Video' : appMedia.kind === 'gif' ? 'GIF' : vi ? 'Ảnh' : 'Photo'} · ${vi ? styleMeta(appMedia.style).vi : styleMeta(appMedia.style).en}`
+                        : vi
+                          ? 'Chưa chọn ảnh'
+                          : 'No picture yet'}
+                    </Text>
+                    <Text style={styles.rowDesc}>
+                      {vi
+                        ? 'Chạm để đổi ảnh, căn khung, kiểu mờ, lớp phủ, chuyển động'
+                        : 'Tap to change, frame, blur, veil and motion'}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={UI.text3} />
+                </Tap>
+                {row(
+                  vi ? 'Dùng cho trang album & playlist' : 'Also behind album & playlist pages',
+                  vi
+                    ? 'Trang chưa có ảnh nền riêng sẽ dùng ảnh này.'
+                    : 'Pages without their own background use this one.',
+                  sw(!!prefs.pagesUseAppBg, (v) => set({ pagesUseAppBg: v })),
+                  true
+                )}
+              </View>
+            )}
+            {pageCount > 0 && (
+              <View style={[styles.inline, { marginTop: 12 }]}>
+                <Text style={[styles.rowDesc, { flex: 1, marginTop: 0 }]}>
+                  {vi
+                    ? `${pageCount} trang có ảnh nền riêng (đặt trong menu ⋯ của trang).`
+                    : `${pageCount} page${pageCount > 1 ? 's have' : ' has'} its own background (set from the page’s ⋯ menu).`}
+                </Text>
+                <Tap
+                  onPress={() => {
+                    set({ pageBackdrops: {} });
+                    sweepBackdropFiles([prefs.appBgMedia?.ref]);
+                    showToast(vi ? 'Đã xoá ảnh nền của các trang' : 'Page backgrounds removed');
+                  }}
+                  style={styles.btnGhost}
+                >
+                  <Text style={{ color: UI.text, fontWeight: '700' }}>
+                    {vi ? 'Xoá hết' : 'Clear all'}
+                  </Text>
+                </Tap>
+              </View>
+            )}
+
+            {mode !== 'plain' && mode !== 'media' && (
               <>
                 <Text style={[styles.subLabel, { marginTop: 14 }]}>
                   {vi ? 'Độ đậm' : 'Strength'}
@@ -379,7 +485,7 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
                 sw(prefs.appBgReactive !== false, (v) => set({ appBgReactive: v })),
                 true
               )}
-            {ambient.lowPower && mode !== 'plain' && mode !== 'color' && (
+            {ambient.lowPower && mode !== 'plain' && mode !== 'color' && mode !== 'media' && (
               <Text style={styles.note}>
                 {vi
                   ? '⚡ Đang bật Nguồn điện thấp: nền đứng yên để tiết kiệm pin.'
@@ -573,6 +679,28 @@ const styles = themedSheet(() => ({
   },
   tileBar: { flex: 1, borderRadius: 2 },
   tileLines: { position: 'absolute', left: 8, right: 8, top: 34, gap: 5 },
+  tileMediaIcon: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: UI.fg(0.05),
+    borderRadius: 14,
+    padding: 10,
+  },
+  mediaThumb: {
+    width: 46,
+    height: 64,
+    borderRadius: 9,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: UI.fg(0.08),
+  },
   tileLine: { height: 4, borderRadius: 2, backgroundColor: UI.fg(0.18) },
   tileCheck: {
     position: 'absolute',

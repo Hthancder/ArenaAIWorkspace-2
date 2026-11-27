@@ -9,6 +9,7 @@ import {
   Alert,
   Animated,
   Easing,
+  LayoutAnimation,
   Modal,
   PanResponder,
   Platform,
@@ -37,6 +38,11 @@ import { Rise } from '../ui/Rise';
 import { GlassSurface } from '../GlassSurface';
 import { NativeMenu, nativeMenuAvailable, MenuItem } from '../ui/NativeMenu';
 import { Progressive } from '../../hooks/useProgressive';
+import { MediaBackdrop } from '../ambient/MediaBackdrop';
+import { openBackdropEditor } from '../backdrop/BackdropEditor';
+import { pageBgKey } from '../../services/backdrop/backdropMedia';
+import { useAppActive } from '../../services/appActivity';
+import { ToastStore } from '../../services/ui/toastStore';
 
 export const CollectionModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -65,7 +71,13 @@ export const CollectionModal: React.FC = () => {
     createPlaylist,
     isOnline,
     setActiveTab,
+    palette,
+    isPlayerOpen,
+    isPlaying,
+    ambient,
+    updatePlaylist,
   } = useHolySic();
+  const appActive = useAppActive();
   const [reloadTick, setReloadTick] = useState(0);
   useModalLayer('collection', Boolean(collectionTarget));
 
@@ -241,6 +253,12 @@ export const CollectionModal: React.FC = () => {
   }
 
   const headerPalette = buildArtworkPalette(title);
+  // the page's own photo / GIF / video (or the app's, when "also behind pages" is on)
+  const bgKey = pageBgKey(collectionTarget as any);
+  const ownBg = (prefs.pageBackdrops || {})[bgKey];
+  const pageBg =
+    ownBg ?? (prefs.pagesUseAppBg && prefs.appBackdrop === 'media' ? prefs.appBgMedia : null);
+  const pageBgColor = prefs.pureBlack ? UI.surface('#000') : UI.surface('#0A0A0F');
   const allTracks = tracks;
   const canFilter = collectionTarget.kind !== 'album' && allTracks.length >= 6;
   if (canFilter && (filterQ.trim() || sortBy !== 'default')) {
@@ -332,6 +350,35 @@ export const CollectionModal: React.FC = () => {
       { text: vi ? 'Xoá' : 'Delete', style: 'destructive', onPress: doDelete },
     ]);
   };
+  // removing songs from a playlist can be undone from the toast (order is restored exactly)
+  const removeWithUndo = (ids: string[]) => {
+    if (!removablePlaylistId) return;
+    const plId = removablePlaylistId;
+    const before = playlists.find((p) => p.id === plId)?.tracks || [];
+    // the rows below slide up into the gap (and back down on undo), like UITableView
+    const smooth = () =>
+      LayoutAnimation.configureNext(LayoutAnimation.create(260, 'easeInEaseOut', 'opacity'));
+    smooth();
+    if (ids.length === 1) removeTrackFromPlaylist(plId, ids[0]);
+    else removeTracksFromPlaylist(plId, ids);
+    ToastStore.show(
+      ids.length === 1
+        ? vi
+          ? 'Đã xoá khỏi playlist'
+          : 'Removed from playlist'
+        : vi
+          ? `Đã xoá ${ids.length} bài`
+          : `Removed ${ids.length} songs`,
+      undefined,
+      {
+        label: vi ? 'Hoàn tác' : 'Undo',
+        onPress: () => {
+          smooth();
+          updatePlaylist(plId, { tracks: before });
+        },
+      }
+    );
+  };
   const downloadingCount = Object.keys(downloadingIds).length;
   const pageMenu: MenuItem[] = [];
   if (tracks.length > 0) {
@@ -370,6 +417,13 @@ export const CollectionModal: React.FC = () => {
       section: 1,
     });
   }
+  pageMenu.push({
+    id: 'bg',
+    title: vi ? 'Ảnh nền trang…' : 'Page Background…',
+    subtitle: ownBg ? (vi ? 'Đang dùng ảnh riêng' : 'Using its own') : undefined,
+    icon: 'photo.on.rectangle',
+    section: 2,
+  });
   if (removablePlaylistId) {
     pageMenu.push(
       {
@@ -399,6 +453,17 @@ export const CollectionModal: React.FC = () => {
     else if (id === 'save') saveAsPlaylist();
     else if (id === 'download') downloadAll();
     else if (id === 'm3u') exportM3U();
+    else if (id === 'bg')
+      setTimeout(
+        () =>
+          openBackdropEditor({
+            scope: 'page',
+            key: bgKey,
+            title,
+            cover: artworkUrl || undefined,
+          }),
+        350
+      );
     else if (id === 'edit' && removablePlaylistId)
       setTimeout(() => openPlaylistEditor(removablePlaylistId), 350);
     else if (id === 'cover' && removablePlaylistId)
@@ -434,11 +499,22 @@ export const CollectionModal: React.FC = () => {
         {...edgeSwipe.panHandlers}
         style={[
           styles.root,
-          { backgroundColor: prefs.pureBlack ? UI.surface('#000') : UI.surface('#0A0A0F') },
+          { backgroundColor: pageBgColor },
           moving && styles.pushed,
           moving && { transform: [{ translateX: pushX }] },
         ]}
       >
+        {pageBg && (
+          <MediaBackdrop
+            media={pageBg}
+            active={appActive && !isPlayerOpen && !ambient.lowPower}
+            scheme={UI.scheme}
+            bg={pageBgColor}
+            accent={palette.accent}
+            isPlaying={isPlaying}
+            reduceMotion={ambient.reduceMotion}
+          />
+        )}
         <Animated.ScrollView
           contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
           showsVerticalScrollIndicator={false}
@@ -451,7 +527,11 @@ export const CollectionModal: React.FC = () => {
           })}
         >
           <LinearGradient
-            colors={[headerPalette.gradient[0], UI.surface('#0A0A0F')]}
+            colors={
+              pageBg
+                ? ['rgba(0,0,0,0)', 'rgba(0,0,0,0)']
+                : [headerPalette.gradient[0], UI.surface('#0A0A0F')]
+            }
             style={[styles.hero, { paddingTop: Math.max(insets.top, 16) }]}
           >
             <View style={styles.navBar}>
@@ -503,42 +583,62 @@ export const CollectionModal: React.FC = () => {
             </View>
 
             <View style={styles.heroContent}>
-              {removablePlaylistId ? (
-                <Tap
-                  feedback="scale"
-                  onPress={() => openPlaylistEditor(removablePlaylistId, 'cover')}
-                  accessibilityLabel={vi ? 'Đổi ảnh bìa' : 'Change cover'}
-                >
-                  {artworkUrl ? (
-                    <ArtworkImage source={{ uri: artworkUrl }} style={styles.heroCover} />
-                  ) : (
-                    <View
-                      style={[
-                        styles.heroCover,
-                        styles.placeholderCover,
-                        { backgroundColor: headerPalette.container },
-                      ]}
-                    >
-                      <Ionicons name="musical-notes" size={56} color={headerPalette.accent} />
+              {/* iOS stretchy header: the cover grows as you pull down, settles back as you scroll */}
+              <Animated.View
+                style={{
+                  transform: [
+                    {
+                      scale: scrollY.interpolate({
+                        inputRange: [-240, 0, 240],
+                        outputRange: [1.22, 1, 0.9],
+                        extrapolate: 'clamp',
+                      }),
+                    },
+                  ],
+                  opacity: scrollY.interpolate({
+                    inputRange: [0, 260],
+                    outputRange: [1, 0.35],
+                    extrapolate: 'clamp',
+                  }),
+                }}
+              >
+                {removablePlaylistId ? (
+                  <Tap
+                    feedback="scale"
+                    onPress={() => openPlaylistEditor(removablePlaylistId, 'cover')}
+                    accessibilityLabel={vi ? 'Đổi ảnh bìa' : 'Change cover'}
+                  >
+                    {artworkUrl ? (
+                      <ArtworkImage source={{ uri: artworkUrl }} style={styles.heroCover} />
+                    ) : (
+                      <View
+                        style={[
+                          styles.heroCover,
+                          styles.placeholderCover,
+                          { backgroundColor: headerPalette.container },
+                        ]}
+                      >
+                        <Ionicons name="musical-notes" size={56} color={headerPalette.accent} />
+                      </View>
+                    )}
+                    <View style={styles.coverEditBadge}>
+                      <Ionicons name="pencil" size={13} color="#fff" />
                     </View>
-                  )}
-                  <View style={styles.coverEditBadge}>
-                    <Ionicons name="pencil" size={13} color="#fff" />
+                  </Tap>
+                ) : artworkUrl ? (
+                  <ArtworkImage source={{ uri: artworkUrl }} style={styles.heroCover} />
+                ) : (
+                  <View
+                    style={[
+                      styles.heroCover,
+                      styles.placeholderCover,
+                      { backgroundColor: headerPalette.container },
+                    ]}
+                  >
+                    <Ionicons name="musical-notes" size={56} color={headerPalette.accent} />
                   </View>
-                </Tap>
-              ) : artworkUrl ? (
-                <ArtworkImage source={{ uri: artworkUrl }} style={styles.heroCover} />
-              ) : (
-                <View
-                  style={[
-                    styles.heroCover,
-                    styles.placeholderCover,
-                    { backgroundColor: headerPalette.container },
-                  ]}
-                >
-                  <Ionicons name="musical-notes" size={56} color={headerPalette.accent} />
-                </View>
-              )}
+                )}
+              </Animated.View>
 
               <Text style={[styles.heroTitle, { fontFamily }]}>{title}</Text>
               <Text style={styles.heroSub}>{subtitle}</Text>
@@ -580,6 +680,21 @@ export const CollectionModal: React.FC = () => {
                   style={{ marginTop: 10, marginHorizontal: -18, alignSelf: 'stretch' }}
                   contentContainerStyle={styles.chipRow}
                 >
+                  <Tap
+                    onPress={() =>
+                      openBackdropEditor({
+                        scope: 'page',
+                        key: bgKey,
+                        title,
+                        cover: artworkUrl || undefined,
+                      })
+                    }
+                    style={styles.chipBtn}
+                    accessibilityLabel={vi ? 'Ảnh nền trang' : 'Page background'}
+                  >
+                    <Ionicons name="image-outline" size={15} color={UI.text} />
+                    <Text style={styles.chipText}>{vi ? 'Ảnh nền' : 'Background'}</Text>
+                  </Tap>
                   {removablePlaylistId && (
                     <Tap
                       onPress={() => openPlaylistEditor(removablePlaylistId)}
@@ -844,10 +959,7 @@ export const CollectionModal: React.FC = () => {
               {removablePlaylistId && (
                 <Tap
                   onPress={() => {
-                    removeTracksFromPlaylist(
-                      removablePlaylistId!,
-                      chosen.map((x) => x.id)
-                    );
+                    removeWithUndo(chosen.map((x) => x.id));
                     setSelected({});
                   }}
                   style={styles.chipBtn}
@@ -936,11 +1048,7 @@ export const CollectionModal: React.FC = () => {
                         track={song}
                         queueContext={tracks}
                         indexBadge={idx + 1}
-                        onRemove={
-                          removablePlaylistId
-                            ? () => removeTrackFromPlaylist(removablePlaylistId!, song.id)
-                            : undefined
-                        }
+                        onRemove={removablePlaylistId ? () => removeWithUndo([song.id]) : undefined}
                       />
                     </Rise>
                   ))
