@@ -132,8 +132,45 @@ export function createStreamCandidateQueue(
     return makeQueue(producers, diagnostics, prefs);
   }
 
+  // 2c. Music video mode with "audio from the video": the sound comes from the very video that is
+  // on screen, so picture and sound line up exactly (instead of a different cut of the song)
+  const fromVideo =
+    !!track.mvId &&
+    (track.id.startsWith('ytv-') ||
+      (!!prefs.musicVideo && !!prefs.videoAudio && prefs.enabledModules.innertube !== false));
+  let mvIndex = -1;
+  if (fromVideo) {
+    mvIndex = producers.length;
+    producers.push(
+      resolveInnerTubeStream(
+        {
+          title: track.title,
+          artists: track.artists?.length ? track.artists : [track.artist],
+          durationSec: track.durationSec,
+          videoId: track.mvId,
+        },
+        pushStep
+      )
+        .then((list) =>
+          list.map(
+            (yt) =>
+              ({
+                url: yt.url,
+                source: 'innertube',
+                sourceLabel: 'YouTube MV',
+                qualityLabel: yt.qualityLabel.replace('YouTube', 'MV'),
+                codec: yt.codec,
+                headers: yt.headers,
+                gainDb: yt.gainDb,
+              }) as Candidate
+          )
+        )
+        .catch(() => [])
+    );
+  }
+
   // 3. Source Memory — what played this song last time goes first
-  if (prefs.rememberSources) {
+  if (prefs.rememberSources && !fromVideo) {
     const mem = SourceMemory.get(track);
     if (mem?.localUri && StreamFileCache.isLocalUriAlive(mem.localUri)) {
       pushStep({
@@ -381,6 +418,14 @@ export function createStreamCandidateQueue(
     );
   }
 
+  // the video's own audio is waited for (no grace-window jump to another cut of the song)
+  if (mvIndex >= 0) {
+    const mv = producers[mvIndex];
+    for (let i = mvIndex + 1; i < producers.length; i++) {
+      const p = producers[i];
+      producers[i] = Promise.all([p, mv.catch(() => [])]).then(([v]) => v);
+    }
+  }
   return makeQueue(producers, diagnostics, prefs);
 }
 

@@ -15,10 +15,10 @@ import {
 import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
-import { useHolySic } from '../../context/HolySicContext';
+import { SearchFilter, useHolySic } from '../../context/HolySicContext';
 import { looksLikeLink } from '../../services/import/linkImport';
 import { MOOD_CATEGORIES } from '../../data/curatedCatalog';
-import { AlbumSummary, MusicSourceId, Track } from '../../types/music';
+import { AlbumSummary, Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
 import { useLocalLibrary } from '../local/LocalLibraryScreen';
 import { LocalLibrary } from '../../services/local/localLibrary';
@@ -28,8 +28,9 @@ import { Tap } from '../ui/Tap';
 import { Rise } from '../ui/Rise';
 import { ScrollEdgeHairline } from '../ui/ScrollEdgeBar';
 
-const SOURCE_FILTERS: { id: 'all' | MusicSourceId; vi: string; en: string }[] = [
+const SOURCE_FILTERS: { id: SearchFilter; vi: string; en: string }[] = [
   { id: 'all', vi: 'Tất cả', en: 'All' },
+  { id: 'video', vi: 'Video MV', en: 'Music videos' },
   { id: 'innertube', vi: 'YouTube Music', en: 'YouTube Music' },
   { id: 'monochrome', vi: 'Lossless FLAC', en: 'Lossless FLAC' },
   { id: 'jiosaavn', vi: 'JioSaavn', en: 'JioSaavn' },
@@ -70,7 +71,7 @@ export const SearchScreen: React.FC = () => {
   const [linkMsg, setLinkMsg] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
-  const [sourceFilter, setSourceFilter] = useState<'all' | MusicSourceId>('all');
+  const [sourceFilter, setSourceFilter] = useState<SearchFilter>('all');
   const [results, setResults] = useState<Track[]>([]);
   const [albumResults, setAlbumResults] = useState<AlbumSummary[]>([]);
   const [loading, setLoading] = useState(false);

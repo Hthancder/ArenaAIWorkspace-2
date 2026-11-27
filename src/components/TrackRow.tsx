@@ -151,13 +151,15 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   const badgeLabel =
     track.source === 'local'
       ? qb.split(' · ')[0] || 'Local'
-      : qb.includes('FLAC')
-        ? 'FLAC'
-        : qb.includes('320')
-          ? '320k'
-          : track.source === 'synth'
-            ? 'LAB'
-            : 'AAC';
+      : track.id.startsWith('ytv-')
+        ? 'MV'
+        : qb.includes('FLAC')
+          ? 'FLAC'
+          : qb.includes('320')
+            ? '320k'
+            : track.source === 'synth'
+              ? 'LAB'
+              : 'AAC';
   const lossless = /FLAC|ALAC|WAV|AIFF/.test(track.source === 'local' ? badgeLabel : qb);
 
   const row = (

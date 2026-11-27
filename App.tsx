@@ -23,6 +23,8 @@ import { AppBackdrop } from './src/components/ambient/AppBackdrop';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { TabBar, TabDef } from './src/components/TabBar';
 import { FullPlayerModal } from './src/components/player/FullPlayerModal';
+import { MusicVideoHost } from './src/components/video/MusicVideoHost';
+import { AppVideoAmbient } from './src/components/video/VideoSurfaces';
 import { HomeScreen } from './src/components/screens/HomeScreen';
 import { LibraryScreen } from './src/components/screens/LibraryScreen';
 import { RecapModal } from './src/components/screens/RecapModal';
@@ -179,6 +181,9 @@ const HolySicShell: React.FC = () => {
       >
         {/* Settings › Background & effects: one layer under every tab */}
         <AppBackdrop />
+        {prefs.musicVideo && prefs.videoAmbientApp && (
+          <AppVideoAmbient hidden={isPlayerOpen} level={prefs.videoAmbientLevel * 0.6} />
+        )}
         <View style={{ flex: 1 }}>
           {/* tabs stay alive once visited (scroll position, search text, open filters survive a
               tab switch, like a native UITabBarController); the shown one fades in */}
@@ -225,6 +230,8 @@ const HolySicShell: React.FC = () => {
         {/* Local Files sheets / prompts (above the dock) */}
         <LocalOverlayHost />
 
+        {/* one muted music-video player for the whole app (follows the audio) */}
+        <MusicVideoHost />
         {/* Modals & Sheets */}
         <FullPlayerModal />
         <RecapModal />

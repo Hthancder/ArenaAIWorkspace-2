@@ -89,6 +89,8 @@ import { AudioOutput, sourceFacts } from '../services/audio/audioOutput';
 import { DEFAULT_AUDIO_LAB, StorageService } from '../services/storage/storageService';
 import { PlaybackClock, usePositionStep } from '../services/audio/playbackClock';
 import { SleepClock } from '../services/audio/sleepClock';
+import { peekMusicVideo, videoHitToTrack } from '../services/video/videoService';
+import { searchYouTubeVideos } from '../services/providers/innertubeProvider';
 import {
   AlbumSummary,
   ArtistSummary,
@@ -118,6 +120,9 @@ export type LinkResult =
   | { kind: 'none'; message: string };
 
 /** Features merged from Spotube, OpenSpot Music, Musike and Cog (see NOTICE) */
+/** search source chips: a catalogue, or YouTube music videos */
+export type SearchFilter = 'all' | MusicSourceId | 'video';
+
 interface HolySicExtras {
   isOnline: boolean;
   importSheet: { mode: 'link' | 'list'; text: string } | null;
@@ -166,6 +171,8 @@ interface HolySicExtras {
   movePlaylistTrack: (id: string, from: number, to: number) => void;
   /** put downloads in one of your Downloads folders (null = take them out) */
   setDownloadsFolder: (trackIds: string[], folder: string | null) => void;
+  /** music video found for the playing song: take the audio from that video (picture in sync) */
+  switchToVideoAudio: (mvId: string) => void;
   /** delete several downloads at once */
   removeDownloads: (trackIds: string[]) => Promise<void>;
   /** turn downloads into Local Files in a folder (likes, playlists and history follow) */
@@ -247,7 +254,7 @@ interface HolySicContextValue extends HolySicExtras {
   refreshHomeFeeds: () => Promise<void>;
   searchTracks: (
     query: string,
-    sourceFilter?: 'all' | MusicSourceId
+    sourceFilter?: SearchFilter
   ) => Promise<{ tracks: Track[]; albums: AlbumSummary[] }>;
   searchHistory: string[];
   addSearchHistory: (q: string) => void;
@@ -805,6 +812,11 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const internalStartTrack = useCallback(
     async (track: Track, startAtSec = 0) => {
       const token = ++playTokenRef.current;
+      // music video mode: a video found earlier (prefetched) lets the audio come from it at once
+      if (prefsRef.current.musicVideo && prefsRef.current.videoAudio && !track.mvId) {
+        const mv = peekMusicVideo(track);
+        if (mv) track = { ...track, mvId: mv };
+      }
       flushListenTime();
       playLogRef.current = null;
       const isCurrent = () => token === playTokenRef.current;
@@ -1659,7 +1671,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const searchTracks = useCallback(
     async (
       query: string,
-      sourceFilter: 'all' | MusicSourceId = 'all'
+      sourceFilter: SearchFilter = 'all'
     ): Promise<{ tracks: Track[]; albums: AlbumSummary[] }> => {
       const q = query.trim();
       if (!q) return { tracks: [], albums: [] };
@@ -1689,6 +1701,9 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Catalog-only extras: Audius (artist uploads) and live radio stations
       if (sourceFilter === 'audius') tasks.push(searchAudiusTracks(q, 25));
       if (sourceFilter === 'radio') tasks.push(searchStations({ name: q, limit: 30 }));
+      // music videos (YouTube): the picture plays in the player, the sound from the same video
+      if (sourceFilter === 'video')
+        tasks.push(searchYouTubeVideos(q, 24).then((hits) => hits.map(videoHitToTrack)));
 
       const [albums, ...trackGroups] = await Promise.all([
         sourceFilter === 'all' || sourceFilter === 'itunes'
@@ -2359,6 +2374,17 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, []);
 
+  const switchToVideoAudio = useCallback(
+    (mvId: string) => {
+      const cur = currentTrackRef.current;
+      if (!cur || cur.mvId === mvId) return;
+      const next = { ...cur, mvId };
+      setQueue((prev) => prev.map((t) => (t.id === cur.id ? next : t)));
+      internalStartTrack(next, PlaybackClock.get());
+    },
+    [internalStartTrack]
+  );
+
   const removeDownloads = useCallback(
     async (trackIds: string[]) => {
       const cur = downloadsRef.current;
@@ -2765,6 +2791,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       updatePlaylist,
       movePlaylistTrack,
       removeDownloads,
+      switchToVideoAudio,
       setDownloadsFolder,
       moveDownloadsToLocal,
       isBlocked,
@@ -2809,6 +2836,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       updatePlaylist,
       movePlaylistTrack,
       removeDownloads,
+      switchToVideoAudio,
       setDownloadsFolder,
       moveDownloadsToLocal,
       isBlocked,

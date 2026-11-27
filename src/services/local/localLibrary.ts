@@ -1511,10 +1511,7 @@ class LocalLibraryStore {
 
 export const LocalLibrary = new LocalLibraryStore();
 /** the cover a playlist shows: its own (kept or a link), else its first song's */
-export const playlistCoverOf = (pl?: {
-  coverUrl?: string;
-  tracks: Track[];
-}): string =>
+export const playlistCoverOf = (pl?: { coverUrl?: string; tracks: Track[] }): string =>
   (pl && (LocalLibrary.resolveImageRef(pl.coverUrl) || pl.tracks[0]?.artworkUrl)) || '';
 export const isLocalTrack = (t?: Track | null) => !!t && t.id.startsWith(LOCAL_ID_PREFIX);
 export const localPathOf = (t: Track) => t.id.slice(LOCAL_ID_PREFIX.length);

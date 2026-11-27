@@ -16,6 +16,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  LayoutAnimation,
   Modal,
   PanResponder,
   Platform,
@@ -52,6 +53,11 @@ import { NativeMenu, nativeMenuAvailable, MenuItem } from '../ui/NativeMenu';
 import { useTrackMenu } from '../menu/useTrackMenu';
 import { MorphIcon, NudgeIcon } from '../ui/MorphIcon';
 import { PlayerStack } from '../../services/ui/playerStack';
+import { MusicVideoStage, VideoAmbient } from '../video/VideoSurfaces';
+import { useVideoState, videoWanted } from '../../services/video/videoStore';
+
+// "show the cover instead" survives closing / re-opening the player (this app session)
+let videoHiddenMemo = false;
 
 type SubPane = 'artwork' | 'lyrics' | 'queue' | 'sleep' | 'diagnostics' | 'styles';
 
@@ -237,8 +243,33 @@ export const FullPlayerModal: React.FC = () => {
     })
   ).current;
 
+  // ── music video (Settings › Music video) ──
+  const video = useVideoState();
+  const [videoHidden, setVideoHiddenState] = useState(videoHiddenMemo);
+  const lastShowVideoRef = useRef(false);
+
   if (!currentTrack) return null;
   const vi = prefs.language === 'vi';
+
+  const setVideoHidden = (v: boolean) => {
+    videoHiddenMemo = v;
+    setVideoHiddenState(v);
+  };
+  const videoMode = videoWanted(prefs.musicVideo, currentTrack);
+  const videoReady = videoMode && video.status === 'ready' && video.trackId === currentTrack?.id;
+  const showVideo =
+    videoReady &&
+    !videoHidden &&
+    (prefs.playerStyle === 'FLAGSHIP' || prefs.playerStyle === 'POSTER');
+  const videoW = Math.min(winW - 36, 400);
+  const videoH = Math.round(videoW / Math.max(1, Math.min(2.4, video.aspect || 16 / 9)));
+  const lastShowVideo = lastShowVideoRef;
+  if (lastShowVideo.current !== showVideo) {
+    lastShowVideo.current = showVideo;
+    // cover ⇄ video: the card reshapes smoothly instead of jumping
+    if (Platform.OS !== 'web')
+      LayoutAnimation.configureNext(LayoutAnimation.create(320, 'easeInEaseOut', 'opacity'));
+  }
   const playerMenuItems = (): MenuItem[] => {
     const sleepOn = sleepActive || sleepEndOfTrack;
     return [
@@ -390,6 +421,10 @@ export const FullPlayerModal: React.FC = () => {
               still={ambient.reduceMotion}
             />
           )}
+          {/* the music video's scenes light the player (moves with the picture) */}
+          {videoMode && prefs.videoAmbient && isPlayerOpen && !prefs.pureBlack && (
+            <VideoAmbient live={!ambient.reduceMotion} level={prefs.videoAmbientLevel} />
+          )}
           {/* Top Bar — also the grab area for swipe-down-to-close */}
           <View style={styles.topBar} {...dismissPan.panHandlers}>
             <Tap hitSlop={10} onPress={() => setIsPlayerOpen(false)} style={styles.topIconBtn}>
@@ -422,6 +457,48 @@ export const FullPlayerModal: React.FC = () => {
             </Tap>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              {videoMode && (
+                <Tap
+                  hitSlop={8}
+                  onPress={() => {
+                    if (pane !== 'artwork') setPane('artwork');
+                    setVideoHidden(pane !== 'artwork' ? false : !videoHidden);
+                  }}
+                  accessibilityLabel={
+                    videoHidden
+                      ? vi
+                        ? 'Hiện video'
+                        : 'Show video'
+                      : vi
+                        ? 'Hiện ảnh bìa'
+                        : 'Show cover'
+                  }
+                  style={[
+                    styles.styleChipBtn,
+                    showVideo && pane === 'artwork' && { backgroundColor: palette.accent },
+                  ]}
+                >
+                  {video.status === 'searching' || video.status === 'loading' ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#FFFFFF"
+                      style={{ transform: [{ scale: 0.7 }] }}
+                    />
+                  ) : (
+                    <Ionicons
+                      name={
+                        videoReady
+                          ? showVideo && pane === 'artwork'
+                            ? 'videocam'
+                            : 'videocam-outline'
+                          : 'videocam-off-outline'
+                      }
+                      size={16}
+                      color={showVideo && pane === 'artwork' ? palette.onAccent : '#FFFFFF'}
+                    />
+                  )}
+                </Tap>
+              )}
               <Tap
                 hitSlop={8}
                 onPress={() => setPane((p) => (p === 'styles' ? 'artwork' : 'styles'))}
@@ -754,6 +831,7 @@ export const FullPlayerModal: React.FC = () => {
                       style={[
                         styles.coverShadowWrap,
                         prefs.playerStyle === 'POSTER' && styles.posterCoverWrap,
+                        showVideo && { width: videoW, height: videoH, borderRadius: 20 },
                         {
                           transform: [
                             { translateX: coverX },
@@ -768,11 +846,20 @@ export const FullPlayerModal: React.FC = () => {
                         },
                       ]}
                     >
-                      <ArtworkImage
-                        source={{ uri: currentTrack.artworkUrl }}
-                        fallbackSeed={currentTrack.title}
-                        style={styles.coverImage}
-                      />
+                      {showVideo ? (
+                        <MusicVideoStage
+                          width={videoW}
+                          accent={palette.accent}
+                          vi={vi}
+                          style={styles.videoInCard}
+                        />
+                      ) : (
+                        <ArtworkImage
+                          source={{ uri: currentTrack.artworkUrl }}
+                          fallbackSeed={currentTrack.title}
+                          style={styles.coverImage}
+                        />
+                      )}
                     </Animated.View>
                   </CoverGlow>
                   {/* Poster: a real 32-band spectrum of what's playing (FFT of the actual PCM) */}
@@ -1285,6 +1372,11 @@ const styles = StyleSheet.create({
   coverImage: {
     width: '100%',
     height: '100%',
+  },
+  videoInCard: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 0,
   },
   posterVisualizer: {
     width: 310,

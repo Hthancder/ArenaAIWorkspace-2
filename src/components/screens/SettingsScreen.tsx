@@ -35,6 +35,7 @@ import { SourceMemory } from '../../services/providers/sourceMemory';
 import { MergedSettings } from '../merge/MergedSettings';
 import { EffectsSettings } from '../settings/EffectsSettings';
 import { LyricsIconSettings } from '../settings/LyricsIconSettings';
+import { VideoSettings } from '../settings/VideoSettings';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
@@ -475,6 +476,7 @@ export const SettingsScreen: React.FC = () => {
         {/* Background & effects · Controls */}
         <EffectsSettings fontFamily={fontFamily} />
         <LyricsIconSettings fontFamily={fontFamily} />
+        <VideoSettings fontFamily={fontFamily} />
 
         {/* Audio Source Modules & Priority Order */}
         <Text style={[styles.sectionTitle, { fontFamily }]}>

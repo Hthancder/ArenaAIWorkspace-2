@@ -5,9 +5,9 @@ import { Platform } from 'react-native';
 import { DiagnosticStep, Track } from '../../types/music';
 import { CatalogCandidate, coreTitle, rankCandidates, TrackQueryInput } from '../trackMatcher';
 
-const PIPED_INSTANCES = ['https://pipedapi.kavin.rocks', 'https://api.piped.private.coffee'];
+export const PIPED_INSTANCES = ['https://pipedapi.kavin.rocks', 'https://api.piped.private.coffee'];
 
-async function fetchTimeout(
+export async function fetchTimeout(
   url: string,
   init: RequestInit = {},
   timeoutMs = 4500
@@ -658,4 +658,144 @@ export async function fetchInnerTubeSuggestions(input: string): Promise<string[]
   } catch {
     return [];
   }
+}
+
+// ───────────────────────── music videos ─────────────────────────
+
+/**
+ * The raw player response for a video, from the first stream client that answers OK (same
+ * visitor-id / bot-check handling as audio). Native only. `userAgent` must be sent with the media.
+ */
+export async function fetchInnerTubePlayer(
+  videoId: string
+): Promise<{ data: any; client: string; userAgent: string } | null> {
+  if (Platform.OS === 'web') return null;
+  for (const c of STREAM_CLIENTS) {
+    if (c === VISIONOS && Date.now() < visionRestingUntil) continue;
+    try {
+      let visitor = c.ownVisitorId ? await mintVisitorId(c) : undefined;
+      let data = await playerRequest(c, videoId, visitor);
+      if (c.ownVisitorId && isBotCheck(data)) {
+        visitor = await mintVisitorId(c, true);
+        data = await playerRequest(c, videoId, visitor);
+      }
+      if (data?.playabilityStatus?.status === 'OK')
+        return { data, client: c.name, userAgent: c.userAgent };
+    } catch {
+      // next client
+    }
+  }
+  return null;
+}
+
+/** Range-probe a media URL past the untokened window (exported for video links) */
+export const probeMediaUrl = validateStream;
+
+export interface YouTubeVideoHit {
+  videoId: string;
+  title: string;
+  channel: string;
+  durationSec: number;
+  thumbnail: string;
+  views?: number;
+}
+
+const parseClock = (t: string) => {
+  const parts = String(t || '')
+    .split(':')
+    .map((x) => Number(x));
+  return parts.length >= 2 && parts.every((n) => Number.isFinite(n))
+    ? parts.reduce((a, n) => a * 60 + n, 0)
+    : 0;
+};
+
+/** YouTube video search (music videos first). Native: InnerTube WEB; web/fallback: Piped. */
+export async function searchYouTubeVideos(query: string, limit = 12): Promise<YouTubeVideoHit[]> {
+  const q = query.trim();
+  if (!q) return [];
+  if (Platform.OS !== 'web') {
+    try {
+      const res = await fetchTimeout(
+        'https://www.youtube.com/youtubei/v1/search?prettyPrint=false',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0',
+          },
+          body: JSON.stringify({
+            query: q,
+            params: 'EgIQAQ%3D%3D', // type: video
+            context: {
+              client: { clientName: 'WEB', clientVersion: '2.20251120.01.00', hl: 'vi', gl: 'VN' },
+            },
+          }),
+        },
+        5000
+      );
+      if (res.ok) {
+        const root = await res.json();
+        const out: YouTubeVideoHit[] = [];
+        const seen = new Set<string>();
+        const walk = (node: any) => {
+          if (!node || typeof node !== 'object' || out.length >= limit) return;
+          const v = node.videoRenderer;
+          if (v?.videoId && !seen.has(v.videoId)) {
+            seen.add(v.videoId);
+            const thumbs: any[] = v.thumbnail?.thumbnails || [];
+            const viewsTxt = String(v.viewCountText?.simpleText || '').replace(/[^0-9]/g, '');
+            out.push({
+              videoId: v.videoId,
+              title: v.title?.runs?.map((r: any) => r.text).join('') || '',
+              channel: (v.ownerText?.runs?.[0]?.text || v.longBylineText?.runs?.[0]?.text || '')
+                .replace(/ - Topic$/i, '')
+                .replace(/VEVO$/i, ''),
+              durationSec: parseClock(v.lengthText?.simpleText),
+              thumbnail: (thumbs[thumbs.length - 1]?.url || '').split('?')[0],
+              views: viewsTxt ? Number(viewsTxt) : undefined,
+            });
+          }
+          for (const k of Object.keys(node)) walk(node[k]);
+        };
+        walk(root);
+        // live streams have no length
+        const vids = out.filter((x) => x.durationSec > 0);
+        if (vids.length) return vids;
+      }
+    } catch {
+      // Piped below
+    }
+  }
+  for (const filter of ['music_videos', 'videos']) {
+    for (const base of PIPED_INSTANCES) {
+      try {
+        const res = await fetchTimeout(
+          `${base}/search?q=${encodeURIComponent(q)}&filter=${filter}`,
+          {},
+          3600
+        );
+        if (!res.ok) continue;
+        const data = await res.json();
+        const out: YouTubeVideoHit[] = [];
+        for (const it of (data?.items || []) as any[]) {
+          const vid = String(it?.url || '').match(/v=([a-zA-Z0-9_-]{11})/)?.[1];
+          if (!vid || !it?.title || !(Number(it.duration) > 0)) continue;
+          out.push({
+            videoId: vid,
+            title: String(it.title),
+            channel: String(it.uploaderName || '').replace(/ - Topic$/i, ''),
+            durationSec: Number(it.duration),
+            thumbnail: String(it.thumbnail || ''),
+            views: Number(it.views) || undefined,
+          });
+          if (out.length >= limit) break;
+        }
+        if (out.length) return out;
+      } catch {
+        // next instance
+      }
+    }
+  }
+  return [];
 }

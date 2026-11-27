@@ -83,7 +83,8 @@
         }
       ],
       "@bacons/apple-targets",
-      "./plugins/withAppIconSkins"
+      "./plugins/withAppIconSkins",
+      "./plugins/withMutedVideoSession"
     ]
   }
 }

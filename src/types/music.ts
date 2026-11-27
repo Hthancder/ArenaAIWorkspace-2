@@ -24,6 +24,8 @@ export interface Track {
   explicit?: boolean;
   isrc?: string;
   videoId?: string;
+  /** YouTube id of the song's music video (found by the video service, or the video itself) */
+  mvId?: string;
   /** Optional pre-resolved direct stream URL (e.g. AAC/FLAC/M4A) */
   streamUrl?: string;
   /** Optional synth chord recipe for offline zero-network showcase fallback */

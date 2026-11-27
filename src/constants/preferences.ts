@@ -189,6 +189,22 @@ export interface HolySicPreferences {
   lyricsSize: LyricsSize;
   /** Home Screen icon skin (APP_ICON_SKINS id) */
   appIcon: string;
+
+  // ── Music video ──
+  /** show the song's music video in the player instead of the cover */
+  musicVideo: boolean;
+  /** the video's scenes light the player background (blurred, follows the picture) */
+  videoAmbient: boolean;
+  /** outside the player the last scene stays (still) behind the app */
+  videoAmbientApp: boolean;
+  /** ambient strength 0..1 */
+  videoAmbientLevel: number;
+  /** max picture height */
+  videoQuality: 360 | 480 | 720 | 1080;
+  /** play the audio from the same video, so picture and sound match exactly */
+  videoAudio: boolean;
+  /** only load videos on Wi-Fi */
+  videoWifiOnly: boolean;
 }
 
 export const DEFAULT_PREFERENCES: HolySicPreferences = {
@@ -255,6 +271,13 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   lyricsEffect: 'glow',
   lyricsSize: 'M',
   appIcon: 'default',
+  musicVideo: false,
+  videoAmbient: true,
+  videoAmbientApp: true,
+  videoAmbientLevel: 0.6,
+  videoQuality: 720,
+  videoAudio: true,
+  videoWifiOnly: false,
 };
 
 export const PLAYER_STYLE_META: {
