@@ -20,7 +20,7 @@ import { Track } from '../types/music';
 import { formatTimeSec } from './HolySicIcons';
 import { T as UI, themedSheet } from '../theme/ui';
 import { Tap } from './ui/Tap';
-import { NativeMenu, nativeMenuAvailable } from './ui/NativeMenu';
+import { MenuItem, NativeMenu, nativeMenuAvailable } from './ui/NativeMenu';
 import { useTrackMenu } from './menu/useTrackMenu';
 import { perfCount } from '../services/perfProbe';
 
@@ -36,6 +36,22 @@ interface TrackRowProps {
 
 const SWIPE_AT = 76;
 
+interface RowActions {
+  press: () => void;
+  like: () => void;
+  next: () => void;
+  sheet: () => void;
+  remove: () => void;
+  menu: (id: string) => void;
+  haptic: (k: 'light' | 'medium' | 'selection') => void;
+}
+
+/**
+ * Reads the app state and hands the row only what it shows (plain values) plus one stable
+ * actions object. The row body is memoized, so a context change (a toast, the next song, a
+ * download finishing…) re-renders just the rows it actually changes — not every row of every
+ * list on every tab.
+ */
 export const TrackRow: React.FC<TrackRowProps> = ({
   track,
   queueContext,
@@ -44,7 +60,6 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   onRemove,
   swipeable = true,
 }) => {
-  perfCount('render:TrackRow');
   const {
     currentTrack,
     isPlaying,
@@ -61,6 +76,96 @@ export const TrackRow: React.FC<TrackRowProps> = ({
     addToQueue,
     isOnline,
   } = useHolySic();
+  const trackMenu = useTrackMenu();
+  const active = currentTrack?.id === track.id;
+  const isOffline = Boolean(downloads[track.id]);
+  const unavailable =
+    !isOnline &&
+    !isOffline &&
+    track.source !== 'local' &&
+    track.source !== 'synth' &&
+    !track.synthPreset;
+  const menuItems = useMemo(
+    () => (nativeMenuAvailable ? trackMenu.itemsFor(track) : EMPTY_MENU),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [trackMenu.itemsFor, track]
+  );
+  const actions = useRef<RowActions>(null as unknown as RowActions);
+  actions.current = {
+    press: () => (active ? togglePlay() : playTrack(track, queueContext)),
+    like: () => toggleLike(track),
+    next: () => addToQueue(track, true),
+    sheet: () => setActionTrack(track),
+    remove: () => onRemove?.(),
+    menu: (id) => trackMenu.select(track, id),
+    haptic,
+  };
+  return (
+    <TrackRowBody
+      track={track}
+      indexBadge={indexBadge}
+      compact={compact}
+      removable={!!onRemove}
+      swipeable={swipeable}
+      active={active}
+      playing={active && isPlaying}
+      liked={isLiked(track.id)}
+      isOffline={isOffline}
+      isDownloading={Boolean(downloadingIds[track.id])}
+      unavailable={unavailable}
+      accent={palette.accent}
+      container={palette.container}
+      fontFamily={resolveFontFamily(prefs.fontStyle)}
+      vi={prefs.language === 'vi'}
+      menuItems={menuItems}
+      actions={actions}
+    />
+  );
+};
+
+const EMPTY_MENU: MenuItem[] = [];
+
+interface BodyProps {
+  track: Track;
+  indexBadge?: number;
+  compact: boolean;
+  removable: boolean;
+  swipeable: boolean;
+  active: boolean;
+  playing: boolean;
+  liked: boolean;
+  isOffline: boolean;
+  isDownloading: boolean;
+  unavailable: boolean;
+  accent: string;
+  container: string;
+  fontFamily: string | undefined;
+  vi: boolean;
+  menuItems: MenuItem[];
+  actions: React.MutableRefObject<RowActions>;
+}
+
+const TrackRowBody = React.memo(function TrackRowBody({
+  track,
+  indexBadge,
+  compact,
+  removable,
+  swipeable,
+  active,
+  playing,
+  liked,
+  isOffline,
+  isDownloading,
+  unavailable,
+  accent,
+  container,
+  fontFamily,
+  vi,
+  menuItems,
+  actions,
+}: BodyProps) {
+  perfCount('render:TrackRow');
+  const haptic = (k: 'light' | 'medium' | 'selection') => actions.current.haptic(k);
 
   // ── Apple-Music-style swipe actions: → like / unlike, ← play next. The row follows the finger
   // (with resistance past the trigger point), a haptic tick marks "release now to do it" ──
@@ -71,8 +176,8 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   const swipedAt = useRef(0);
   const acts = useRef({ like: () => {}, next: () => {}, haptic });
   acts.current = {
-    like: () => toggleLike(track),
-    next: () => addToQueue(track, true),
+    like: () => actions.current.like(),
+    next: () => actions.current.next(),
     haptic,
   };
   const pan = useRef(
@@ -115,38 +220,15 @@ export const TrackRow: React.FC<TrackRowProps> = ({
     })
   ).current;
 
-  // native song menu (iOS): touch and hold lifts the row out, "…" opens the pull-down
-  const trackMenu = useTrackMenu();
-  const menuItems = useMemo(
-    () => (nativeMenuAvailable ? trackMenu.itemsFor(track) : []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [trackMenu.itemsFor, track]
-  );
-  const onMenu = (id: string) => trackMenu.select(track, id);
+  const onMenu = (id: string) => actions.current.menu(id);
 
   const { width: winW } = useWindowDimensions();
   // 4" phones: drop the secondary bits (quality pill, duration in grids) so the title gets room
   const narrow = winW < 360;
-  const active = currentTrack?.id === track.id;
-  const liked = isLiked(track.id);
-  const isOffline = Boolean(downloads[track.id]);
-  const isDownloading = Boolean(downloadingIds[track.id]);
-  // offline: online-only songs are skipped in a mixed list — show them greyed out
-  const unavailable =
-    !isOnline &&
-    !isOffline &&
-    track.source !== 'local' &&
-    track.source !== 'synth' &&
-    !track.synthPreset;
-  const fontFamily = resolveFontFamily(prefs.fontStyle);
 
   const handlePress = () => {
     if (Date.now() - swipedAt.current < 400) return;
-    if (active) {
-      togglePlay();
-    } else {
-      playTrack(track, queueContext);
-    }
+    actions.current.press();
   };
 
   // Local Files carry their real codec ("MP3 · 44.1 kHz · Trên máy") — show it, not a guess
@@ -174,19 +256,19 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         if (nativeMenuAvailable) return;
         if (Date.now() - swipedAt.current < 400) return;
         haptic('medium');
-        setActionTrack(track);
+        actions.current.sheet();
       }}
       delayLongPress={380}
       style={({ pressed }) => [
         styles.row,
         compact && styles.rowCompact,
-        active && { backgroundColor: palette.container + '55' },
+        active && { backgroundColor: container + '55' },
         unavailable && { opacity: 0.38 },
         pressed && { opacity: 0.78 },
       ]}
     >
       {indexBadge !== undefined && (
-        <Text style={[styles.indexNum, { color: active ? palette.accent : UI.text3, fontFamily }]}>
+        <Text style={[styles.indexNum, { color: active ? accent : UI.text3, fontFamily }]}>
           {indexBadge}
         </Text>
       )}
@@ -199,7 +281,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         />
         {active && (
           <View style={styles.playingOverlay}>
-            <NowPlayingBars playing={isPlaying} color={palette.accent} size={16} />
+            <NowPlayingBars playing={playing} color={accent} size={16} />
           </View>
         )}
       </View>
@@ -211,7 +293,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
             style={[
               styles.title,
               {
-                color: active ? palette.accent : UI.text,
+                color: active ? accent : UI.text,
                 fontFamily,
               },
             ]}
@@ -281,7 +363,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         hitSlop={8}
         onPress={(e) => {
           e.stopPropagation?.();
-          toggleLike(track);
+          actions.current.like();
         }}
         style={styles.iconBtn}
       >
@@ -292,13 +374,13 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         />
       </Tap>
 
-      {onRemove ? (
+      {removable ? (
         <Tap
           feedback="opacity"
           hitSlop={8}
           onPress={(e) => {
             e.stopPropagation?.();
-            onRemove();
+            actions.current.remove();
           }}
           style={styles.iconBtn}
         >
@@ -309,7 +391,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           items={menuItems}
           onSelect={onMenu}
           title={`${track.title} · ${track.artist}`}
-          label={(prefs.language === 'vi' ? 'Tuỳ chọn ' : 'Options for ') + track.title}
+          label={(vi ? 'Tuỳ chọn ' : 'Options for ') + track.title}
           style={styles.iconBtn}
         >
           <Ionicons name="ellipsis-horizontal" size={18} color={UI.text2} />
@@ -320,13 +402,11 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           hitSlop={8}
           onPress={(e) => {
             e.stopPropagation?.();
-            setActionTrack(track);
+            actions.current.sheet();
           }}
           style={styles.iconBtn}
           accessibilityRole="button"
-          accessibilityLabel={
-            (prefs.language === 'vi' ? 'Tuỳ chọn ' : 'Options for ') + track.title
-          }
+          accessibilityLabel={(vi ? 'Tuỳ chọn ' : 'Options for ') + track.title}
         >
           <Ionicons name="ellipsis-horizontal" size={18} color={UI.text2} />
         </Tap>
@@ -349,7 +429,6 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   );
 
   if (!swipeable) return lifted;
-  const vi = prefs.language === 'vi';
   const likeOpacity = dragX.interpolate({
     inputRange: [0, 24, SWIPE_AT],
     outputRange: [0, 0.6, 1],
@@ -380,8 +459,8 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         { name: 'next', label: vi ? 'Phát tiếp theo' : 'Play next' },
       ]}
       onAccessibilityAction={(e) => {
-        if (e.nativeEvent.actionName === 'like') toggleLike(track);
-        if (e.nativeEvent.actionName === 'next') addToQueue(track, true);
+        if (e.nativeEvent.actionName === 'like') actions.current.like();
+        if (e.nativeEvent.actionName === 'next') actions.current.next();
       }}
     >
       {/* revealed behind the row */}
@@ -411,7 +490,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           styles.swipeNext,
           {
             width: rowW,
-            backgroundColor: palette.accent,
+            backgroundColor: accent,
             opacity: nextOpacity,
             transform: [{ translateX: Animated.add(dragX, rowW) }],
           },
@@ -427,7 +506,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
       <Animated.View style={{ transform: [{ translateX: dragX }] }}>{lifted}</Animated.View>
     </View>
   );
-};
+});
 
 const styles = themedSheet(() => ({
   swipeWrap: {

@@ -10,6 +10,7 @@ import { BedsideClockFace, BedsideNightTint } from '../../constants/preferences'
 import { useHolySic } from '../../context/HolySicContext';
 import { useHoldSeek } from '../../hooks/useHoldSeek';
 import { useActiveLyricIndex } from '../../services/lyrics/lyricClock';
+import { useAppActive } from '../../services/appActivity';
 
 export const BedsideClockView: React.FC = () => {
   // the nightstand clock keeps the screen on (released when the style or player closes)
@@ -39,10 +40,20 @@ export const BedsideClockView: React.FC = () => {
 
   const [now, setNow] = useState(() => new Date());
 
+  // only hours:minutes are shown, so wake exactly on each minute boundary (not every second),
+  // and not at all while the app is in the background; resync on return
+  const active = useAppActive();
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
+    if (!active) return;
+    let t: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const d = new Date();
+      setNow(d);
+      t = setTimeout(tick, 60000 - (d.getSeconds() * 1000 + d.getMilliseconds()) + 20);
+    };
+    tick();
+    return () => clearTimeout(t);
+  }, [active]);
 
   if (!currentTrack) return null;
 

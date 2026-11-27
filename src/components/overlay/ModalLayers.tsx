@@ -11,7 +11,7 @@
 
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHolySic } from '../../context/HolySicContext';
 import { GlassSurface } from '../GlassSurface';
@@ -22,6 +22,7 @@ import { LyricsEditor, useLyricsEditorTarget } from '../player/LyricsEditor';
 import { CollectionModal } from '../screens/CollectionScreen';
 import { TrackActionSheet } from '../TrackActionSheet';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { ToastStore, useToastMessage } from '../../services/ui/toastStore';
 
 export type LayerId =
   | 'root'
@@ -152,7 +153,8 @@ export const SheetSlot: React.FC<{ layer: LayerId }> = ({ layer }) => {
 /** The app's toast, drawn in whichever layer is on top (it used to hide behind open modals).
  *  Drops in from the top with a spring and lifts away when it ends, like an iOS banner. */
 const ToastPill: React.FC = () => {
-  const { toastMessage, palette } = useHolySic();
+  const { palette } = useHolySic();
+  const toastMessage = useToastMessage();
   const insets = useSafeAreaInsets();
   const [shown, setShown] = useState<string | null>(toastMessage);
   const v = useRef(new Animated.Value(0)).current;
@@ -174,7 +176,7 @@ const ToastPill: React.FC = () => {
   const bad = /lỗi|không thể|thất bại|error|fail|couldn|can.t/i.test(shown);
   return (
     <Animated.View
-      pointerEvents="none"
+      pointerEvents={toastMessage ? 'box-none' : 'none'}
       accessibilityLiveRegion="polite"
       style={[
         styles.toastWrap,
@@ -188,18 +190,21 @@ const ToastPill: React.FC = () => {
         },
       ]}
     >
-      <GlassSurface
-        intensity={75}
-        tintColor={UI.shade(22, 22, 32, 0.92)}
-        style={[styles.toastPill, { borderColor: palette.accent + '44' }]}
-      >
-        <Ionicons
-          name={bad ? 'alert-circle' : 'checkmark-circle'}
-          size={16}
-          color={bad ? '#FBBF24' : palette.accent}
-        />
-        <Text style={styles.toastText}>{shown}</Text>
-      </GlassSurface>
+      {/* tap to dismiss early */}
+      <Pressable onPress={ToastStore.hide} accessibilityRole="button" accessibilityLabel={shown}>
+        <GlassSurface
+          intensity={75}
+          tintColor={UI.shade(22, 22, 32, 0.92)}
+          style={[styles.toastPill, { borderColor: palette.accent + '44' }]}
+        >
+          <Ionicons
+            name={bad ? 'alert-circle' : 'checkmark-circle'}
+            size={16}
+            color={bad ? '#FBBF24' : palette.accent}
+          />
+          <Text style={styles.toastText}>{shown}</Text>
+        </GlassSurface>
+      </Pressable>
     </Animated.View>
   );
 };

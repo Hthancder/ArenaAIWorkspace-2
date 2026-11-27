@@ -3,7 +3,7 @@
 
 import { skinPreview } from '../../constants/appIcons';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -39,7 +39,7 @@ import { EffectsSettings } from '../settings/EffectsSettings';
 import { LyricsIconSettings } from '../settings/LyricsIconSettings';
 import { VideoSettings } from '../settings/VideoSettings';
 import { T as UI, themedSheet } from '../../theme/ui';
-import { useTabScrollToTop } from '../../services/ui/tabBus';
+import { TabBus, useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
 import { ScrollEdgeBar } from '../ui/ScrollEdgeBar';
 import { PageHeader, SettingsHome, SettingsPageId, pageTitle } from '../settings/SettingsHome';
@@ -89,6 +89,18 @@ export const SettingsScreen: React.FC = () => {
     }).start();
   };
   const back = () => openPage(null);
+  // re-tapping the HolySic tab on a settings page goes back to the front page (UIKit pops to root)
+  const backFn = useRef(back);
+  backFn.current = back;
+  const onPage = useRef(false);
+  onPage.current = page !== null;
+  useEffect(
+    () =>
+      TabBus.subscribe((t) => {
+        if (t === 'settings' && onPage.current) backFn.current();
+      }),
+    []
+  );
   // swipe from the left edge to go back (iOS navigation gesture)
   const backRef = useRef(back);
   backRef.current = back;

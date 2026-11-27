@@ -305,6 +305,7 @@ const EditorBody: React.FC<{ track: Track }> = ({ track }) => {
 
           <ScrollView
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
             contentContainerStyle={{ paddingBottom: 18 }}
             showsVerticalScrollIndicator={false}
           >

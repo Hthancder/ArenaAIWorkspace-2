@@ -5,32 +5,52 @@ import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { useHolySic } from '../../context/HolySicContext';
 import { usePositionSec } from '../../services/audio/playbackClock';
+import { useAppActive } from '../../services/appActivity';
 
 export const TurntableVinylStage: React.FC = () => {
   const { currentTrack, isPlaying, durationSec, darkPalette: palette } = useHolySic();
   const positionSec = usePositionSec();
   const spinAnim = useRef(new Animated.Value(0)).current;
 
+  const active = useAppActive();
+  const spinning = isPlaying && active;
   useEffect(() => {
-    let loop: Animated.CompositeAnimation | null = null;
-    if (isPlaying) {
-      spinAnim.setValue(0);
-      loop = Animated.loop(
-        Animated.timing(spinAnim, {
-          toValue: 1,
-          duration: 9000,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        })
-      );
-      loop.start();
-    } else {
+    // Resume from wherever the record stopped instead of snapping back to 0° on every play/pause.
+    if (!spinning) {
       spinAnim.stopAnimation();
+      return;
     }
+    let stopped = false;
+    let anim: Animated.CompositeAnimation | null = null;
+    spinAnim.stopAnimation((from) => {
+      if (stopped) return;
+      const start = from % 1;
+      spinAnim.setValue(start);
+      anim = Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: Math.max(1, (1 - start) * 9000),
+        easing: Easing.linear,
+        useNativeDriver: true,
+      });
+      anim.start(({ finished }) => {
+        if (!finished || stopped) return;
+        spinAnim.setValue(0);
+        anim = Animated.loop(
+          Animated.timing(spinAnim, {
+            toValue: 1,
+            duration: 9000,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          })
+        );
+        anim.start();
+      });
+    });
     return () => {
-      loop?.stop();
+      stopped = true;
+      anim?.stop();
     };
-  }, [isPlaying, spinAnim]);
+  }, [spinning, spinAnim]);
 
   if (!currentTrack) return null;
 

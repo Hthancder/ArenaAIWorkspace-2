@@ -1,7 +1,7 @@
 // HolySic Library Hub — Playlists, Liked Songs, Offline Downloads, History & Playlist Importer
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -34,6 +34,7 @@ import { PopIn } from '../ui/PopIn';
 import { ScrollEdgeHairline } from '../ui/ScrollEdgeBar';
 import { NativeMenu, nativeMenuAvailable } from '../ui/NativeMenu';
 import { perfCount } from '../../services/perfProbe';
+import { useProgressive } from '../../hooks/useProgressive';
 
 type LibFilter = 'playlists' | 'liked' | 'offline' | 'history';
 
@@ -55,8 +56,12 @@ export const LibraryScreen: React.FC = () => {
     setIsPlayerOpen,
     deletePlaylist,
   } = useHolySic();
+  // one queue array for the whole history list (it used to be rebuilt for every row)
+  const historyTracks = useMemo(() => history.map((h) => h.track), [history]);
 
   const [tab, setTab] = useState<LibFilter>('playlists');
+  const likedShown = useProgressive(likedTracks.length, 30, 40, tab);
+  const historyShown = useProgressive(history.length, 30, 40, tab);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [plName, setPlName] = useState('');
   const [plDesc, setPlDesc] = useState('');
@@ -246,6 +251,8 @@ export const LibraryScreen: React.FC = () => {
       <Animated.ScrollView
         ref={scrollRef as any}
         style={{ flex: 1 }}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
@@ -422,9 +429,9 @@ export const LibraryScreen: React.FC = () => {
                 onAction={() => setActiveTab('search')}
               />
             ) : (
-              likedTracks.map((song) => (
-                <TrackRow key={song.id} track={song} queueContext={likedTracks} />
-              ))
+              likedTracks
+                .slice(0, likedShown)
+                .map((song) => <TrackRow key={song.id} track={song} queueContext={likedTracks} />)
             )}
           </>
         )}
@@ -448,9 +455,9 @@ export const LibraryScreen: React.FC = () => {
                 onAction={() => setActiveTab('home')}
               />
             ) : (
-              history.map((ev) => (
-                <TrackRow key={ev.id} track={ev.track} queueContext={history.map((h) => h.track)} />
-              ))
+              history
+                .slice(0, historyShown)
+                .map((ev) => <TrackRow key={ev.id} track={ev.track} queueContext={historyTracks} />)
             )}
           </>
         )}

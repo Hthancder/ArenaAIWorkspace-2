@@ -74,6 +74,8 @@ const HolySicShell: React.FC = () => {
     closeCharts,
     isPlayerOpen,
     prefsReady,
+    isRecapOpen,
+    radioOpen,
   } = useHolySic();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   useQuickActions();
@@ -255,25 +257,51 @@ const HolySicShell: React.FC = () => {
         <Perf id="player">
           <FullPlayerModal />
         </Perf>
-        <RecapModal />
-        <ImportModal
-          visible={!!importSheet}
-          onClose={closeImport}
-          initialMode={importSheet?.mode}
-          initialText={importSheet?.text}
-        />
-        <RadioModal />
-        <ChartsModal
-          visible={!!chartsSheet}
-          onClose={closeCharts}
-          initialGenre={chartsSheet?.genre ?? null}
-        />
+        <KeepWhileOpen open={isRecapOpen}>
+          <RecapModal />
+        </KeepWhileOpen>
+        <KeepWhileOpen open={!!importSheet}>
+          <ImportModal
+            visible={!!importSheet}
+            onClose={closeImport}
+            initialMode={importSheet?.mode}
+            initialText={importSheet?.text}
+          />
+        </KeepWhileOpen>
+        <KeepWhileOpen open={radioOpen}>
+          <RadioModal />
+        </KeepWhileOpen>
+        <KeepWhileOpen open={!!chartsSheet}>
+          <ChartsModal
+            visible={!!chartsSheet}
+            onClose={closeCharts}
+            initialGenre={chartsSheet?.genre ?? null}
+          />
+        </KeepWhileOpen>
         <WelcomeModal />
         {/* Shared sheets + toast for the root layer (see overlay/ModalLayers) */}
         <SheetSlot layer="root" />
       </Animated.View>
     </View>
   );
+};
+
+/** Sheets that are rarely open are mounted only while shown (+ their closing slide), so their
+ *  hooks and memos (e.g. the Recap stats) don't run on every app update while hidden. */
+const KeepWhileOpen: React.FC<{ open: boolean; children: React.ReactNode }> = ({
+  open,
+  children,
+}) => {
+  const [mounted, setMounted] = useState(open);
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      return;
+    }
+    const t = setTimeout(() => setMounted(false), 800);
+    return () => clearTimeout(t);
+  }, [open]);
+  return mounted || open ? <>{children}</> : null;
 };
 
 /** Benchmark only (see services/perfProbe): React.Profiler around a part of the tree */

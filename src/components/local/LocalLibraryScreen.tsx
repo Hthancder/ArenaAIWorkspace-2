@@ -1231,6 +1231,7 @@ export const LocalLibraryScreen: React.FC = () => {
       <FlatList
         data={items}
         keyExtractor={(i) => i.k}
+        keyboardDismissMode="interactive"
         ListHeaderComponent={header}
         renderItem={({ item }) =>
           item.group

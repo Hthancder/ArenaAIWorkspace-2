@@ -315,6 +315,7 @@ export const ImportModal: React.FC<Props> = ({
         <ScrollView
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
           {fromFile ? (
             <View style={styles.fileCard}>

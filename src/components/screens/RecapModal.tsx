@@ -144,11 +144,25 @@ export const RecapModal: React.FC = () => {
               {!flipped ? (
                 <>
                   <View style={styles.idCardTop}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 8,
+                        flex: 1,
+                        minWidth: 0,
+                        marginRight: 8,
+                      }}
+                    >
                       <HolySicMarkIcon size={24} color={palette.accent} filled />
-                      <Text style={styles.idIssuer}>HOLYSIC LISTENER PASS · iOS</Text>
+                      <Text style={[styles.idIssuer, { flexShrink: 1 }]} numberOfLines={1}>
+                        HOLYSIC LISTENER PASS
+                      </Text>
                     </View>
-                    <Text style={[styles.tapFlipHint, { color: palette.accent }]}>
+                    <Text
+                      style={[styles.tapFlipHint, { color: palette.accent, flexShrink: 0 }]}
+                      numberOfLines={1}
+                    >
                       {vi ? 'Chạm để lật ↻' : 'Tap to flip ↻'}
                     </Text>
                   </View>

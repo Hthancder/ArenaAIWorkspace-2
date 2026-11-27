@@ -36,6 +36,7 @@ import { Tap } from '../ui/Tap';
 import { Rise } from '../ui/Rise';
 import { GlassSurface } from '../GlassSurface';
 import { NativeMenu, nativeMenuAvailable, MenuItem } from '../ui/NativeMenu';
+import { Progressive } from '../../hooks/useProgressive';
 
 export const CollectionModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -926,21 +927,26 @@ export const CollectionModal: React.FC = () => {
                   </View>
                 </Tap>
               ))}
-            {!selecting &&
-              tracks.map((song, idx) => (
-                <Rise key={`${song.id}-${idx}`} index={idx}>
-                  <TrackRow
-                    track={song}
-                    queueContext={tracks}
-                    indexBadge={idx + 1}
-                    onRemove={
-                      removablePlaylistId
-                        ? () => removeTrackFromPlaylist(removablePlaylistId!, song.id)
-                        : undefined
-                    }
-                  />
-                </Rise>
-              ))}
+            {!selecting && (
+              <Progressive total={tracks.length} resetKey={collectionTarget}>
+                {(shown) =>
+                  tracks.slice(0, shown).map((song, idx) => (
+                    <Rise key={`${song.id}-${idx}`} index={idx}>
+                      <TrackRow
+                        track={song}
+                        queueContext={tracks}
+                        indexBadge={idx + 1}
+                        onRemove={
+                          removablePlaylistId
+                            ? () => removeTrackFromPlaylist(removablePlaylistId!, song.id)
+                            : undefined
+                        }
+                      />
+                    </Rise>
+                  ))
+                }
+              </Progressive>
+            )}
             {!selecting && collectionTarget.kind === 'artist' && tracks.length > 0 && (
               <Tap onPress={loadMoreArtist} disabled={loadingMore} style={styles.loadMore}>
                 {loadingMore ? (

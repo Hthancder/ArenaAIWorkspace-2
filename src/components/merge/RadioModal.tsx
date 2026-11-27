@@ -197,6 +197,8 @@ export const RadioModal: React.FC = () => {
           <FlatList
             data={list}
             keyExtractor={(x) => x.id}
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingBottom: 40 + insets.bottom }}
             ListEmptyComponent={
               <Text style={styles.empty}>

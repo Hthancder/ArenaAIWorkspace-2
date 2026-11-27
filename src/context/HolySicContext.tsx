@@ -108,6 +108,7 @@ import {
 import { isLocalTrack, LocalLibrary, taggedAlbumOf } from '../services/local/localLibrary';
 import { perfCount } from '../services/perfProbe';
 import { runLyricClock } from '../services/lyrics/lyricClock';
+import { ToastStore } from '../services/ui/toastStore';
 
 export type CollectionTarget =
   | { kind: 'album'; id: string; summary?: AlbumSummary }
@@ -227,7 +228,6 @@ interface HolySicContextValue extends HolySicExtras {
   setIsRecapOpen: (open: boolean) => void;
   actionTrack: Track | null;
   setActionTrack: (track: Track | null) => void;
-  toastMessage: string | null;
   showToast: (msg: string) => void;
 
   // Preferences & Theme
@@ -375,7 +375,6 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isAudioLabOpen, setIsAudioLabOpen] = useState(false);
   const [isRecapOpen, setIsRecapOpen] = useState(false);
   const [actionTrack, setActionTrack] = useState<Track | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [prefs, setPrefs] = useState<HolySicPreferences>(DEFAULT_PREFERENCES);
   const [quickPicks, setQuickPicks] = useState<Track[]>(OFFLINE_SHOWCASE_TRACKS);
@@ -423,7 +422,6 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     DEFAULT_MONOCHROME_SERVER,
   ]);
 
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queueRef = useRef(queue);
   const queueIndexRef = useRef(queueIndex);
   const repeatRef = useRef(repeatMode);
@@ -539,11 +537,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   downloadsRef.current = downloads;
   volumeRef.current = volume;
 
-  const showToast = useCallback((msg: string) => {
-    setToastMessage(msg);
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToastMessage(null), 2600);
-  }, []);
+  // the pill reads ToastStore directly — a toast no longer re-renders the app
+  const showToast = useCallback((msg: string) => ToastStore.show(msg), []);
 
   // Real cover colours (ambient light + accent). Cached per artwork URL.
   const [artColors, setArtColors] = useState<ArtColors | null>(null);
@@ -2968,7 +2963,6 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setIsRecapOpen,
       actionTrack,
       setActionTrack,
-      toastMessage,
       showToast,
       prefs,
       updatePrefs,
@@ -3053,7 +3047,6 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       isAudioLabOpen,
       isRecapOpen,
       actionTrack,
-      toastMessage,
       showToast,
       prefs,
       updatePrefs,
