@@ -40,14 +40,18 @@ export interface HolySicDSPNative {
     sampleRate: number,
     outUri: string
   ): Promise<boolean>;
-  /** the bundled sample bank (GeneralUser GS) is present — newer builds only */
-  soundBankAvailable?(): boolean;
-  /** MIDI → WAV through the sample bank; `pianoBank`/`pianoProgram` replace GM program 0 (−1 = keep) */
-  renderMidiBank?(
+  /**
+   * MIDI → WAV through the sample bank assembled from downloaded parts (index .hsi + sample packs
+   * .hsp, see scripts/soundbank/split_bank.py). `pianoBank`/`pianoProgram` replace GM program 0
+   * (−1 = keep). Newer builds only.
+   */
+  renderMidiBankParts?(
     events: number[],
     durationSec: number,
     sampleRate: number,
     outUri: string,
+    indexUri: string,
+    packUris: string[],
     pianoBank: number,
     pianoProgram: number
   ): Promise<boolean>;

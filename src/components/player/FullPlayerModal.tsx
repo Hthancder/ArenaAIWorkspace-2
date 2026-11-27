@@ -4,7 +4,8 @@ import { SignalPathList } from '../audio/SignalPathList';
 import { useSignalPath } from '../audio/useSignalPath';
 import { PlayerPaneBus } from '../../services/ui/playerPaneBus';
 import { usePositionSec } from '../../services/audio/playbackClock';
-import { SleepClock, useSleepRemaining } from '../../services/audio/sleepClock';
+import { formatSleepLeft, SleepClock, useSleepRemaining } from '../../services/audio/sleepClock';
+import { formatSleepLength, SleepCustomPicker } from './SleepCustomPicker';
 import { audioEngine } from '../../services/audio/audioEngine';
 import * as Clipboard from 'expo-clipboard';
 import { FitStage } from './FitStage';
@@ -116,6 +117,11 @@ export const FullPlayerModal: React.FC = () => {
   const [nudge, setNudge] = useState({ back: 0, fwd: 0 });
 
   const [pane, setPane] = useState<SubPane>('artwork');
+  // sleep pane: the custom hours/minutes picker replaces the presets while open
+  const [sleepCustom, setSleepCustom] = useState(false);
+  useEffect(() => {
+    if (pane !== 'sleep') setSleepCustom(false);
+  }, [pane]);
   const { width: winW, height: winH } = useWindowDimensions();
   // narrow phones (SE / mini / 375pt): stack the deck icon over its label so nothing wraps
   const compactDeck = winW < 400;
@@ -561,33 +567,73 @@ export const FullPlayerModal: React.FC = () => {
                         </Tap>
                       </View>
                     )}
-                    <View style={styles.sleepGrid}>
-                      {[5, 15, 30, 45, 60].map((mins) => (
-                        <Tap
-                          key={mins}
-                          onPress={() => {
-                            setSleepTimer(mins);
-                            setPane('artwork');
-                          }}
-                          style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
-                        >
-                          <Text style={styles.sleepOptionText}>
-                            {mins} {vi ? 'phút' : 'min'}
-                          </Text>
-                        </Tap>
-                      ))}
-                      <Tap
-                        onPress={() => {
-                          setSleepTimer('end_of_track');
+                    {sleepCustom ? (
+                      <SleepCustomPicker
+                        vi={vi}
+                        accent={palette.accent}
+                        onAccent={palette.onAccent}
+                        initialMin={prefs.sleepCustomMin || 90}
+                        onBack={() => setSleepCustom(false)}
+                        onStart={(mins) => {
+                          updatePrefs({ sleepCustomMin: mins });
+                          setSleepTimer(mins);
+                          setSleepCustom(false);
                           setPane('artwork');
                         }}
-                        style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
-                      >
-                        <Text style={styles.sleepOptionText}>
-                          {vi ? 'Hết bài này' : 'End of Song'}
-                        </Text>
-                      </Tap>
-                    </View>
+                      />
+                    ) : (
+                      <View style={styles.sleepGrid}>
+                        {[5, 15, 30, 45, 60, 90].map((mins) => (
+                          <Tap
+                            key={mins}
+                            onPress={() => {
+                              setSleepTimer(mins);
+                              setPane('artwork');
+                            }}
+                            style={[styles.sleepOption, { borderColor: palette.accent + '44' }]}
+                          >
+                            <Text style={styles.sleepOptionText}>
+                              {formatSleepLength(mins, vi)}
+                            </Text>
+                          </Tap>
+                        ))}
+                        <Tap
+                          onPress={() => {
+                            setSleepTimer('end_of_track');
+                            setPane('artwork');
+                          }}
+                          style={[
+                            styles.sleepOption,
+                            styles.sleepOptionWide,
+                            { borderColor: palette.accent + '44' },
+                          ]}
+                        >
+                          <Ionicons name="musical-note" size={14} color="#FFF" />
+                          <Text style={styles.sleepOptionText}>
+                            {vi ? 'Hết bài này' : 'End of Song'}
+                          </Text>
+                        </Tap>
+                        <Tap
+                          onPress={() => {
+                            haptic('selection');
+                            setSleepCustom(true);
+                          }}
+                          style={[
+                            styles.sleepOption,
+                            styles.sleepOptionWide,
+                            { borderColor: palette.accent + '44' },
+                          ]}
+                          accessibilityLabel={
+                            vi ? 'Tuỳ chỉnh giờ và phút' : 'Custom hours and minutes'
+                          }
+                        >
+                          <Ionicons name="time-outline" size={14} color="#FFF" />
+                          <Text style={styles.sleepOptionText}>
+                            {vi ? 'Tuỳ chỉnh…' : 'Custom…'}
+                          </Text>
+                        </Tap>
+                      </View>
+                    )}
                     {(sleepActive || sleepEndOfTrack) && (
                       <Tap onPress={() => setSleepTimer(null)} style={styles.turnOffSleepBtn}>
                         <Text style={{ color: '#F87171', fontWeight: '700' }}>
@@ -1206,7 +1252,7 @@ export const FullPlayerModal: React.FC = () => {
 const SleepCountdown: React.FC<{ big?: boolean }> = ({ big }) => {
   const left = useSleepRemaining();
   if (left === null) return null;
-  return <Text style={big ? styles.sleepBig : undefined}>{formatTimeSec(left)}</Text>;
+  return <Text style={big ? styles.sleepBig : undefined}>{formatSleepLeft(left)}</Text>;
 };
 
 /**
@@ -1452,6 +1498,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  sleepOptionWide: {
+    minWidth: '40%',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
   },
   sleepOptionText: {
     color: '#FFFFFF',

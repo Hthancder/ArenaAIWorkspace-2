@@ -185,6 +185,8 @@ export interface HolySicPreferences {
   offlinePill: boolean;
   /** sleep timer fades out over the last N seconds (0 = stop at once) */
   sleepFadeSec: number;
+  /** last custom sleep timer length (minutes), offered again in the picker */
+  sleepCustomMin: number;
   /** screen stays on while the lyrics are open */
   keepAwakeLyrics: boolean;
   /** tapping a song also opens the full player */
@@ -236,6 +238,8 @@ export interface HolySicPreferences {
   midiSound: 'sampled' | 'synth';
   /** piano voice for GM program 0, "bank:program" in the sample bank (see MIDI_PIANOS) */
   midiPiano: string;
+  /** download the instruments a MIDI song needs when it plays (else: synth until downloaded) */
+  midiAutoDownload: boolean;
 }
 
 export type PlaylistSort = 'custom' | 'recent' | 'added' | 'alpha' | 'creator';
@@ -304,6 +308,7 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   tabLabels: true,
   offlinePill: true,
   sleepFadeSec: 20,
+  sleepCustomMin: 90,
   keepAwakeLyrics: false,
   openPlayerOnPlay: false,
   lyricsEffect: 'glow',
@@ -326,6 +331,7 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   pipStyle: 'lyrics',
   midiSound: 'sampled',
   midiPiano: '0:0',
+  midiAutoDownload: true,
 };
 
 export const PLAYER_STYLE_META: {

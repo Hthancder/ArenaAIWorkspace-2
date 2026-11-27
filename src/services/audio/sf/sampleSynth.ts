@@ -10,7 +10,7 @@
 // updated once per segment (≤ 64 frames, split at events); audio runs per frame.
 
 import { Ev, ParsedMidi, writeWavHeader } from '../midiSynth';
-import { GEN_COUNT, SoundBank } from './soundBank';
+import { GEN_COUNT, MISSING_SAMPLE, SoundBank } from './soundBank';
 
 export interface SampleRenderOptions {
   sampleRate?: number;
@@ -322,6 +322,8 @@ export async function renderMidiSampled(
   };
 
   const startVoice = (chN: number, key: number, vel: number, r: number, noteId: number) => {
+    // a sample whose pack isn't downloaded (assembled bank) stays silent
+    if (bank.sOff[bank.rSample[r]] === MISSING_SAMPLE) return;
     const ch = chans[chN];
     const gb = r * GEN_COUNT;
     for (let k = 0; k < GEN_COUNT; k++) gens[k] = bank.rGen[gb + k];

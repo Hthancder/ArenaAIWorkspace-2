@@ -218,6 +218,11 @@ const KEYWORDS: Record<SettingsPageId, string[]> = {
     'free space',
     'tệp tạm',
     'temp',
+    'bài đã tải',
+    'downloads',
+    'nhạc cụ',
+    'instruments',
+    'tải dở',
   ],
   language: ['ngôn ngữ', 'language', 'tiếng việt', 'english'],
   credits: [

@@ -20,6 +20,4 @@ Pod::Spec.new do |s|
   }
 
   s.source_files = '**/*.{h,m,mm,swift}'
-  # sample bank for the MIDI renderer (GeneralUser GS, flattened to 22 kHz — see SoundBank/)
-  s.resource_bundles = { 'HolySicSoundBank' => ['SoundBank/*.hsb'] }
 end

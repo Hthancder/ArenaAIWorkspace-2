@@ -2,7 +2,8 @@
 //
 // The sound: by default a real sample bank (GeneralUser GS — multi-sampled pianos, strings,
 // guitars, brass, 13 drum kits; see sf/), or the small procedural synth ("Nhẹ") as a choice and a
-// fallback. iOS: the file is parsed in JS (tempo map, karaoke lyrics) and rendered by the native C
+// fallback. The bank is downloaded per instrument (sf/instruments.ts): a song fetches only what it
+// plays, once; offline with an instrument missing, the song plays on the synth meanwhile. iOS: the file is parsed in JS (tempo map, karaoke lyrics) and rendered by the native C
 // renderers in HolySicDSP. The web preview, and builds without them, use the identical TypeScript
 // renderers, which yield to the UI while they work. Results live in Caches/holysic-midi keyed by
 // path + size + date + sound settings, so every later play starts instantly.
@@ -11,7 +12,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { HolySicDSP } from '../../../modules/holysic-dsp';
 import { GM_FAMILIES, parseMidi, ParsedMidi, renderMidiToWav } from './midiSynth';
-import { loadSoundBank } from './sf/bankLoader';
+import { Instruments } from './sf/instruments';
 import { renderMidiSampled } from './sf/sampleSynth';
 
 export type MidiSound = 'sampled' | 'synth';
@@ -57,7 +58,17 @@ export interface MidiRenderInfo {
   engine: 'native' | 'js' | 'cache';
   /** rendered with the sample bank (GeneralUser GS) */
   bank: boolean;
+  /** the bank was wanted but its instruments couldn't be downloaded (synth used meanwhile) */
+  missing?: boolean;
   ms: number;
+}
+
+export interface MidiRenderOptions {
+  onProgress?: (f: number) => void;
+  /** called before instruments are downloaded for this song (bytes to fetch) */
+  onDownload?: (bytes: number) => void;
+  /** background warm-up after an import: no synth stand-in when instruments can't be had */
+  prewarm?: boolean;
 }
 
 const inflight = new Map<string, Promise<MidiRenderInfo>>();
@@ -118,44 +129,62 @@ async function readBytes(uri: string): Promise<Uint8Array> {
 }
 
 function nativeBank(): boolean {
-  try {
-    return !!HolySicDSP?.renderMidiBank && !!HolySicDSP.soundBankAvailable?.();
-  } catch {
-    return false;
-  }
+  return !!HolySicDSP?.renderMidiBankParts;
 }
+
+function pianoPreset(): { bank: number; program: number } | null {
+  const [pb, pp] = pianoArgs();
+  return pb >= 0 ? { bank: pb, program: pp } : null;
+}
+
+/** files of every instrument the song plays — downloaded now if allowed; null = not available */
+async function bankFiles(midi: ParsedMidi, o: MidiRenderOptions): Promise<string[] | null> {
+  const presets = Instruments.presetsOf(midi, pianoPreset());
+  const files = Instruments.filesFor(presets);
+  await Instruments.ready();
+  if (files.every((f) => Instruments.has(f))) return files;
+  if (!Instruments.autoDownload) return null;
+  o.onDownload?.(Instruments.missingBytes(files));
+  return (await Instruments.ensure(files)) ? files : null;
+}
+
+class InstrumentsMissing extends Error {}
 
 function settingsKey(): string {
   return sound === 'sampled' ? `${BANK_VERSION}-${piano.replace(':', '.')}` : VERSION;
 }
 
-async function render(uri: string, onProgress?: (f: number) => void): Promise<MidiRenderInfo> {
+async function render(uri: string, o: MidiRenderOptions): Promise<MidiRenderInfo> {
   const t0 = Date.now();
   const native = Platform.OS !== 'web' && /^file:/i.test(uri);
   const wantBank = sound === 'sampled';
-  let dst: File | null = null;
-  let srcKey = '';
+  let bankDst: File | null = null;
+  let synthDst: File | null = null;
+  const cached = async (f: File, bank: boolean, missing = false): Promise<MidiRenderInfo> => {
+    // parse again for the lyrics / facts (cheap: milliseconds)
+    const m = parseMidi(await readBytes(uri));
+    return {
+      uri: f.uri,
+      durationSec: m.durationSec,
+      notes: m.notes,
+      instruments: instrumentsOf(m),
+      lyrics: m.lyrics,
+      title: m.title,
+      engine: 'cache',
+      bank,
+      missing,
+      ms: Date.now() - t0,
+    };
+  };
+  const usable = (f: File | null): boolean => !!f && f.exists && (f.size || 0) > 44;
   if (native) {
     const src = new File(uri);
-    srcKey = hashOf(`${uri}|${src.size || 0}|${src.modificationTime || 0}`);
-    // the bank result when the bank can be used here, else the synth's
-    const key = `${srcKey}-${wantBank && nativeBank() ? settingsKey() : VERSION}`;
-    dst = new File(cacheDir(), `${key}.wav`);
-    if (dst.exists && (dst.size || 0) > 44) {
-      // parse again for the lyrics / facts (cheap: milliseconds)
-      const m = parseMidi(await readBytes(uri));
-      return {
-        uri: dst.uri,
-        durationSec: m.durationSec,
-        notes: m.notes,
-        instruments: instrumentsOf(m),
-        lyrics: m.lyrics,
-        title: m.title,
-        engine: 'cache',
-        bank: !key.endsWith(VERSION),
-        ms: Date.now() - t0,
-      };
-    }
+    const srcKey = hashOf(`${uri}|${src.size || 0}|${src.modificationTime || 0}`);
+    synthDst = new File(cacheDir(), `${srcKey}-${VERSION}.wav`);
+    if (wantBank && nativeBank()) {
+      bankDst = new File(cacheDir(), `${srcKey}-${settingsKey()}.wav`);
+      if (usable(bankDst)) return cached(bankDst, true);
+    } else if (usable(synthDst)) return cached(synthDst, false);
   }
   const midi = parseMidi(await readBytes(uri));
   if (!midi.notes) throw new Error('MIDI has no notes');
@@ -166,35 +195,51 @@ async function render(uri: string, onProgress?: (f: number) => void): Promise<Mi
     lyrics: midi.lyrics,
     title: midi.title,
   };
+  const [pb, pp] = pianoArgs();
+  let missing = false;
 
-  if (dst && HolySicDSP) {
+  if (native && synthDst && HolySicDSP) {
     const events = flatten(midi);
-    if (wantBank && nativeBank()) {
-      try {
-        const [pb, pp] = pianoArgs();
-        const ok = await HolySicDSP.renderMidiBank!(
-          events,
-          midi.durationSec,
-          SAMPLE_RATE,
-          dst.uri,
-          pb,
-          pp
-        );
-        if (ok && dst.exists && (dst.size || 0) > 44) {
-          prune(dst.name);
-          return { ...base, uri: dst.uri, engine: 'native', bank: true, ms: Date.now() - t0 };
+    if (bankDst) {
+      const files = await bankFiles(midi, o);
+      if (files) {
+        try {
+          const ok = await HolySicDSP.renderMidiBankParts!(
+            events,
+            midi.durationSec,
+            SAMPLE_RATE,
+            bankDst.uri,
+            Instruments.uriOf(files[0]),
+            files.slice(1).map((f) => Instruments.uriOf(f)),
+            pb,
+            pp
+          );
+          if (ok && usable(bankDst)) {
+            prune(bankDst.name);
+            return { ...base, uri: bankDst.uri, engine: 'native', bank: true, ms: Date.now() - t0 };
+          }
+        } catch {
+          // fall through to the synth
         }
-      } catch {
-        // fall through to the synth
+      } else {
+        if (o.prewarm) throw new InstrumentsMissing('instruments not downloaded');
+        missing = true;
+        if (usable(synthDst)) return cached(synthDst, false, true);
       }
-      dst = new File(cacheDir(), `${srcKey}-${VERSION}.wav`);
     }
     if (HolySicDSP.renderMidi) {
       try {
-        const ok = await HolySicDSP.renderMidi(events, midi.durationSec, SAMPLE_RATE, dst.uri);
-        if (ok && dst.exists && (dst.size || 0) > 44) {
-          prune(dst.name);
-          return { ...base, uri: dst.uri, engine: 'native', bank: false, ms: Date.now() - t0 };
+        const ok = await HolySicDSP.renderMidi(events, midi.durationSec, SAMPLE_RATE, synthDst.uri);
+        if (ok && usable(synthDst)) {
+          prune(synthDst.name);
+          return {
+            ...base,
+            uri: synthDst.uri,
+            engine: 'native',
+            bank: false,
+            missing,
+            ms: Date.now() - t0,
+          };
         }
       } catch {
         // fall back to the JS synth
@@ -202,45 +247,57 @@ async function render(uri: string, onProgress?: (f: number) => void): Promise<Mi
     }
   }
 
-  // TypeScript renderers: the sample bank where it can be loaded (web), else the synth
-  const bank = wantBank && !native ? await loadSoundBank() : null;
-  const [pb, pp] = pianoArgs();
+  // TypeScript renderers: the sample bank on the web (assembled from downloaded instruments),
+  // else the synth
+  let bank = null;
+  if (wantBank && !native) {
+    const files = await bankFiles(midi, o);
+    bank = files ? await Instruments.webBankFor(files) : null;
+    if (!bank) {
+      if (o.prewarm) throw new InstrumentsMissing('instruments not downloaded');
+      missing = true;
+    }
+  }
   const wav = bank
     ? await renderMidiSampled(midi, bank, {
         sampleRate: SAMPLE_RATE,
-        onProgress,
-        piano: pb >= 0 ? { bank: pb, program: pp } : null,
+        onProgress: o.onProgress,
+        piano: pianoPreset(),
       })
-    : await renderMidiToWav(midi, { sampleRate: SAMPLE_RATE, onProgress });
+    : await renderMidiToWav(midi, { sampleRate: SAMPLE_RATE, onProgress: o.onProgress });
+  const dst = native ? (bank ? bankDst : synthDst) : null;
   if (dst) {
     if (dst.exists) dst.delete();
     dst.create();
     dst.write(wav);
     prune(dst.name);
-    return { ...base, uri: dst.uri, engine: 'js', bank: !!bank, ms: Date.now() - t0 };
+    return { ...base, uri: dst.uri, engine: 'js', bank: !!bank, missing, ms: Date.now() - t0 };
   }
   const blobUrl = URL.createObjectURL(
     new Blob([wav as unknown as BlobPart], { type: 'audio/wav' })
   );
   webBytes.set(blobUrl, wav.length);
-  return { ...base, uri: blobUrl, engine: 'js', bank: !!bank, ms: Date.now() - t0 };
+  return { ...base, uri: blobUrl, engine: 'js', bank: !!bank, missing, ms: Date.now() - t0 };
 }
 
 export const MidiRender = {
   /** Playable WAV for a MIDI file (rendered once, then cached) */
-  wavFor(uri: string, onProgress?: (f: number) => void): Promise<MidiRenderInfo> {
+  wavFor(uri: string, o: MidiRenderOptions = {}): Promise<MidiRenderInfo> {
     const k = `${settingsKey()}|${uri}`;
     const memo = webCache.get(k);
+    // a warm-up must not hand its "instruments missing" to a real play of the same song
+    const jobKey = o.prewarm ? `${k}|warm` : k;
     if (memo) return Promise.resolve({ ...memo, engine: 'cache', ms: 0 });
-    let p = inflight.get(k);
+    let p = inflight.get(jobKey);
     if (!p) {
-      p = render(uri, onProgress)
+      p = render(uri, o)
         .then((info) => {
-          if (Platform.OS === 'web') webCache.set(k, info);
+          // a synth stand-in (instruments missing) is not remembered: the next play retries
+          if (Platform.OS === 'web' && !info.missing) webCache.set(k, info);
           return info;
         })
-        .finally(() => inflight.delete(k));
-      inflight.set(k, p);
+        .finally(() => inflight.delete(jobKey));
+      inflight.set(jobKey, p);
     }
     return p;
   },
@@ -256,12 +313,21 @@ export const MidiRender = {
     return Platform.OS === 'web' || nativeBank();
   },
 
-  /** Warm the cache in the background (after an import) — never throws */
+  /** the instruments (preset indexes) a MIDI file plays with the current piano choice */
+  async presetsFor(uri: string): Promise<number[]> {
+    return Instruments.presetsOf(parseMidi(await readBytes(uri)), pianoPreset());
+  },
+
+  /**
+   * Warm the cache in the background (after an import) so the first play starts at once — never
+   * throws. Downloads the songs' instruments when auto-download is on; songs whose instruments
+   * can't be had now (offline / off) are left for their first play.
+   */
   prewarm(uris: string[]) {
     let chain = Promise.resolve();
     for (const u of uris)
       chain = chain.then(() =>
-        MidiRender.wavFor(u).then(
+        MidiRender.wavFor(u, { prewarm: true }).then(
           () => undefined,
           () => undefined
         )

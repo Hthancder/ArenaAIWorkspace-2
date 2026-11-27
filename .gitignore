@@ -19,3 +19,4 @@ yarn-error.*
 local.properties
 .env*.local
 *.tsbuildinfo
+*.hsb

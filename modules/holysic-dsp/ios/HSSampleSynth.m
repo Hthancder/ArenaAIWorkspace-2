@@ -34,7 +34,7 @@ enum {
 
 // ------------------------------------------------------------------------------------- bank
 
-typedef struct {
+typedef struct BankS {
   int sampleRate;
   const int16_t *pool;
   uint32_t nS, nP, nR, nM;
@@ -53,14 +53,23 @@ typedef struct {
   int16_t *mAmt;
   void *map;
   size_t mapLen;
+  int owned;    // map is a malloc'd buffer (assembled from parts), not an mmap
+  int refs;     // renders using this bank right now
+  int retired;  // replaced by a newer bank: freed when the last render ends
 } Bank;
 
+#define MISSING_SAMPLE 0xFFFFFFFFu
+
 static Bank *gBank = NULL;
-static char gBankPath[1024];
+static char *gBankKey = NULL;  // what gBank was loaded from (path, or index|pack|pack…)
 static pthread_mutex_t gBankLock = PTHREAD_MUTEX_INITIALIZER;
 
 static inline uint32_t rd32(const uint8_t *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
 static inline uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
+static void putLE32s(uint8_t *b, uint32_t v);
+static int renderWith(const struct BankS *bk, const double *ev, int count, double durationSec,
+                      int srIn, const char *path, int pianoBank, int pianoProgram,
+                      volatile int *cancel);
 
 static Bank *parseBank(void *map, size_t len) {
   const uint8_t *b = (const uint8_t *)map;
@@ -137,9 +146,160 @@ static Bank *parseBank(void *map, size_t len) {
   return k;
 }
 
+static void freeBank(Bank *k) {
+  if (!k) return;
+  free(k->sOff); free(k->sRate); free(k->pBank); free(k->pProg); free(k->pStart); free(k->pCount);
+  free(k->rKey); free(k->rSample); free(k->rModCount); free(k->rModStart); free(k->rMode);
+  free(k->rPos); free(k->rGen); free(k->mSrc); free(k->mDst); free(k->mAmt); free(k->mAmtSrc);
+  free(k->mTrans);
+  if (k->owned) free(k->map);
+  else if (k->map) munmap(k->map, k->mapLen);
+  free(k);
+}
+
+/// swap in a new bank (lock held); the old one goes once no render reads it
+static void installBank(Bank *k, const char *key) {
+  Bank *old = gBank;
+  gBank = k;
+  free(gBankKey);
+  gBankKey = strdup(key);
+  if (old) {
+    old->retired = 1;
+    if (old->refs == 0) freeBank(old);
+  }
+}
+
+static uint8_t *readAll(const char *path, size_t *len) {
+  FILE *f = fopen(path, "rb");
+  if (!f) return NULL;
+  fseek(f, 0, SEEK_END);
+  long n = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  uint8_t *b = n > 0 ? (uint8_t *)malloc((size_t)n) : NULL;
+  if (b && fread(b, 1, (size_t)n, f) != (size_t)n) {
+    free(b);
+    b = NULL;
+  }
+  fclose(f);
+  if (b) *len = (size_t)n;
+  return b;
+}
+
+int HSBankLoadParts(const char *indexPath, const char *const *packPaths, int nPacks) {
+  // cache key: index + packs in the given order
+  size_t keyLen = strlen(indexPath) + 1;
+  for (int i = 0; i < nPacks; i++) keyLen += strlen(packPaths[i]) + 1;
+  char *key = (char *)malloc(keyLen + 1);
+  if (!key) return 2;
+  strcpy(key, indexPath);
+  for (int i = 0; i < nPacks; i++) {
+    strcat(key, "|");
+    strcat(key, packPaths[i]);
+  }
+  pthread_mutex_lock(&gBankLock);
+  if (gBank && gBankKey && strcmp(gBankKey, key) == 0) {
+    pthread_mutex_unlock(&gBankLock);
+    free(key);
+    return 0;
+  }
+  pthread_mutex_unlock(&gBankLock);
+
+  size_t ilen = 0;
+  uint8_t *idx = readAll(indexPath, &ilen);
+  if (!idx || ilen < 32 || memcmp(idx, "HSBI", 4) != 0 || rd32(idx + 4) != 1) {
+    free(idx);
+    free(key);
+    return 3;
+  }
+  uint32_t nS = rd32(idx + 8);
+  uint8_t **packs = (uint8_t **)calloc((size_t)(nPacks > 0 ? nPacks : 1), sizeof(uint8_t *));
+  size_t *plen = (size_t *)calloc((size_t)(nPacks > 0 ? nPacks : 1), sizeof(size_t));
+  uint64_t frames = 2;
+  int rc = 0;
+  for (int i = 0; i < nPacks && !rc; i++) {
+    packs[i] = readAll(packPaths[i], &plen[i]);
+    if (!packs[i] || plen[i] < 16 || memcmp(packs[i], "HSPK", 4) != 0 || rd32(packs[i] + 4) != 1) {
+      rc = 4;
+      break;
+    }
+    uint32_t count = rd32(packs[i] + 8);
+    uint32_t pf = rd32(packs[i] + 12);
+    if (16 + (size_t)count * 8 + (size_t)pf * 2 > plen[i]) rc = 5;
+    frames += pf;
+  }
+  uint8_t *buf = NULL;
+  size_t head = (ilen + 3) & ~(size_t)3;
+  size_t total = head + (size_t)frames * 2;
+  if (!rc) {
+    buf = (uint8_t *)calloc(1, total);
+    if (!buf) rc = 2;
+  }
+  if (!rc) {
+    memcpy(buf, idx, ilen);
+    memcpy(buf, "HSBK", 4);
+    putLE32s(buf + 24, (uint32_t)frames);
+    for (uint32_t i = 0; i < nS; i++) putLE32s(buf + 32 + (size_t)i * 16, MISSING_SAMPLE);
+    int16_t *pool = (int16_t *)(buf + head);
+    uint64_t cur = 0;
+    for (int i = 0; i < nPacks; i++) {
+      const uint8_t *p = packs[i];
+      uint32_t count = rd32(p + 8);
+      size_t data = 16 + (size_t)count * 8;
+      for (uint32_t k = 0; k < count; k++) {
+        uint32_t sid = rd32(p + 16 + (size_t)k * 8);
+        uint32_t n = rd32(p + 20 + (size_t)k * 8);
+        if (data + (size_t)n * 2 > plen[i] || cur + n > frames) {
+          rc = 5;
+          break;
+        }
+        if (sid < nS) putLE32s(buf + 32 + (size_t)sid * 16, (uint32_t)(cur + 2));
+        memcpy(pool + cur, p + data, (size_t)n * 2);
+        data += (size_t)n * 2;
+        cur += n;
+      }
+      if (rc) break;
+    }
+  }
+  for (int i = 0; i < nPacks; i++) free(packs[i]);
+  free(packs);
+  free(plen);
+  free(idx);
+  Bank *k = NULL;
+  if (!rc) {
+    k = parseBank(buf, total);
+    if (!k) rc = 6;
+  }
+  if (rc) {
+    free(buf);
+    free(key);
+    return rc;
+  }
+  k->owned = 1;
+  pthread_mutex_lock(&gBankLock);
+  installBank(k, key);
+  pthread_mutex_unlock(&gBankLock);
+  free(key);
+  return 0;
+}
+
+void HSBankRelease(void) {
+  // drop an assembled (malloc'd) bank once its renders are done: the WAV is cached, so holding
+  // several MB of samples through playback buys nothing. Mapped banks cost no dirty memory.
+  pthread_mutex_lock(&gBankLock);
+  if (gBank && gBank->owned) {
+    Bank *old = gBank;
+    gBank = NULL;
+    free(gBankKey);
+    gBankKey = NULL;
+    old->retired = 1;
+    if (old->refs == 0) freeBank(old);
+  }
+  pthread_mutex_unlock(&gBankLock);
+}
+
 int HSBankLoad(const char *path) {
   pthread_mutex_lock(&gBankLock);
-  if (gBank && strcmp(gBankPath, path) == 0) {
+  if (gBank && gBankKey && strcmp(gBankKey, path) == 0) {
     pthread_mutex_unlock(&gBankLock);
     return 0;
   }
@@ -152,9 +312,8 @@ int HSBankLoad(const char *path) {
       if (map != MAP_FAILED) {
         Bank *k = parseBank(map, (size_t)st.st_size);
         if (k) {
-          // an older bank stays mapped: a render on another thread may still be reading it
-          gBank = k;
-          strncpy(gBankPath, path, sizeof(gBankPath) - 1);
+          // an older bank is freed once no render on another thread reads it
+          installBank(k, path);
           rc = 0;
         } else {
           munmap(map, (size_t)st.st_size);
@@ -355,6 +514,8 @@ static int presetFor(SSynth *s, int chN) {
 
 static void startVoice(SSynth *s, int chN, int key, int vel, uint32_t r, int noteId) {
   const Bank *bk = s->bk;
+  // a sample whose pack isn't downloaded (assembled bank) stays silent
+  if (bk->sOff[bk->rSample[r]] == MISSING_SAMPLE) return;
   SChan *ch = &s->ch[chN];
   double *gens = s->gens;
   int sr = s->sr;
@@ -548,9 +709,20 @@ static double *mkLine(int n, double scale, int *len) {
 int HSSampleRender(const double *ev, int count, double durationSec, int srIn, const char *path,
                    int pianoBank, int pianoProgram, volatile int *cancel) {
   pthread_mutex_lock(&gBankLock);
-  const Bank *bk = gBank;
+  Bank *bk = gBank;
+  if (bk) bk->refs++;
   pthread_mutex_unlock(&gBankLock);
   if (!bk) return 10;
+  int rc = renderWith(bk, ev, count, durationSec, srIn, path, pianoBank, pianoProgram, cancel);
+  pthread_mutex_lock(&gBankLock);
+  bk->refs--;
+  if (bk->retired && bk->refs == 0) freeBank(bk);
+  pthread_mutex_unlock(&gBankLock);
+  return rc;
+}
+
+static int renderWith(const Bank *bk, const double *ev, int count, double durationSec, int srIn,
+                      const char *path, int pianoBank, int pianoProgram, volatile int *cancel) {
   int sr = srIn > 0 ? srIn : bk->sampleRate;
   long frames = (long)ceil(durationSec * sr);
   if (frames < sr) frames = sr;

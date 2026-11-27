@@ -1,7 +1,7 @@
 // HolySic Library Hub — Playlists, Liked Songs, Offline Downloads, History & Playlist Importer
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   KeyboardAvoidingView,
@@ -21,6 +21,7 @@ import { LocalLibrary } from '../../services/local/localLibrary';
 import { DownloadsManager } from '../library/DownloadsManager';
 import { PlaylistShelf } from '../library/PlaylistShelf';
 import { useLocalLibrary } from '../local/LocalLibraryScreen';
+import { LibraryNav } from '../../services/ui/libraryNav';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
@@ -51,7 +52,16 @@ export const LibraryScreen: React.FC = () => {
   // one queue array for the whole history list (it used to be rebuilt for every row)
   const historyTracks = useMemo(() => history.map((h) => h.track), [history]);
 
-  const [tab, setTab] = useState<LibFilter>('playlists');
+  const [tab, setTab] = useState<LibFilter>(() => LibraryNav.take() || 'playlists');
+  // Settings › Storage › "Mở trong Thư viện" switches the section while the screen is mounted
+  useEffect(
+    () =>
+      LibraryNav.subscribe(() => {
+        const t = LibraryNav.take();
+        if (t) setTab(t);
+      }),
+    []
+  );
   const likedShown = useProgressive(likedTracks.length, 30, 40, tab);
   const historyShown = useProgressive(history.length, 30, 40, tab);
   const [showCreateModal, setShowCreateModal] = useState(false);

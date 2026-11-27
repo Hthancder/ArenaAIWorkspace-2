@@ -858,7 +858,9 @@ export const SettingsScreen: React.FC = () => {
               <MergedSettings part="blacklist" />
             </>
           )}
-          {page === 'storage' && <StorageSettings fontFamily={fontFamily} />}
+          {page === 'storage' && (
+            <StorageSettings fontFamily={fontFamily} onOpenPage={(id) => openPage(id)} />
+          )}
           {page === 'language' && (
             <>
               {/* Language Switch */}

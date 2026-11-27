@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""Build HolySic's compact sample bank (modules/holysic-dsp/ios/SoundBank/holysic-gm.hsb) from GeneralUser GS.
+"""Build HolySic's compact sample bank (.hsb) from GeneralUser GS.
 
-    python3 scripts/soundbank/build_bank.py GeneralUser-GS.sf2 modules/holysic-dsp/ios/SoundBank/holysic-gm.hsb
+    python3 scripts/soundbank/build_bank.py GeneralUser-GS.sf2 /tmp/holysic-gm.hsb
+    python3 scripts/soundbank/split_bank.py /tmp/holysic-gm.hsb public/soundbank/gu1 \
+        src/services/audio/sf/instrumentManifest.ts
+
+The .hsb itself is an intermediate (git-ignored): the app ships no bank, it downloads the packs
+split_bank.py makes from it. A changed bank must go to a NEW pack folder (gu2 …) and bump
+PACKS_COMMIT in src/services/audio/sf/bankHost.ts — published packs are never edited in place.
 
 GeneralUser GS (S. Christian Collins, https://www.schristiancollins.com/generaluser) — free to use,
-modify and redistribute in software; see modules/holysic-dsp/ios/SoundBank/LICENSE-GeneralUser-GS.txt.
+modify and redistribute in software; see public/soundbank/LICENSE-GeneralUser-GS.txt.
 
 What this does
   * flattens every preset (preset zone x instrument zone) into self-contained "regions" whose 61

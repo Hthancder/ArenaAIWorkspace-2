@@ -5,6 +5,8 @@
 // this file — keep the two in step with the build script.
 
 export const GEN_COUNT = 61;
+/** sOff of a sample whose pack is not loaded (assembled banks) — the renderers skip it */
+export const MISSING_SAMPLE = 0xffffffff;
 const REGION_BYTES = 152;
 const MOD_BYTES = 10;
 
@@ -136,4 +138,55 @@ export function parseSoundBank(buf: ArrayBuffer): SoundBank {
     mAmtSrc,
     mTrans,
   };
+}
+
+/**
+ * Rebuild a bank from the downloadable pieces (scripts/soundbank/split_bank.py): the index (bank
+ * without its pool, magic 'HSBI') plus any number of sample packs ('HSPK'). Samples of packs not
+ * given are marked MISSING_SAMPLE. Mirrors HSBankLoadParts in HSSampleSynth.m.
+ */
+export function assembleBank(index: ArrayBuffer, packs: ArrayBuffer[]): SoundBank {
+  const idv = new DataView(index);
+  const magic = String.fromCharCode(
+    idv.getUint8(0),
+    idv.getUint8(1),
+    idv.getUint8(2),
+    idv.getUint8(3)
+  );
+  if (magic !== 'HSBI') throw new Error('Not a HolySic bank index');
+  const nS = idv.getUint32(8, true);
+  const head = (index.byteLength + 3) & ~3;
+  let frames = 2;
+  const metas: { dv: DataView; count: number }[] = [];
+  for (const p of packs) {
+    const dv = new DataView(p);
+    if (dv.getUint32(0, true) !== 0x4b505348 || dv.getUint32(4, true) !== 1)
+      throw new Error('Not a HolySic sample pack');
+    metas.push({ dv, count: dv.getUint32(8, true) });
+    frames += dv.getUint32(12, true);
+  }
+  const out = new ArrayBuffer(head + frames * 2);
+  const bytes = new Uint8Array(out);
+  bytes.set(new Uint8Array(index), 0);
+  bytes[0] = 0x48; // 'HSBK'
+  bytes[1] = 0x53;
+  bytes[2] = 0x42;
+  bytes[3] = 0x4b;
+  const odv = new DataView(out);
+  odv.setUint32(24, frames, true);
+  for (let i = 0; i < nS; i++) odv.setUint32(32 + i * 16, MISSING_SAMPLE, true);
+  const pool = new Int16Array(out, head, frames);
+  let cur = 0;
+  for (const { dv, count } of metas) {
+    let data = 16 + count * 8;
+    for (let k = 0; k < count; k++) {
+      const sid = dv.getUint32(16 + k * 8, true);
+      const n = dv.getUint32(20 + k * 8, true);
+      if (sid < nS) odv.setUint32(32 + sid * 16, cur + 2, true);
+      pool.set(new Int16Array(dv.buffer, dv.byteOffset + data, n), cur);
+      data += n * 2;
+      cur += n;
+    }
+  }
+  return parseSoundBank(out);
 }

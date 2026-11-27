@@ -135,31 +135,38 @@ public class HolySicDSPModule: Module {
       return rc == 0
     }
 
-    // sample-bank MIDI renderer (GeneralUser GS) — falls back to renderMidi when the bank is missing
-    Function("soundBankAvailable") { () -> Bool in
-      return HolySicDSPModule.soundBankPath() != nil
-    }
-
-    AsyncFunction("renderMidiBank") {
-      (events: [Double], durationSec: Double, sampleRate: Int, outUri: String, pianoBank: Int,
-       pianoProgram: Int) -> Bool in
+    // sample-bank MIDI renderer (GeneralUser GS). The bank isn't bundled: JS downloads the
+    // instruments a song needs (index + sample packs) and hands their files over; the C side
+    // assembles them in memory for this render and frees them afterwards (the WAV is cached).
+    AsyncFunction("renderMidiBankParts") {
+      (events: [Double], durationSec: Double, sampleRate: Int, outUri: String, indexUri: String,
+       packUris: [String], pianoBank: Int, pianoProgram: Int) -> Bool in
       let count = events.count / 5
-      guard count > 0, durationSec > 0, let bank = HolySicDSPModule.soundBankPath() else {
-        return false
+      guard count > 0, durationSec > 0 else { return false }
+      guard !packUris.isEmpty else { return false }
+      let indexPath = HolySicDSPModule.filePath(indexUri)
+      let owned: [UnsafeMutablePointer<CChar>] = packUris.compactMap {
+        strdup(HolySicDSPModule.filePath($0))
       }
-      guard HSBankLoad(bank) == 0 else { return false }
-      let path: String
-      if let url = URL(string: outUri), url.isFileURL {
-        path = url.path
-      } else {
-        path = outUri.hasPrefix("file://") ? String(outUri.dropFirst(7)) : outUri
+      defer { owned.forEach { free($0) } }
+      guard owned.count == packUris.count else { return false }
+      let ptrs: [UnsafePointer<CChar>] = owned.map { UnsafePointer($0) }
+      // load → render → release as one step, so a second song can't free the bank mid-render
+      HolySicDSPModule.bankRenderLock.lock()
+      defer { HolySicDSPModule.bankRenderLock.unlock() }
+      let loaded: Int32 = ptrs.withUnsafeBufferPointer { buf -> Int32 in
+        guard let base = buf.baseAddress else { return -1 }
+        return HSBankLoadParts(indexPath, base, Int32(buf.count))
       }
+      guard loaded == 0 else { return false }
+      let path = HolySicDSPModule.filePath(outUri)
       let rc = events.withUnsafeBufferPointer { buf -> Int32 in
         guard let base = buf.baseAddress else { return -1 }
         return HSSampleRender(
           base, Int32(count), durationSec, Int32(sampleRate), path, Int32(pianoBank),
           Int32(pianoProgram), nil)
       }
+      HSBankRelease()
       return rc == 0
     }
 
@@ -170,22 +177,18 @@ public class HolySicDSPModule: Module {
     }
   }
 
-  // MARK: - sound bank
+  // MARK: - files
 
-  /// HolySicSoundBank.bundle/holysic-gm.hsb (main bundle for static pods, else the pod's bundle)
-  private static let bankPath: String? = {
-    for b in [Bundle.main, Bundle(for: HolySicDSPModule.self)] {
-      if let url = b.url(forResource: "HolySicSoundBank", withExtension: "bundle"),
-        let rb = Bundle(url: url), let p = rb.path(forResource: "holysic-gm", ofType: "hsb")
-      {
-        return p
-      }
-      if let p = b.path(forResource: "holysic-gm", ofType: "hsb") { return p }
+  static let bankRenderLock = NSLock()
+
+  static func filePath(_ uri: String) -> String {
+    if let url = URL(string: uri), url.isFileURL { return url.path }
+    if uri.hasPrefix("file://") {
+      let raw = String(uri.dropFirst(7))
+      return raw.removingPercentEncoding ?? raw
     }
-    return nil
-  }()
-
-  static func soundBankPath() -> String? { bankPath }
+    return uri
+  }
 
   // MARK: - items
 

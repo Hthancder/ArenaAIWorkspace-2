@@ -35,3 +35,21 @@ export function useSleepRemaining(step = 1): number | null {
     () => null
   );
 }
+
+/** "1 giờ 30 phút" / "45 phút" / "2 giờ" */
+export function formatSleepLength(min: number, vi: boolean): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (vi) return [h ? `${h} giờ` : '', m || !h ? `${m} phút` : ''].filter(Boolean).join(' ');
+  return [h ? `${h} h` : '', m || !h ? `${m} min` : ''].filter(Boolean).join(' ');
+}
+
+/** countdown text: m:ss, or h:mm:ss from an hour up */
+export function formatSleepLeft(sec: number): string {
+  const t = Math.max(0, Math.floor(sec || 0));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  const ss = `${s < 10 ? '0' : ''}${s}`;
+  return h ? `${h}:${m < 10 ? '0' : ''}${m}:${ss}` : `${m}:${ss}`;
+}

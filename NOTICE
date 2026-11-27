@@ -22,11 +22,12 @@ Mochy Music stands on the shoulders of these open-source projects and services:
 - **LyricsPlus / YouLyPlus** by [Ibra Al Tabian](https://github.com/ibratabian17/LyricsPlus) — Word/syllable-timed lyrics API
 - **Better Lyrics API** by [Boidushya](https://github.com/better-lyrics/api) & **Unison Lyrics** (https://github.com/better-lyrics/unison) — TTML & syllable lyrics
 - **GeneralUser GS** v2.0.3 by S. Christian Collins (https://schristiancollins.com/generaluser.php) — GM/GS
-  SoundFont used for MIDI playback. Converted to HolySic's own sample-bank format
-  (`modules/holysic-dsp/ios/SoundBank/holysic-gm.hsb`, built by `scripts/soundbank/build_bank.py`).
+  SoundFont used for MIDI playback. Converted to HolySic's own sample-bank format by
+  `scripts/soundbank/build_bank.py` and split into per-instrument packs (`public/soundbank/gu1/`,
+  `scripts/soundbank/split_bank.py`) that the app downloads on demand.
   Licensed under the GeneralUser GS License v2.0 (free use, modification and redistribution in
   software, private or commercial); the full license is in
-  `modules/holysic-dsp/ios/SoundBank/LICENSE-GeneralUser-GS.txt`.
+  `public/soundbank/LICENSE-GeneralUser-GS.txt`.
 
 ## Merged feature sources (ideas reimplemented in TypeScript — no source code copied)
 

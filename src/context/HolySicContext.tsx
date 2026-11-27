@@ -65,7 +65,7 @@ import { AUTO_EQ_PRESETS, OFFLINE_SHOWCASE_TRACKS } from '../data/curatedCatalog
 import { audioEngine } from '../services/audio/audioEngine';
 import { StreamFileCache } from '../services/audio/streamFileCache';
 import { sameFamily, MIDI_EXT } from '../services/audio/formatSniff';
-import { MidiRender } from '../services/audio/midiRender';
+import { MidiRender, MidiRenderInfo, MidiRenderOptions } from '../services/audio/midiRender';
 import { loadLyrics } from '../services/lyrics/lyricsStore';
 import {
   fetchInnerTubeSuggestions,
@@ -91,6 +91,9 @@ import { AudioOutput, sourceFacts } from '../services/audio/audioOutput';
 import { DEFAULT_AUDIO_LAB, StorageService } from '../services/storage/storageService';
 import { PlaybackClock } from '../services/audio/playbackClock';
 import { SleepClock } from '../services/audio/sleepClock';
+import { Instruments } from '../services/audio/sf/instruments';
+import { formatBytes } from '../services/storage/storageUsage';
+import { formatSleepLength } from '../services/audio/sleepClock';
 import { peekMusicVideo, videoHitToTrack } from '../services/video/videoService';
 import { searchYouTubeVideos } from '../services/providers/innertubeProvider';
 import {
@@ -390,6 +393,34 @@ async function webBlobIsMidi(url: string, id: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** MIDI play: tell the user when the song's instruments are being downloaded (first play only) */
+function midiPlayOptions(vi: boolean, isCurrent: () => boolean): MidiRenderOptions {
+  return {
+    onDownload: (bytes) => {
+      if (bytes > 0 && isCurrent())
+        ToastStore.show(
+          vi
+            ? `Đang tải nhạc cụ cho bài này · ${formatBytes(bytes, vi)} (chỉ lần đầu)`
+            : `Downloading this song's instruments · ${formatBytes(bytes, vi)} (first time only)`
+        );
+    },
+  };
+}
+
+/** the song plays on the synth because its instruments aren't on the device */
+function midiMissingNotice(midi: MidiRenderInfo, vi: boolean) {
+  if (!midi.missing) return;
+  ToastStore.show(
+    Instruments.autoDownload
+      ? vi
+        ? 'Chưa tải được nhạc cụ (mất mạng?) — tạm phát bằng âm Nhẹ'
+        : "Couldn't download the instruments (offline?) — playing the Light sound"
+      : vi
+        ? 'Bài này cần nhạc cụ chưa tải — tạm phát bằng âm Nhẹ (Cài đặt › Phát nhạc › MIDI)'
+        : 'This song needs instruments not downloaded yet — Light sound for now (Settings › Playback › MIDI)'
+  );
 }
 
 export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -1123,8 +1154,9 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
               });
               setResolvedStream({ ...cand, diagnostics: [...queue.diagnostics] });
               try {
-                const midi = await MidiRender.wavFor(playUrl);
+                const midi = await MidiRender.wavFor(playUrl, midiPlayOptions(vi, isCurrent));
                 if (!isCurrent()) return;
+                midiMissingNotice(midi, vi);
                 queue.diagnostics.push({
                   module: cand.sourceLabel,
                   step: vi ? 'Tổng hợp MIDI' : 'MIDI synth',
@@ -1135,7 +1167,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
                         ? 'từ bộ nhớ đệm'
                         : 'cached'
                       : `${midi.engine === 'native' ? 'native' : 'JS'} ${midi.ms} ms`
-                  }${midi.bank ? ' · GeneralUser GS' : ''}`,
+                  }${midi.bank ? ' · GeneralUser GS' : midi.missing ? (vi ? ' · thiếu nhạc cụ, tạm dùng âm Nhẹ' : ' · instruments missing, Light sound') : ''}`,
                   latencyMs: midi.ms,
                 });
                 playUrl = midi.uri;
@@ -1196,13 +1228,14 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ) {
             // web preview: local MIDI through the same synth (TypeScript version)
             try {
-              const midi = await MidiRender.wavFor(playUrl);
+              const midi = await MidiRender.wavFor(playUrl, midiPlayOptions(vi, isCurrent));
               if (!isCurrent()) return;
+              midiMissingNotice(midi, vi);
               queue.diagnostics.push({
                 module: cand.sourceLabel,
                 step: vi ? 'Tổng hợp MIDI' : 'MIDI synth',
                 ok: true,
-                detail: `${midi.instruments || 'GM'} · ${midi.notes} ${vi ? 'nốt' : 'notes'} · JS ${midi.ms} ms${midi.bank ? ' · GeneralUser GS' : ''}`,
+                detail: `${midi.instruments || 'GM'} · ${midi.notes} ${vi ? 'nốt' : 'notes'} · JS ${midi.ms} ms${midi.bank ? ' · GeneralUser GS' : midi.missing ? (vi ? ' · thiếu nhạc cụ, tạm dùng âm Nhẹ' : ' · instruments missing, Light sound') : ''}`,
                 latencyMs: midi.ms,
               });
               playUrl = midi.uri;
@@ -1996,8 +2029,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setSleepActive(true);
         showToast(
           prefs.language === 'vi'
-            ? `Hẹn giờ tắt nhạc sau ${val} phút`
-            : `Sleep timer set for ${val} min`
+            ? `Hẹn giờ tắt nhạc sau ${formatSleepLength(val, true)}`
+            : `Sleep timer set for ${formatSleepLength(val, false)}`
         );
       }
     },
@@ -2932,7 +2965,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // MIDI sound settings → the renderer (new renders use them; cached ones are keyed by them)
   useEffect(() => {
     MidiRender.configure({ sound: prefs.midiSound || 'sampled', piano: prefs.midiPiano || '0:0' });
-  }, [prefs.midiSound, prefs.midiPiano]);
+    Instruments.configure({ auto: prefs.midiAutoDownload !== false });
+  }, [prefs.midiSound, prefs.midiPiano, prefs.midiAutoDownload]);
 
   // Re-apply normalisation immediately when the switch changes
   useEffect(() => {

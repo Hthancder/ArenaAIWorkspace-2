@@ -1,13 +1,17 @@
 // Settings › Playback › MIDI: which sound plays MIDI files (the real-instrument sample bank or the
-// light synth) and which piano stands in for GM program 0.
+// light synth), which piano stands in for GM program 0, and the downloaded instruments (the bank
+// comes per instrument, on demand — see services/audio/sf/instruments.ts).
 
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Switch, Text, View } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
 import { MIDI_PIANOS, MidiRender } from '../../services/audio/midiRender';
+import { INSTRUMENTS, Instruments, useInstruments } from '../../services/audio/sf/instruments';
+import { formatBytes } from '../../services/storage/storageUsage';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { Tap } from '../ui/Tap';
+import { InstrumentManager } from './InstrumentManager';
 
 export const MidiSoundCard: React.FC<{ fontFamily?: string }> = ({ fontFamily }) => {
   const { prefs, updatePrefs, palette, haptic } = useHolySic();
@@ -15,6 +19,11 @@ export const MidiSoundCard: React.FC<{ fontFamily?: string }> = ({ fontFamily })
   const sound = prefs.midiSound || 'sampled';
   const piano = prefs.midiPiano || '0:0';
   const supported = MidiRender.bankSupported();
+  const auto = prefs.midiAutoDownload !== false;
+  const inst = useInstruments();
+  const [manage, setManage] = useState(false);
+  const stored = Instruments.storedBytes();
+  const count = INSTRUMENTS.filter((p) => !p.hidden && Instruments.readyFor([p.i])).length;
 
   const choices = [
     {
@@ -22,8 +31,8 @@ export const MidiSoundCard: React.FC<{ fontFamily?: string }> = ({ fontFamily })
       icon: 'musical-notes' as const,
       title: vi ? 'Nhạc cụ thật' : 'Real instruments',
       desc: vi
-        ? 'Bộ mẫu GeneralUser GS: piano thu âm nhiều lớp, dây, kèn, guitar, 13 bộ trống — đủ 128 nhạc cụ GM và 133 biến thể GS'
-        : 'GeneralUser GS sample bank: multi-layer recorded pianos, strings, brass, guitars, 13 drum kits — all 128 GM instruments plus 133 GS variations',
+        ? 'Bộ mẫu GeneralUser GS: piano thu âm nhiều lớp, dây, kèn, guitar, 13 bộ trống — 128 nhạc cụ GM và 133 biến thể GS, bài cần nhạc cụ nào tải nhạc cụ đó'
+        : 'GeneralUser GS sample bank: multi-layer recorded pianos, strings, brass, guitars, 13 drum kits — 128 GM instruments plus 133 GS variations, each downloaded when a song needs it',
     },
     {
       id: 'synth' as const,
@@ -105,19 +114,78 @@ export const MidiSoundCard: React.FC<{ fontFamily?: string }> = ({ fontFamily })
           </View>
         )}
 
+        {sound === 'sampled' && supported && (
+          <View style={styles.pianoBox}>
+            <Tap
+              feedback="opacity"
+              onPress={() => setManage(true)}
+              style={styles.manageRow}
+              accessibilityRole="button"
+              accessibilityLabel={vi ? 'Quản lý nhạc cụ' : 'Manage instruments'}
+            >
+              <View style={[styles.icon, { backgroundColor: palette.accent + '14' }]}>
+                <Ionicons name="download-outline" size={17} color={palette.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title}>{vi ? 'Nhạc cụ đã tải' : 'Downloaded instruments'}</Text>
+                <Text style={styles.desc}>
+                  {inst.files
+                    ? vi
+                      ? `Đang tải… ${formatBytes(inst.doneBytes, vi)} / ${formatBytes(inst.bytes, vi)}`
+                      : `Downloading… ${formatBytes(inst.doneBytes, vi)} / ${formatBytes(inst.bytes, vi)}`
+                    : count
+                      ? vi
+                        ? `${count} nhạc cụ · ${formatBytes(stored, vi)}`
+                        : `${count} instruments · ${formatBytes(stored, vi)}`
+                      : vi
+                        ? 'Chưa có — tự tải khi phát bài MIDI'
+                        : 'None yet — downloaded when a MIDI song plays'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={17} color={UI.text3} />
+            </Tap>
+            <View style={[styles.manageRow, { marginTop: 6 }]}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={styles.title}>{vi ? 'Tự tải nhạc cụ' : 'Download automatically'}</Text>
+                <Text style={styles.desc}>
+                  {auto
+                    ? vi
+                      ? 'Bài cần nhạc cụ chưa có thì tải ngay khi phát (chỉ lần đầu).'
+                      : "A song's missing instruments download when it plays (first time only)."
+                    : vi
+                      ? 'Tắt: chỉ dùng nhạc cụ đã tải, bài thiếu nhạc cụ tạm phát bằng âm Nhẹ.'
+                      : 'Off: only downloaded instruments are used; songs missing some use the Light sound.'}
+                </Text>
+              </View>
+              <Switch
+                value={auto}
+                onValueChange={(v) => {
+                  haptic('selection');
+                  updatePrefs({ midiAutoDownload: v });
+                }}
+                trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+                accessibilityLabel={vi ? 'Tự tải nhạc cụ' : 'Download instruments automatically'}
+              />
+            </View>
+          </View>
+        )}
+
         <View style={styles.note}>
           <Ionicons name="information-circle-outline" size={14} color={UI.text2} />
           <Text style={styles.noteText}>
             {!supported && sound === 'sampled'
               ? vi
-                ? 'Bản cài này chưa có bộ mẫu — MIDI tạm phát bằng âm Nhẹ. Cài bản build mới để có nhạc cụ thật.'
-                : 'This build has no sample bank yet — MIDI uses the Light sound until you install a newer build.'
+                ? 'Bản cài này chưa hỗ trợ nhạc cụ thật — MIDI tạm phát bằng âm Nhẹ. Cài bản build mới để dùng.'
+                : "This build can't play real instruments yet — MIDI uses the Light sound until you install a newer build."
               : vi
                 ? 'Đổi âm thanh: bài MIDI được dựng lại ở lần phát tới (bản cũ vẫn giữ trong Dung lượng để mở lại tức thì).'
                 : 'Changing the sound re-renders a MIDI song on its next play (older renders stay cached, see Storage).'}
           </Text>
         </View>
       </View>
+      {manage && (
+        <InstrumentManager visible onClose={() => setManage(false)} fontFamily={fontFamily} />
+      )}
     </>
   );
 };
@@ -166,4 +234,5 @@ const styles = themedSheet(() => ({
   chipText: { color: UI.text, fontSize: 12.5, fontWeight: '700' },
   note: { flexDirection: 'row', gap: 6, marginTop: 12, alignItems: 'flex-start' },
   noteText: { flex: 1, color: UI.text2, fontSize: 11.5, lineHeight: 16 },
+  manageRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
 }));
