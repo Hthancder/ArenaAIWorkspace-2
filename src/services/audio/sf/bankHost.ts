@@ -6,7 +6,7 @@
 // copy and keep working whatever happens to the branch later. Mirrors are tried in order.
 
 /** commit that contains public/soundbank/gu1 (bump with a new pack version, never edit packs) */
-export const PACKS_COMMIT = 'PACKS_COMMIT_SHA';
+export const PACKS_COMMIT = 'f5e14c54f2314801571333f6153d620051d29349';
 const REPO = 'Hthancder/ArenaAIWorkspace-2';
 
 export function packSources(version: string, web: boolean): string[] {
