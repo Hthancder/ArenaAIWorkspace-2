@@ -29,6 +29,8 @@ export const OfflineBanner: React.FC<{ isOnline: boolean; vi: boolean; enabled?:
   const mountedAt = useRef(Date.now());
   const shownOffline = useRef(false);
   const prevOnline = useRef(isOnline);
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
 
   const hide = () => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -42,7 +44,7 @@ export const OfflineBanner: React.FC<{ isOnline: boolean; vi: boolean; enabled?:
   };
 
   const show = (m: Mode, ms: number) => {
-    if (!enabled) return;
+    if (!enabledRef.current) return;
     if (hideTimer.current) clearTimeout(hideTimer.current);
     setMode(m);
     Animated.spring(v, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 6 }).start();

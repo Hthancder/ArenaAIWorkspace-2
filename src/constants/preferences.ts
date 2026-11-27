@@ -16,6 +16,28 @@ export type BedsideNightTint = 'OFF' | 'ORANGE' | 'COVER';
 
 export type LyricsPosition = 'LEFT' | 'CENTER' | 'RIGHT';
 
+/** What sits behind the tabs (Home, Search, Library, HolySic) */
+export type AppBackdrop = 'plain' | 'color' | 'artwork' | 'ambient' | 'visualizer';
+export type BackdropVisualizer = 'bars' | 'mirror' | 'wave';
+export type DockVisualizer = 'off' | 'bars' | 'glow';
+
+/** Background colour presets for the 'color' backdrop (dark tone, light tone) */
+export const BACKDROP_COLORS: {
+  id: string;
+  dark: string;
+  light: string;
+  vi: string;
+  en: string;
+}[] = [
+  { id: 'midnight', dark: '#181240', light: '#ECE7FA', vi: 'Nửa đêm', en: 'Midnight' },
+  { id: 'plum', dark: '#2C1030', light: '#F7E7F2', vi: 'Mận', en: 'Plum' },
+  { id: 'ocean', dark: '#0B2440', light: '#E3EEF9', vi: 'Đại dương', en: 'Ocean' },
+  { id: 'forest', dark: '#0D2A1B', light: '#E4F3E9', vi: 'Rừng', en: 'Forest' },
+  { id: 'ember', dark: '#33160B', light: '#FBEBE2', vi: 'Hồng đào', en: 'Ember' },
+  { id: 'gold', dark: '#2E2309', light: '#F9F0DA', vi: 'Hổ phách', en: 'Amber' },
+  { id: 'graphite', dark: '#1E1F25', light: '#EBEBEF', vi: 'Than chì', en: 'Graphite' },
+];
+
 export type RepeatMode = 'OFF' | 'ALL' | 'ONE';
 
 export type AppLanguage = 'vi' | 'en';
@@ -129,6 +151,35 @@ export interface HolySicPreferences {
     innertube: boolean;
     itunes: boolean;
   };
+
+  // ── Background & effects (behind the tabs) ──
+  appBackdrop: AppBackdrop;
+  /** 'color' backdrop: #RRGGBB, or a BACKDROP_COLORS id (follows light / dark) */
+  appBgColor: string;
+  /** second colour → a top-to-bottom gradient ('' = solid) */
+  appBgColor2: string;
+  appBgStrength: 'low' | 'medium' | 'high';
+  /** artwork / ambient / visualizer backgrounds move with the music */
+  appBgReactive: boolean;
+  appBgVisualizer: BackdropVisualizer;
+  /** a visualizer inside the tab bar */
+  dockVisualizer: DockVisualizer;
+  /** spectrum frame rate (30 saves battery) */
+  visualizerFps: 30 | 60;
+
+  // ── Controls ──
+  haptics: 'off' | 'subtle' | 'full';
+  /** swipe the mini player / cover to change songs */
+  swipeToSkip: boolean;
+  tabLabels: boolean;
+  /** the floating "offline" pill */
+  offlinePill: boolean;
+  /** sleep timer fades out over the last N seconds (0 = stop at once) */
+  sleepFadeSec: number;
+  /** screen stays on while the lyrics are open */
+  keepAwakeLyrics: boolean;
+  /** tapping a song also opens the full player */
+  openPlayerOnPlay: boolean;
 }
 
 export const DEFAULT_PREFERENCES: HolySicPreferences = {
@@ -177,6 +228,21 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
     innertube: true,
     itunes: true,
   },
+  appBackdrop: 'plain',
+  appBgColor: 'midnight',
+  appBgColor2: '',
+  appBgStrength: 'medium',
+  appBgReactive: true,
+  appBgVisualizer: 'mirror',
+  dockVisualizer: 'off',
+  visualizerFps: 60,
+  haptics: 'full',
+  swipeToSkip: true,
+  tabLabels: true,
+  offlinePill: true,
+  sleepFadeSec: 20,
+  keepAwakeLyrics: false,
+  openPlayerOnPlay: false,
 };
 
 export const PLAYER_STYLE_META: {

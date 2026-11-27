@@ -33,6 +33,7 @@ import {
   useAmbientEnergy,
 } from '../ambient/AmbientLight';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { PLAYER_STYLE_META, PlayerStyle } from '../../constants/preferences';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
@@ -141,6 +142,7 @@ export const FullPlayerModal: React.FC = () => {
     prev: playPrevious,
     haptic,
     pane,
+    skip: prefs.swipeToSkip !== false,
   });
   swipeRef.current = {
     close: () => setIsPlayerOpen(false),
@@ -149,13 +151,23 @@ export const FullPlayerModal: React.FC = () => {
     prev: playPrevious,
     haptic,
     pane,
+    skip: prefs.swipeToSkip !== false,
   };
   useEffect(() => {
     if (isPlayerOpen) dragY.setValue(0);
     PlayerStack.setOpen(isPlayerOpen);
     // full-size bars get every frame; the mini player / ambient glow are fine at half the rate
-    audioEngine.setSpectrumFps(isPlayerOpen ? 60 : 30);
-  }, [isPlayerOpen, dragY]);
+    audioEngine.setSpectrumFps(isPlayerOpen ? prefs.visualizerFps || 60 : 30);
+  }, [isPlayerOpen, dragY, prefs.visualizerFps]);
+  // Settings › keep the screen on while reading lyrics
+  const keepAwake = isPlayerOpen && pane === 'lyrics' && !!prefs.keepAwakeLyrics;
+  useEffect(() => {
+    if (!keepAwake) return;
+    activateKeepAwakeAsync('holysic-lyrics').catch(() => {});
+    return () => {
+      deactivateKeepAwake('holysic-lyrics').catch(() => {});
+    };
+  }, [keepAwake]);
   const dismissPan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) => g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx) * 1.4,
@@ -199,7 +211,7 @@ export const FullPlayerModal: React.FC = () => {
   const coverPan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) =>
-        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        swipeRef.current.skip && Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
       onPanResponderMove: (_e, g) => coverX.setValue(g.dx),
       onPanResponderRelease: (_e, g) => {
         const go = Math.abs(g.dx) > 90 || (Math.abs(g.dx) > 30 && Math.abs(g.vx) > 0.7);

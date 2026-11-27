@@ -3,12 +3,17 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useHolySic } from '../context/HolySicContext';
 import { TabBus } from '../services/ui/tabBus';
 import { T as UI, themedSheet } from '../theme/ui';
 import { GlassSurface } from './GlassSurface';
 import { HolySicMarkIcon } from './HolySicIcons';
+import { SpectrumBars, useSpectrumBars } from './ambient/SpectrumBars';
+import { useAmbientEnergy } from './ambient/AmbientLight';
+import { useAppActive } from './ambient/AppBackdrop';
+import { withAlpha } from '../theme/colorMath';
 
 export interface TabDef<Id extends string> {
   id: Id;
@@ -26,7 +31,8 @@ interface Props<Id extends string> {
 }
 
 export function TabBar<Id extends string>({ tabs, active, onSelect, fontFamily }: Props<Id>) {
-  const { palette, haptic } = useHolySic();
+  const { palette, haptic, prefs } = useHolySic();
+  const labels = prefs.tabLabels !== false;
   const [width, setWidth] = useState(0);
   const index = Math.max(
     0,
@@ -63,6 +69,9 @@ export function TabBar<Id extends string>({ tabs, active, onSelect, fontFamily }
 
   return (
     <GlassSurface intensity={65} tintColor={UI.shade(14, 14, 20, 0.84)} style={styles.tabBar}>
+      {prefs.dockVisualizer && prefs.dockVisualizer !== 'off' && (
+        <DockVisualizer kind={prefs.dockVisualizer} />
+      )}
       <View
         style={styles.row}
         onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
@@ -99,7 +108,7 @@ export function TabBar<Id extends string>({ tabs, active, onSelect, fontFamily }
                 pop(i);
                 onSelect(tab.id);
               }}
-              style={styles.tabItem}
+              style={[styles.tabItem, !labels && styles.tabItemCompact]}
               accessibilityRole="tab"
               accessibilityState={{ selected }}
               accessibilityLabel={tab.label}
@@ -111,17 +120,19 @@ export function TabBar<Id extends string>({ tabs, active, onSelect, fontFamily }
                   <Ionicons name={selected ? tab.iconActive : tab.icon} size={22} color={tint} />
                 )}
               </Animated.View>
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.tabLabel,
-                  { color: tint },
-                  fontFamily ? { fontFamily } : null,
-                  selected && { fontWeight: '800' },
-                ]}
-              >
-                {tab.label}
-              </Text>
+              {labels && (
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.tabLabel,
+                    { color: tint },
+                    fontFamily ? { fontFamily } : null,
+                    selected && { fontWeight: '800' },
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              )}
             </Pressable>
           );
         })}
@@ -130,7 +141,64 @@ export function TabBar<Id extends string>({ tabs, active, onSelect, fontFamily }
   );
 }
 
+/** Settings › Dock visualizer: a quiet spectrum (or a light that breathes with the bass) inside
+ *  the tab bar. Still while the full player is open or the app is in the background. */
+const DockVisualizer: React.FC<{ kind: 'bars' | 'glow' }> = ({ kind }) => {
+  const { palette, isPlaying, isPlayerOpen, ambient } = useHolySic();
+  const appActive = useAppActive();
+  const live = appActive && !isPlayerOpen && !ambient.lowPower;
+  const bars = useSpectrumBars(kind === 'bars' ? 22 : 0, live && kind === 'bars', isPlaying, 30);
+  const energy = useAmbientEnergy(live && kind === 'glow', true, isPlaying);
+  const glow = energy.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.9] });
+  const scheme = UI.scheme === 'light';
+  return (
+    <View pointerEvents="none" style={styles.vizClip}>
+      {kind === 'bars' ? (
+        <SpectrumBars
+          values={bars}
+          colors={[palette.accent]}
+          variant="bars"
+          opacity={scheme ? 0.2 : 0.24}
+          gap={3}
+          style={styles.vizBars}
+        />
+      ) : (
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: glow }]}>
+          <LinearGradient
+            colors={[withAlpha(palette.accent, 0.42), withAlpha(palette.accent, 0)]}
+            locations={[0, 1]}
+            start={{ x: 0.5, y: 1 }}
+            end={{ x: 0.5, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={[styles.vizEdge, { backgroundColor: palette.accent }]} />
+        </Animated.View>
+      )}
+    </View>
+  );
+};
+
 const styles = themedSheet(() => ({
+  vizClip: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  vizBars: { position: 'absolute', left: 14, right: 14, top: 8, bottom: 0 },
+  vizEdge: {
+    position: 'absolute',
+    left: '18%',
+    right: '18%',
+    bottom: 0,
+    height: 2,
+    borderRadius: 2,
+    opacity: 0.85,
+  },
+  tabItemCompact: { paddingVertical: 9 },
   tabBar: {
     marginHorizontal: 10,
     borderRadius: 24,

@@ -218,14 +218,17 @@ export const HomeScreen: React.FC = () => {
           />
         }
       >
-        {currentTrack && ambient.spill && !prefs.pureBlack && (
-          <AmbientSpill
-            variant="wash"
-            colors={ambientColors}
-            level={ambient.level * 0.85}
-            style={styles.homeWash}
-          />
-        )}
+        {currentTrack &&
+          ambient.spill &&
+          !prefs.pureBlack &&
+          (prefs.appBackdrop === 'plain' || prefs.appBackdrop === 'color') && (
+            <AmbientSpill
+              variant="wash"
+              colors={ambientColors}
+              level={ambient.level * 0.85}
+              style={styles.homeWash}
+            />
+          )}
         <HaloGlow color={palette.accent} height={320} intensity={currentTrack ? 0.6 : 1} />
         {/* Top Header */}
         <View style={styles.headerRow}>

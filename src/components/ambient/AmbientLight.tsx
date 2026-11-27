@@ -105,7 +105,7 @@ interface Layer<T> {
 }
 
 /** Keeps the previous light on screen while the new one fades in over it. */
-function useCrossfade<T>(key: string, value: T, ms = 1000): Layer<T>[] {
+export function useCrossfade<T>(key: string, value: T, ms = 1000): Layer<T>[] {
   const valueRef = useRef(value);
   valueRef.current = value;
   const [layers, setLayers] = useState<Layer<T>[]>(() => [
@@ -129,14 +129,14 @@ function useCrossfade<T>(key: string, value: T, ms = 1000): Layer<T>[] {
   return layers;
 }
 
-const canShowImage = (uri: string) =>
+export const canShowImage = (uri: string) =>
   !!uri && (Platform.OS === 'web' || !uri.startsWith('data:image/svg'));
 
 // ---------------------------------------------------------------- colour lobes
 
 /** Soft radial lobes in the cover's corner colours — the shape of YouTube's glow. */
-const Lobes: React.FC<{ colors: AmbientColors; strength: number; spread?: number }> = React.memo(
-  ({ colors, strength, spread = 1 }) => {
+export const Lobes: React.FC<{ colors: AmbientColors; strength: number; spread?: number }> =
+  React.memo(({ colors, strength, spread = 1 }) => {
     const ids = useIds(5);
     const [tl, tr, bl, br] = colors.corners;
     const lobe = (id: string, c: string, o: number) => (
@@ -163,8 +163,7 @@ const Lobes: React.FC<{ colors: AmbientColors; strength: number; spread?: number
         <Ellipse cx="70" cy="70" rx={r} ry={r} fill={`url(#${ids[4]})`} />
       </Svg>
     );
-  }
-);
+  });
 
 // ---------------------------------------------------------------- full-screen backdrop
 

@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OfflineBanner } from './src/components/OfflineBanner';
+import { AppBackdrop } from './src/components/ambient/AppBackdrop';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { TabBar, TabDef } from './src/components/TabBar';
 import { FullPlayerModal } from './src/components/player/FullPlayerModal';
@@ -176,6 +177,8 @@ const HolySicShell: React.FC = () => {
           },
         ]}
       >
+        {/* Settings › Background & effects: one layer under every tab */}
+        <AppBackdrop />
         <View style={{ flex: 1 }}>
           {/* tabs stay alive once visited (scroll position, search text, open filters survive a
               tab switch, like a native UITabBarController); the shown one fades in */}
@@ -213,7 +216,11 @@ const HolySicShell: React.FC = () => {
         </View>
 
         {/* Connection pill (10 s when the network drops, 5 s on launch while offline) */}
-        <OfflineBanner isOnline={isOnline} vi={prefs.language === 'vi'} />
+        <OfflineBanner
+          isOnline={isOnline}
+          vi={prefs.language === 'vi'}
+          enabled={prefs.offlinePill !== false}
+        />
         {/* Non-intrusive Toast Pill */}
         {/* Local Files sheets / prompts (above the dock) */}
         <LocalOverlayHost />

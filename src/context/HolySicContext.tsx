@@ -319,10 +319,12 @@ interface HolySicContextValue extends HolySicExtras {
 
 const HolySicContext = createContext<HolySicContextValue | null>(null);
 
+/** Settings › Haptics: off · subtle (selection ticks only) · full */
+let hapticsMode: 'off' | 'subtle' | 'full' = 'full';
 export function triggerHaptic(kind: 'light' | 'medium' | 'selection' = 'light'): void {
-  if (Platform.OS === 'web') return;
+  if (Platform.OS === 'web' || hapticsMode === 'off') return;
   try {
-    if (kind === 'selection') {
+    if (kind === 'selection' || hapticsMode === 'subtle') {
       Haptics.selectionAsync();
     } else if (kind === 'medium') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -479,6 +481,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const preloadRef = useRef<{ trackId: string; stream: ResolvedStream; at: number } | null>(null);
   const preloadingRef = useRef<string | null>(null);
   const isOnline = useConnectivity();
+  hapticsMode = prefs.haptics || 'full';
   const isOnlineRef = useRef(isOnline);
   isOnlineRef.current = isOnline;
 
@@ -1205,6 +1208,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setQueueIndex(0);
         }
       }
+      if (prefsRef.current.openPlayerOnPlay) setIsPlayerOpen(true);
       await internalStartTrack(track);
     },
     [internalStartTrack]
@@ -1450,7 +1454,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // and the final 20 s fade the music out gently instead of cutting it mid-phrase
   useEffect(() => {
     if (!sleepActive) return;
-    const FADE_SEC = 20;
+    const FADE_SEC = Math.max(0, prefsRef.current.sleepFadeSec ?? 20);
     const tick = () => {
       const end = sleepEndAtRef.current;
       if (!end) return;
@@ -1470,7 +1474,9 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         );
         return;
       }
-      audioEngine.setSleepFade(left < FADE_SEC ? Math.max(0.04, left / FADE_SEC) : 1);
+      audioEngine.setSleepFade(
+        FADE_SEC > 0 && left < FADE_SEC ? Math.max(0.04, left / FADE_SEC) : 1
+      );
       const secs = Math.ceil(left);
       SleepClock.set(secs);
     };

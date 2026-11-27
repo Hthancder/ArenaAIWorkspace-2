@@ -54,13 +54,25 @@ export const MiniPlayer: React.FC = () => {
   // a swipe must never also count as a tap (web still delivers the click after a drag)
   const swipedAt = useRef(0);
   const tapOk = () => Date.now() - swipedAt.current > 400;
-  const acts = useRef({ playNext, playPrevious, open: () => setIsPlayerOpen(true), haptic });
-  acts.current = { playNext, playPrevious, open: () => setIsPlayerOpen(true), haptic };
+  const acts = useRef({
+    playNext,
+    playPrevious,
+    open: () => setIsPlayerOpen(true),
+    haptic,
+    skip: prefs.swipeToSkip !== false,
+  });
+  acts.current = {
+    playNext,
+    playPrevious,
+    open: () => setIsPlayerOpen(true),
+    haptic,
+    skip: prefs.swipeToSkip !== false,
+  };
   const axis = useRef<'x' | 'y' | null>(null);
   const pan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) =>
-        (Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy)) ||
+        (acts.current.skip && Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy)) ||
         (g.dy < -12 && Math.abs(g.dy) > Math.abs(g.dx)),
       onPanResponderGrant: (_e, g) => {
         swipedAt.current = Date.now();
