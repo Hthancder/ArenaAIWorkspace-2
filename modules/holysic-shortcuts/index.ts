@@ -25,6 +25,10 @@ export interface HolySicShortcutsNative {
   indexSpotlight?(items: NativeSpotlightItem[]): void;
   /** the song now playing → current NSUserActivity (Siri Suggestions "Resume …"); {} clears */
   donateListening?(d: { id?: string; title?: string; subtitle?: string }): void;
+  /** current alternate icon name (null = primary) */
+  getAppIcon?(): Promise<string | null>;
+  /** switch the Home Screen icon; resolves 'ok', 'unsupported' or an error message */
+  setAppIcon?(name: string | null): Promise<string>;
   addListener(event: 'onShortcut', cb: (e: { type: string }) => void): { remove(): void };
 }
 

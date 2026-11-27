@@ -154,6 +154,30 @@ public class HolySicShortcutsModule: Module {
       }
     }
 
+    // ── App icon skins (alternate icons compiled from Images.xcassets by plugins/withAppIconSkins)
+    /// nil = the primary icon
+    AsyncFunction("getAppIcon") { () -> String? in
+      return UIApplication.shared.alternateIconName
+    }.runOnQueue(.main)
+
+    /// name: an alternate icon set name, or nil for the primary icon. Resolves "ok" or an error
+    /// message (never rejects, so JS can show a friendly toast).
+    AsyncFunction("setAppIcon") { (name: String?, promise: Promise) in
+      let app = UIApplication.shared
+      guard app.supportsAlternateIcons else {
+        promise.resolve("unsupported")
+        return
+      }
+      let target = (name?.isEmpty ?? true) ? nil : name
+      if app.alternateIconName == target {
+        promise.resolve("ok")
+        return
+      }
+      app.setAlternateIconName(target) { error in
+        promise.resolve(error.map { $0.localizedDescription } ?? "ok")
+      }
+    }.runOnQueue(.main)
+
     OnStartObserving {
       self.observer = NotificationCenter.default.addObserver(
         forName: holySicShortcutNotification, object: nil, queue: .main

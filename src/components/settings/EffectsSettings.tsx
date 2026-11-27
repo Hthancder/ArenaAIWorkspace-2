@@ -464,8 +464,8 @@ export const EffectsSettings: React.FC<{ fontFamily?: string }> = ({ fontFamily 
         {segments<number>(
           prefs.visualizerFps || 60,
           [
-            [30, vi ? '30 khung · tiết kiệm pin' : '30 fps · saves battery'],
-            [60, vi ? '60 khung · mượt' : '60 fps · smooth'],
+            [30, vi ? 'Tiết kiệm · 30' : 'Battery · 30'],
+            [60, vi ? 'Mượt · 60' : 'Smooth · 60'],
           ] as const,
           (v) => set({ visualizerFps: v as 30 | 60 }),
           vi ? 'Tốc độ khung visualizer' : 'Visualizer frame rate'

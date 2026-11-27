@@ -20,6 +20,9 @@ export type LyricsPosition = 'LEFT' | 'CENTER' | 'RIGHT';
 export type AppBackdrop = 'plain' | 'color' | 'artwork' | 'ambient' | 'visualizer';
 export type BackdropVisualizer = 'bars' | 'mirror' | 'wave';
 export type DockVisualizer = 'off' | 'bars' | 'glow';
+/** how the synced lyrics come alive */
+export type LyricsEffect = 'glow' | 'karaoke' | 'wave' | 'depth' | 'neon' | 'minimal';
+export type LyricsSize = 'S' | 'M' | 'L';
 
 /** Background colour presets for the 'color' backdrop (dark tone, light tone) */
 export const BACKDROP_COLORS: {
@@ -180,6 +183,12 @@ export interface HolySicPreferences {
   keepAwakeLyrics: boolean;
   /** tapping a song also opens the full player */
   openPlayerOnPlay: boolean;
+
+  // ── Lyrics & icon ──
+  lyricsEffect: LyricsEffect;
+  lyricsSize: LyricsSize;
+  /** Home Screen icon skin (APP_ICON_SKINS id) */
+  appIcon: string;
 }
 
 export const DEFAULT_PREFERENCES: HolySicPreferences = {
@@ -243,6 +252,9 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   sleepFadeSec: 20,
   keepAwakeLyrics: false,
   openPlayerOnPlay: false,
+  lyricsEffect: 'glow',
+  lyricsSize: 'M',
+  appIcon: 'default',
 };
 
 export const PLAYER_STYLE_META: {

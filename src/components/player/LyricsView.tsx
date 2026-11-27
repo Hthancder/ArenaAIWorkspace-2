@@ -1,10 +1,20 @@
 // Synchronized Word-by-Word & Line-Synced Glowing Lyrics View — ported from LyricsScreen.kt & LyricsGlowLine.kt
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef } from 'react';
-import { ActivityIndicator, Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextStyle,
+  View,
+} from 'react-native';
 import { t } from '../../constants/i18n';
-import { LyricsPosition } from '../../constants/preferences';
+import { LyricsEffect, LyricsPosition, LyricsSize } from '../../constants/preferences';
+import { LyricLine, LyricWord } from '../../types/music';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { usePositionSec } from '../../services/audio/playbackClock';
@@ -24,9 +34,12 @@ export const LyricsView: React.FC = () => {
     haptic,
     lyricsOffsetSec,
     nudgeLyricsOffset,
+    isPlaying,
+    showToast,
   } = useHolySic();
-  const positionSec = usePositionSec();
   const vi = prefs.language === 'vi';
+  const effect: LyricsEffect = prefs.lyricsEffect || 'glow';
+  const size = SIZES[prefs.lyricsSize || 'M'] ?? SIZES.M;
 
   const scrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -52,6 +65,14 @@ export const LyricsView: React.FC = () => {
     const order: LyricsPosition[] = ['LEFT', 'CENTER', 'RIGHT'];
     const next = order[(order.indexOf(prefs.lyricsPosition) + 1) % order.length];
     updatePrefs({ lyricsPosition: next });
+  };
+
+  const cycleEffect = () => {
+    haptic('selection');
+    const i = LYRICS_EFFECTS.findIndex((e) => e.id === effect);
+    const next = LYRICS_EFFECTS[(i + 1) % LYRICS_EFFECTS.length];
+    updatePrefs({ lyricsEffect: next.id });
+    showToast((vi ? 'Hiệu ứng lời: ' : 'Lyrics effect: ') + (vi ? next.vi : next.en));
   };
 
   if (isLoadingLyrics) {
@@ -172,6 +193,13 @@ export const LyricsView: React.FC = () => {
           </View>
         )}
 
+        <Tap
+          onPress={cycleEffect}
+          style={[styles.alignBtn, { marginRight: 6 }]}
+          accessibilityLabel={vi ? 'Đổi hiệu ứng lời' : 'Change lyrics effect'}
+        >
+          <Ionicons name="color-wand-outline" size={15} color="#FFF" />
+        </Tap>
         <Tap onPress={cycleAlign} style={styles.alignBtn}>
           <Ionicons
             name={
@@ -201,8 +229,17 @@ export const LyricsView: React.FC = () => {
         {lyrics.lines.map((line, idx) => {
           const isActive = idx === activeLyricIndex;
           const isPast = idx < activeLyricIndex;
+          const dist = activeLyricIndex < 0 ? 3 : Math.abs(idx - activeLyricIndex);
           const isDuetV2 = line.agent && line.agent.toLowerCase().includes('2');
           const textAlign = line.isBackground ? 'center' : isDuetV2 ? 'right' : baseAlign;
+          const look = lineLook(effect, palette.accent, isActive, isPast, dist);
+          const textStyle: TextStyle = line.isBackground
+            ? styles.bgLineText
+            : {
+                fontSize: size.font,
+                lineHeight: size.line,
+                fontWeight: effect === 'minimal' ? '700' : '800',
+              };
 
           return (
             <Tap
@@ -215,55 +252,34 @@ export const LyricsView: React.FC = () => {
               }}
               style={[
                 styles.lineWrap,
-                isActive && {
-                  backgroundColor: 'rgba(255,255,255,0.06)',
-                  borderRadius: 16,
-                },
+                isActive &&
+                  (effect === 'glow' || effect === 'karaoke' || effect === 'wave') && {
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    borderRadius: 16,
+                  },
               ]}
             >
               <LineScale
-                active={isActive}
+                scale={look.scale}
+                opacity={look.opacity}
                 origin={
                   textAlign === 'center' ? 'center' : textAlign === 'right' ? 'right' : 'left'
                 }
               >
-                {line.words && line.words.length > 0 && isActive ? (
-                  <Text style={[styles.lineTextActive, { textAlign, fontFamily }]}>
-                    {line.words.map((w, wIdx) => {
-                      const lit = positionSec - lyricsOffsetSec + 0.08 >= w.startSec;
-                      return (
-                        <Text
-                          key={`${line.id}-w-${wIdx}`}
-                          style={{
-                            color: lit ? '#FFFFFF' : 'rgba(255,255,255,0.38)',
-                            textShadowColor: lit ? palette.accent : 'transparent',
-                            textShadowRadius: lit ? 12 : 0,
-                          }}
-                        >
-                          {w.text}
-                          {wIdx < line.words!.length - 1 ? ' ' : ''}
-                        </Text>
-                      );
-                    })}
-                  </Text>
+                {isActive && !line.isBackground ? (
+                  <ActiveLine
+                    line={line}
+                    endSec={line.endSec ?? lyrics.lines[idx + 1]?.startSec}
+                    effect={effect}
+                    accent={palette.accent}
+                    offset={lyricsOffsetSec}
+                    playing={isPlaying}
+                    textStyle={[textStyle, { textAlign, fontFamily }]}
+                    align={textAlign}
+                    gap={size.font * 0.27}
+                  />
                 ) : (
-                  <Text
-                    style={[
-                      line.isBackground ? styles.bgLineText : styles.lineText,
-                      isActive && styles.lineTextActive,
-                      isActive && {
-                        color: '#FFFFFF',
-                        textShadowColor: palette.accent + '88',
-                        textShadowRadius: 14,
-                      },
-                      !isActive && {
-                        color: isPast ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.52)',
-                      },
-                      { textAlign, fontFamily },
-                    ]}
-                  >
-                    {line.text}
-                  </Text>
+                  <Text style={[textStyle, look.text, { textAlign, fontFamily }]}>{line.text}</Text>
                 )}
               </LineScale>
             </Tap>
@@ -280,29 +296,332 @@ export const LyricsView: React.FC = () => {
   );
 };
 
-/** The active line zooms up to full size and the others settle back (no font-size jump, so the
- *  page never reflows), anchored on the side the text is aligned to. */
-const LineScale: React.FC<{
-  active: boolean;
-  origin: 'left' | 'center' | 'right';
-  children: React.ReactNode;
-}> = ({ active, origin, children }) => {
-  const v = useRef(new Animated.Value(active ? 1 : 0)).current;
+// ---------------------------------------------------------------- effects
+
+export const LYRICS_EFFECTS: {
+  id: LyricsEffect;
+  vi: string;
+  en: string;
+  descVi: string;
+  descEn: string;
+}[] = [
+  {
+    id: 'glow',
+    vi: 'Toả sáng',
+    en: 'Glow',
+    descVi: 'Câu đang hát phóng to, sáng theo màu nhấn',
+    descEn: 'The sung line zooms in and glows in the accent colour',
+  },
+  {
+    id: 'karaoke',
+    vi: 'Karaoke',
+    en: 'Karaoke',
+    descVi: 'Từng chữ được tô màu dần theo giọng hát',
+    descEn: 'Each word fills with colour as it is sung',
+  },
+  {
+    id: 'wave',
+    vi: 'Nhảy chữ',
+    en: 'Bounce',
+    descVi: 'Chữ nảy nhẹ lên đúng lúc được hát',
+    descEn: 'Words hop gently as they are sung',
+  },
+  {
+    id: 'depth',
+    vi: 'Chiều sâu',
+    en: 'Depth',
+    descVi: 'Câu xa mờ dần, như Apple Music',
+    descEn: 'Lines fade with distance, Apple Music style',
+  },
+  {
+    id: 'neon',
+    vi: 'Neon',
+    en: 'Neon',
+    descVi: 'Chữ phát sáng rực như đèn neon',
+    descEn: 'A bright neon-sign glow',
+  },
+  {
+    id: 'minimal',
+    vi: 'Tối giản',
+    en: 'Minimal',
+    descVi: 'Không hiệu ứng, chỉ đậm nhạt — dễ đọc nhất',
+    descEn: 'No effects, just bright and dim — easiest to read',
+  },
+];
+
+const SIZES: Record<LyricsSize, { font: number; line: number }> = {
+  S: { font: 21, line: 30 },
+  M: { font: 25, line: 35 },
+  L: { font: 30, line: 41 },
+};
+
+const DEPTH_OPACITY = [1, 0.5, 0.32, 0.2, 0.13];
+
+/** How a line looks for an effect: its colour/glow, scale and opacity (scale & opacity animate) */
+function lineLook(
+  effect: LyricsEffect,
+  accent: string,
+  active: boolean,
+  past: boolean,
+  dist: number
+): { text: TextStyle; scale: number; opacity: number } {
+  const dim = past ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.52)';
+  switch (effect) {
+    case 'depth':
+      return {
+        text: active
+          ? { color: '#FFFFFF', textShadowColor: 'rgba(255,255,255,0.35)', textShadowRadius: 10 }
+          : { color: '#FFFFFF' },
+        scale: active ? 1 : Math.max(0.84, 0.93 - dist * 0.02),
+        opacity: DEPTH_OPACITY[Math.min(dist, DEPTH_OPACITY.length - 1)],
+      };
+    case 'neon':
+      return {
+        text: active
+          ? { color: '#FFFFFF', textShadowColor: accent, textShadowRadius: 20 }
+          : { color: accent + (past ? '55' : '80') },
+        scale: active ? 1 : 0.9,
+        opacity: 1,
+      };
+    case 'minimal':
+      return {
+        text: {
+          color: active ? '#FFFFFF' : past ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.4)',
+        },
+        scale: 1,
+        opacity: 1,
+      };
+    default:
+      return {
+        text: active
+          ? { color: '#FFFFFF', textShadowColor: accent + '88', textShadowRadius: 14 }
+          : { color: dim },
+        scale: active ? 1 : 0.88,
+        opacity: 1,
+      };
+  }
+}
+
+/** A line without word timing gets estimated word starts (by syllable-ish length) so karaoke and
+ *  bounce still flow through it; real word timing is always preferred. */
+function estimateWords(line: LyricLine, endSec?: number): LyricWord[] {
+  const parts = line.text.split(/\s+/).filter(Boolean);
+  if (!parts.length) return [];
+  const span = Math.min(12, Math.max(0.8, (endSec ?? line.startSec + 4) - line.startSec));
+  const dur = span * 0.82;
+  const total = parts.reduce((n, p) => n + p.length + 1, 0);
+  let acc = 0;
+  return parts.map((p) => {
+    const start = line.startSec + (dur * acc) / total;
+    acc += p.length + 1;
+    return { text: p, startSec: start, endSec: line.startSec + (dur * acc) / total };
+  });
+}
+
+/** How many words are lit. Position arrives ~4×/s; between updates each next word is lit by a
+ *  timer at its exact start, so words land on time without re-rendering every frame. */
+function useLitCount(words: LyricWord[], offset: number, playing: boolean): number {
+  const pos = usePositionSec();
+  const t = pos - offset + 0.08;
+  let base = 0;
+  while (base < words.length && words[base].startSec <= t) base++;
+  const [extra, setExtra] = useState<{ at: number; n: number }>({ at: -1, n: 0 });
   useEffect(() => {
-    Animated.spring(v, {
-      toValue: active ? 1 : 0,
+    if (!playing) return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (let i = base; i < words.length; i++) {
+      const ms = (words[i].startSec - t) * 1000;
+      if (ms > 450) break;
+      const n = i - base + 1;
+      timers.push(setTimeout(() => setExtra({ at: pos, n }), Math.max(0, ms)));
+    }
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pos, playing, words]);
+  return Math.min(words.length, base + (extra.at === pos ? extra.n : 0));
+}
+
+const ActiveLine: React.FC<{
+  line: LyricLine;
+  endSec?: number;
+  effect: LyricsEffect;
+  accent: string;
+  offset: number;
+  playing: boolean;
+  textStyle: any;
+  align: 'left' | 'center' | 'right';
+  gap: number;
+}> = (p) => {
+  const flowing = p.effect === 'karaoke' || p.effect === 'wave';
+  const hasWords = !!p.line.words && p.line.words.length > 0;
+  if (!hasWords && !flowing) {
+    const look = lineLook(p.effect, p.accent, true, false, 0);
+    return <Text style={[p.textStyle, look.text]}>{p.line.text}</Text>;
+  }
+  return <ActiveWords {...p} />;
+};
+
+const ActiveWords: React.FC<React.ComponentProps<typeof ActiveLine>> = ({
+  line,
+  endSec,
+  effect,
+  accent,
+  offset,
+  playing,
+  textStyle,
+  align,
+  gap,
+}) => {
+  const words = useMemo(
+    () => (line.words && line.words.length ? line.words : estimateWords(line, endSec)),
+    [line, endSec]
+  );
+  const lit = useLitCount(words, offset, playing);
+
+  if (effect === 'karaoke' || effect === 'wave') {
+    return (
+      <View
+        style={[
+          styles.wordRow,
+          {
+            justifyContent:
+              align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+          },
+        ]}
+      >
+        {words.map((w, i) => (
+          <FlowWord
+            key={i}
+            text={w.text}
+            lit={i < lit}
+            ms={Math.max(120, Math.min(700, (w.endSec - w.startSec) * 1000))}
+            effect={effect}
+            accent={accent}
+            textStyle={textStyle}
+            gap={gap}
+          />
+        ))}
+      </View>
+    );
+  }
+
+  // glow / depth / neon / minimal with real word timing: lit words light up in place
+  const on: TextStyle =
+    effect === 'minimal'
+      ? { color: '#FFFFFF' }
+      : effect === 'neon'
+        ? { color: '#FFFFFF', textShadowColor: accent, textShadowRadius: 20 }
+        : { color: '#FFFFFF', textShadowColor: accent, textShadowRadius: 12 };
+  const off: TextStyle = {
+    color: effect === 'neon' ? accent + '99' : 'rgba(255,255,255,0.38)',
+    textShadowColor: 'transparent',
+    textShadowRadius: 0,
+  };
+  return (
+    <Text style={textStyle}>
+      {words.map((w, i) => (
+        <Text key={i} style={i < lit ? on : off}>
+          {w.text}
+          {i < words.length - 1 ? ' ' : ''}
+        </Text>
+      ))}
+    </Text>
+  );
+};
+
+/** One word of a karaoke / bounce line: the lit copy fades in over the word's own duration
+ *  (karaoke) or the word hops (bounce). Native-driven opacity / transform only. */
+const FlowWord: React.FC<{
+  text: string;
+  lit: boolean;
+  ms: number;
+  effect: 'karaoke' | 'wave';
+  accent: string;
+  textStyle: any;
+  gap: number;
+}> = React.memo(({ text, lit, ms, effect, accent, textStyle, gap }) => {
+  const v = useRef(new Animated.Value(lit ? 1 : 0)).current;
+  const hop = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!lit) {
+      Animated.timing(v, { toValue: 0, duration: 140, useNativeDriver: true }).start();
+      return;
+    }
+    Animated.timing(v, {
+      toValue: 1,
+      duration: effect === 'karaoke' ? ms : 160,
+      easing: Easing.out(Easing.quad),
       useNativeDriver: true,
-      speed: 12,
-      bounciness: 4,
     }).start();
-  }, [active, v]);
+    if (effect === 'wave') {
+      hop.setValue(0);
+      Animated.sequence([
+        Animated.timing(hop, {
+          toValue: 1,
+          duration: 130,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.spring(hop, { toValue: 0, useNativeDriver: true, speed: 14, bounciness: 10 }),
+      ]).start();
+    }
+  }, [lit, ms, effect, v, hop]);
+  const litColor = effect === 'karaoke' ? accent : '#FFFFFF';
   return (
     <Animated.View
-      style={{
-        transformOrigin: origin,
-        transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
-      }}
+      style={[
+        { marginRight: gap },
+        effect === 'wave' && {
+          transform: [
+            { translateY: hop.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }) },
+            { scale: hop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) },
+          ],
+        },
+      ]}
     >
+      <Text style={[textStyle, styles.wordText, { color: 'rgba(255,255,255,0.4)' }]}>{text}</Text>
+      <Animated.Text
+        style={[
+          textStyle,
+          styles.wordText,
+          styles.wordLit,
+          {
+            color: litColor,
+            opacity: v,
+            textShadowColor: effect === 'karaoke' ? accent + 'AA' : accent + '88',
+            textShadowRadius: 12,
+          },
+        ]}
+      >
+        {text}
+      </Animated.Text>
+    </Animated.View>
+  );
+});
+
+/** Lines settle to their effect's scale / opacity (no font-size jump, so the page never
+ *  reflows), anchored on the side the text is aligned to. */
+const LineScale: React.FC<{
+  scale: number;
+  opacity: number;
+  origin: 'left' | 'center' | 'right';
+  children: React.ReactNode;
+}> = ({ scale, opacity, origin, children }) => {
+  const s = useRef(new Animated.Value(scale)).current;
+  const o = useRef(new Animated.Value(opacity)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(s, { toValue: scale, useNativeDriver: true, speed: 12, bounciness: 4 }),
+      Animated.timing(o, {
+        toValue: opacity,
+        duration: 320,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [scale, opacity, s, o]);
+  return (
+    <Animated.View style={{ transformOrigin: origin, opacity: o, transform: [{ scale: s }] }}>
       {children}
     </Animated.View>
   );
@@ -411,6 +730,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 24,
   },
+  wordRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  // the word box sizes to the word; lines keep their height
+  wordText: { textAlign: 'left' },
+  wordLit: { position: 'absolute', left: 0, top: 0 },
   footerText: {
     color: 'rgba(255,255,255,0.32)',
     fontSize: 11.5,

@@ -1,5 +1,6 @@
 // HolySic Home Screen — Greeting, Mood Chips, Quick Picks, Mix It, VN/Global Charts, Albums & Recap Banner
 
+import { skinPreview } from '../../constants/appIcons';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -234,7 +235,7 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.headerRow}>
           <View style={styles.brandLeft}>
             <Image
-              source={require('../../../assets/icon.png')}
+              source={skinPreview(prefs.appIcon)}
               style={styles.logoBadge}
               accessibilityIgnoresInvertColors
             />

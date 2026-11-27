@@ -1,6 +1,7 @@
 // HolySic Tab (Settings, Player Customizer, Source Modules, iOS Install Guide & Complete Open-Source Credits)
 // Preserves full attribution to realidkroo/Mochy-Music and all upstream open-source contributors.
 
+import { skinPreview } from '../../constants/appIcons';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
 import {
@@ -33,6 +34,7 @@ import { StreamFileCache } from '../../services/audio/streamFileCache';
 import { SourceMemory } from '../../services/providers/sourceMemory';
 import { MergedSettings } from '../merge/MergedSettings';
 import { EffectsSettings } from '../settings/EffectsSettings';
+import { LyricsIconSettings } from '../settings/LyricsIconSettings';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
@@ -94,7 +96,7 @@ export const SettingsScreen: React.FC = () => {
         {/* Hero Brand Banner */}
         <View style={[styles.brandBanner, { borderColor: palette.accent + '35' }]}>
           <Image
-            source={require('../../../assets/icon.png')}
+            source={skinPreview(prefs.appIcon)}
             style={styles.heroIcon}
             accessibilityIgnoresInvertColors
           />
@@ -472,6 +474,7 @@ export const SettingsScreen: React.FC = () => {
 
         {/* Background & effects · Controls */}
         <EffectsSettings fontFamily={fontFamily} />
+        <LyricsIconSettings fontFamily={fontFamily} />
 
         {/* Audio Source Modules & Priority Order */}
         <Text style={[styles.sectionTitle, { fontFamily }]}>
