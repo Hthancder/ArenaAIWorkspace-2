@@ -22,6 +22,9 @@ import { LyricsEditor, useLyricsEditorTarget } from '../player/LyricsEditor';
 import { CollectionModal } from '../screens/CollectionScreen';
 import { BackdropEditor, useBackdropEditorTarget } from '../backdrop/BackdropEditor';
 import { TrackActionSheet } from '../TrackActionSheet';
+import { TagSheet, useTagSheetTarget } from '../tags/TagSheet';
+import { DownloadOptionsSheet, useDownloadOptionsTarget } from '../download/DownloadOptionsSheet';
+import { MvOptionsSheet, useMvOptionsTarget } from '../video/MvOptionsSheet';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { ToastAction, ToastStore, useToastMessage } from '../../services/ui/toastStore';
 
@@ -37,7 +40,16 @@ export type LayerId =
   | 'welcome';
 
 type SheetId =
-  'collection' | 'audiolab' | 'action' | 'editor' | 'plEditor' | 'lyEditor' | 'bgEditor';
+  | 'collection'
+  | 'audiolab'
+  | 'action'
+  | 'editor'
+  | 'plEditor'
+  | 'lyEditor'
+  | 'bgEditor'
+  | 'tags'
+  | 'download'
+  | 'mv';
 
 let stack: LayerId[] = ['root'];
 const subs = new Set<() => void>();
@@ -105,6 +117,9 @@ const anchors: Record<SheetId, { layer: LayerId; open: boolean }> = {
   plEditor: { layer: 'root', open: false },
   lyEditor: { layer: 'root', open: false },
   bgEditor: { layer: 'root', open: false },
+  tags: { layer: 'root', open: false },
+  download: { layer: 'root', open: false },
+  mv: { layer: 'root', open: false },
 };
 const OWN_LAYER: Record<SheetId, LayerId | undefined> = {
   collection: 'collection',
@@ -114,6 +129,9 @@ const OWN_LAYER: Record<SheetId, LayerId | undefined> = {
   plEditor: undefined,
   lyEditor: undefined,
   bgEditor: undefined,
+  tags: undefined,
+  download: undefined,
+  mv: undefined,
 };
 
 function anchorFor(sheet: SheetId, visible: boolean): LayerId {
@@ -143,6 +161,12 @@ export const SheetSlot: React.FC<{ layer: LayerId }> = ({ layer }) => {
   const lye = anchorFor('lyEditor', !!lyEditing) === layer;
   const bgEditing = useBackdropEditorTarget();
   const bge = anchorFor('bgEditor', !!bgEditing) === layer;
+  const tagging = useTagSheetTarget();
+  const tgs = anchorFor('tags', !!tagging) === layer;
+  const dlAsk = useDownloadOptionsTarget();
+  const dls = anchorFor('download', !!dlAsk) === layer;
+  const mvOpt = useMvOptionsTarget();
+  const mvs = anchorFor('mv', !!mvOpt) === layer;
   return (
     <>
       {col && <CollectionModal />}
@@ -152,6 +176,9 @@ export const SheetSlot: React.FC<{ layer: LayerId }> = ({ layer }) => {
       {ple && <PlaylistEditor />}
       {lye && <LyricsEditor />}
       {bge && <BackdropEditor />}
+      {tgs && <TagSheet />}
+      {dls && <DownloadOptionsSheet />}
+      {mvs && <MvOptionsSheet />}
       {top === layer && <ToastPill />}
     </>
   );

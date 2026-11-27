@@ -136,7 +136,17 @@ const KEYWORDS: Record<SettingsPageId, string[]> = {
     'bìa vuông',
     'lời dọc',
   ],
-  video: ['mv', 'music video', 'video', '720p', 'chất lượng video', 'ambient video'],
+  video: [
+    'mv',
+    'music video',
+    'video',
+    '720p',
+    'chất lượng video',
+    'ambient video',
+    'tự phát',
+    'autoplay',
+    'lưu mv',
+  ],
   icon: ['biểu tượng', 'icon', 'app icon', 'skin'],
   playback: [
     'midi',
@@ -162,6 +172,9 @@ const KEYWORDS: Record<SettingsPageId, string[]> = {
     'cache',
     'tải xuống',
     'download',
+    'tải kèm lời',
+    'tải kèm mv',
+    'hỏi khi tải',
   ],
   controls: [
     'rung',
@@ -223,6 +236,8 @@ const KEYWORDS: Record<SettingsPageId, string[]> = {
     'nhạc cụ',
     'instruments',
     'tải dở',
+    'mv đã lưu',
+    'saved videos',
   ],
   language: ['ngôn ngữ', 'language', 'tiếng việt', 'english'],
   credits: [

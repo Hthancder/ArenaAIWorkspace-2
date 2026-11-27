@@ -3,7 +3,8 @@
 // Three kinds of space:
 //  - caches       — always safe to clear, HolySic makes them again when needed (FLAC/MIDI
 //                   renders, play copies, cover thumbnails, temp files, unfinished downloads)
-//  - user content — removable, item by item: downloaded songs, MIDI instruments, music files
+//  - user content — removable, item by item: downloaded songs, saved music videos, MIDI
+//                   instruments, music files
 //  - fixed        — shown so the bar adds up, not removable here: the app itself, the user's
 //                   backgrounds/covers (in use), browser data, other apps & the system
 //
@@ -16,10 +17,12 @@ import { MidiRender } from '../audio/midiRender';
 import { STREAM_CACHE_DIR } from '../audio/streamFileCache';
 import { Instruments } from '../audio/sf/instruments';
 import { LocalLibrary } from '../local/localLibrary';
+import { MV_DIR, MvCache } from '../video/mvCache';
 
 export type StorageCat =
   | 'app'
   | 'offline'
+  | 'mv'
   | 'instruments'
   | 'music'
   | 'personal'
@@ -46,7 +49,7 @@ export interface StorageReport {
 /** caches: one tap clears them, nothing the user made is lost */
 export const CACHES: StorageCat[] = ['flac', 'midi', 'copies', 'art', 'temp', 'orphans'];
 /** user content: removable item by item (downloads, instruments, music files) */
-export const CONTENT: StorageCat[] = ['offline', 'instruments', 'music'];
+export const CONTENT: StorageCat[] = ['offline', 'mv', 'instruments', 'music'];
 
 const MIDI_DIR = 'holysic-midi';
 const ART_DIR = 'holysic-art';
@@ -106,12 +109,14 @@ function measureNative(downloadUris: string[]): StorageReport {
   const orphans = orphanFiles(downloadUris).reduce((n, f) => n + (f.size || 0), 0);
   const offline = Math.max(0, dirSize(new Directory(doc, OFFLINE_DIR)) - orphans);
   const instruments = dirSize(new Directory(doc, INSTRUMENT_DIR));
+  const mv = dirSize(new Directory(doc, MV_DIR));
   const personal = PERSONAL_DIRS.reduce((n, d) => n + dirSize(new Directory(doc, d)), 0);
-  const music = Math.max(0, docAll - offline - orphans - instruments - personal);
+  const music = Math.max(0, docAll - offline - orphans - instruments - mv - personal);
   const app = dirSize(Paths.bundle);
   const bytes = {
     app,
     offline,
+    mv,
     instruments,
     music,
     personal,
@@ -141,6 +146,8 @@ function measureNative(downloadUris: string[]): StorageReport {
 
 async function measureWeb(downloadBytes: number): Promise<StorageReport> {
   await Instruments.ready();
+  await MvCache.ready();
+  const mv = MvCache.totalBytes();
   const midi = MidiRender.webBytes();
   const temp = Instruments.webMemoryBytes();
   const instruments = Instruments.storedBytes();
@@ -157,11 +164,11 @@ async function measureWeb(downloadBytes: number): Promise<StorageReport> {
     // not available
   }
   // what the browser stores beyond the parts measured on their own (settings, library, …)
-  const web = Math.max(0, usage - instruments - downloadBytes - music);
-  const bytes = { offline: downloadBytes, instruments, music, midi, temp, web };
+  const web = Math.max(0, usage - instruments - downloadBytes - music - mv);
+  const bytes = { offline: downloadBytes, mv, instruments, music, midi, temp, web };
   return {
     bytes,
-    total: midi + temp + Math.max(usage, instruments + downloadBytes + music),
+    total: midi + temp + Math.max(usage, instruments + downloadBytes + music + mv),
     clearable: midi + temp,
     device,
     measuredAt: Date.now(),

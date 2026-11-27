@@ -217,6 +217,16 @@ export interface HolySicPreferences {
   videoAudio: boolean;
   /** only load videos on Wi-Fi */
   videoWifiOnly: boolean;
+  /** load the video by itself when a song starts (off: only when the camera button is tapped) */
+  videoAutoPlay: boolean;
+
+  // ── Downloads ──
+  /** ask what to bring along (lyrics / music video) each time a song is downloaded */
+  downloadAsk: boolean;
+  /** downloads bring the lyrics along (the default ticked in the sheet) */
+  downloadLyrics: boolean;
+  /** downloads bring the music video along (kept for offline viewing) */
+  downloadMv: boolean;
 
   // ── Library ──
   /** how the playlists list is ordered (pinned ones always stay on top) */
@@ -323,6 +333,10 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   videoQuality: 720,
   videoAudio: true,
   videoWifiOnly: false,
+  videoAutoPlay: true,
+  downloadAsk: true,
+  downloadLyrics: true,
+  downloadMv: false,
   playlistSort: 'custom',
   playlistView: 'list',
   playlistCreator: '',

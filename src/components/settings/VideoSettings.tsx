@@ -86,8 +86,12 @@ export const VideoSettings: React.FC<{ fontFamily?: string }> = ({ fontFamily })
         return vi ? 'Đang tải video…' : 'Loading the video…';
       case 'ready':
         return `${vi ? 'Đang chiếu' : 'Showing'} · ${video.label || 'YouTube'}${
-          video.synced ? (vi ? ' · tiếng từ video' : ' · audio from video') : ''
-        }`;
+          video.local ? (vi ? ' · bản đã lưu' : ' · saved copy') : ''
+        }${video.synced ? (vi ? ' · tiếng từ video' : ' · audio from video') : ''}`;
+      case 'idle':
+        return vi
+          ? 'Chờ bạn bấm nút máy quay trên trình phát'
+          : 'Waiting for you to tap the camera button in the player';
       case 'none':
         return vi ? 'Bài đang phát không có MV chính thức' : 'No official video for this song';
       case 'error':
@@ -135,6 +139,13 @@ export const VideoSettings: React.FC<{ fontFamily?: string }> = ({ fontFamily })
           {sw(on, (v) => set({ musicVideo: v }), vi ? 'Video âm nhạc' : 'Music video')}
         </View>
 
+        {row(
+          vi ? 'Tự phát MV' : 'Play videos automatically',
+          vi
+            ? 'Tắt: MV chỉ tải khi bạn bấm nút máy quay trên trình phát (tiết kiệm dữ liệu và pin). MV đã lưu cũng chờ bạn bấm.'
+            : 'Off: a video loads only when you tap the camera button in the player (saves data and battery). Saved videos wait too.',
+          sw(prefs.videoAutoPlay !== false, (v) => set({ videoAutoPlay: v }), 'autoplay', !on)
+        )}
         {row(
           vi ? 'Tiếng từ video' : 'Audio from the video',
           vi
@@ -185,8 +196,8 @@ export const VideoSettings: React.FC<{ fontFamily?: string }> = ({ fontFamily })
         )}
         <Text style={styles.rowDesc}>
           {vi
-            ? 'Video luôn tắt tiếng và giải mã bằng phần cứng (H.264); 720p cân bằng giữa nét và pin.'
-            : 'The picture is muted and hardware-decoded (H.264); 720p balances sharpness and battery.'}
+            ? 'Video luôn tắt tiếng và giải mã bằng phần cứng (H.264); 720p cân bằng giữa nét và pin. Cũng là chất lượng khi lưu MV để xem offline; MV đã lưu được dùng khi mất mạng hoặc khi nét bằng mức này.'
+            : 'The picture is muted and hardware-decoded (H.264); 720p balances sharpness and battery. Also the quality of saved videos; a saved video plays offline, or whenever it is at least this sharp.'}
         </Text>
         {!!statusText && (
           <View style={styles.statusRow}>

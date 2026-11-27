@@ -55,7 +55,8 @@ import { useTrackMenu } from '../menu/useTrackMenu';
 import { MorphIcon, NudgeIcon } from '../ui/MorphIcon';
 import { PlayerStack } from '../../services/ui/playerStack';
 import { MusicVideoStage, VideoAmbient } from '../video/VideoSurfaces';
-import { useVideoState, videoWanted } from '../../services/video/videoStore';
+import { useVideoState, videoWanted, VideoStore } from '../../services/video/videoStore';
+import { openMvOptions } from '../video/MvOptionsSheet';
 import { perfCount } from '../../services/perfProbe';
 import { openLyricsEditor } from './LyricsEditor';
 import { PipButton } from './PipButton';
@@ -269,6 +270,8 @@ export const FullPlayerModal: React.FC = () => {
   };
   const videoMode = videoWanted(prefs.musicVideo, currentTrack);
   const videoReady = videoMode && video.status === 'ready' && video.trackId === currentTrack?.id;
+  // "Tự phát MV" off and not asked for yet
+  const videoIdle = videoMode && video.status === 'idle' && video.trackId === currentTrack?.id;
   const showVideo =
     videoReady &&
     !videoHidden &&
@@ -293,6 +296,17 @@ export const FullPlayerModal: React.FC = () => {
       icon: 'quote.bubble',
       section: 3,
     },
+    ...(videoMode
+      ? [
+          {
+            id: 'p:mv',
+            title: vi ? 'Video âm nhạc…' : 'Music Video…',
+            subtitle: vi ? 'Chất lượng, lưu offline, tự phát' : 'Quality, save offline, autoplay',
+            icon: 'video',
+            section: 3,
+          },
+        ]
+      : []),
     {
       id: 'p:look',
       title: vi ? 'Kiểu trình phát…' : 'Player Style…',
@@ -313,6 +327,11 @@ export const FullPlayerModal: React.FC = () => {
       return;
     }
     if (id === 'p:look') return setPane('styles');
+    if (id === 'p:mv') {
+      const tr = currentTrack;
+      setTimeout(() => openMvOptions(tr), 380);
+      return;
+    }
     trackMenu.select(currentTrack, id);
   };
   const liked = isLiked(currentTrack.id);
@@ -434,17 +453,34 @@ export const FullPlayerModal: React.FC = () => {
                   hitSlop={8}
                   onPress={() => {
                     if (pane !== 'artwork') setPane('artwork');
+                    // auto-play off: the first tap loads this song's video (and shows it)
+                    if (videoIdle) {
+                      haptic('light');
+                      VideoStore.request(currentTrack.id);
+                      setVideoHidden(false);
+                      return;
+                    }
                     setVideoHidden(pane !== 'artwork' ? false : !videoHidden);
                   }}
+                  onLongPress={() => {
+                    haptic('medium');
+                    openMvOptions(currentTrack);
+                  }}
+                  delayLongPress={350}
                   accessibilityLabel={
-                    videoHidden
+                    videoIdle
                       ? vi
-                        ? 'Hiện video'
-                        : 'Show video'
-                      : vi
-                        ? 'Hiện ảnh bìa'
-                        : 'Show cover'
+                        ? 'Phát MV'
+                        : 'Play the music video'
+                      : videoHidden
+                        ? vi
+                          ? 'Hiện video'
+                          : 'Show video'
+                        : vi
+                          ? 'Hiện ảnh bìa'
+                          : 'Show cover'
                   }
+                  accessibilityHint={vi ? 'Giữ để mở tuỳ chọn MV' : 'Hold for music video options'}
                   style={[
                     styles.styleChipBtn,
                     showVideo && pane === 'artwork' && { backgroundColor: palette.accent },
@@ -463,7 +499,9 @@ export const FullPlayerModal: React.FC = () => {
                           ? showVideo && pane === 'artwork'
                             ? 'videocam'
                             : 'videocam-outline'
-                          : 'videocam-off-outline'
+                          : videoIdle
+                            ? 'play-circle-outline'
+                            : 'videocam-off-outline'
                       }
                       size={16}
                       color={showVideo && pane === 'artwork' ? palette.onAccent : '#FFFFFF'}
@@ -884,6 +922,7 @@ export const FullPlayerModal: React.FC = () => {
                           accent={palette.accent}
                           vi={vi}
                           style={styles.videoInCard}
+                          onBadgePress={() => openMvOptions(currentTrack)}
                         />
                       ) : (
                         <ArtworkImage

@@ -2,8 +2,8 @@
 //
 //  - summary: HolySic's total, a segmented bar of *every* part (removable or not, so the picture
 //    is complete) and the device's own bar (HolySic · other apps & system · free)
-//  - Your content: downloads, MIDI instruments, music files — each opens its own list to remove
-//    exactly the items you choose
+//  - Your content: downloads, saved music videos, MIDI instruments, music files — each opens
+//    its own list to remove exactly the items you choose
 //  - Caches: safe to clear one by one (two taps) or all at once
 //  - Not removable here: the app itself, your backgrounds (managed in Settings › Background),
 //    browser data — shown with where they're managed, never with a delete button
@@ -13,6 +13,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, LayoutAnimation, Platform, Text, View } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
 import { INSTRUMENTS, Instruments, useInstruments } from '../../services/audio/sf/instruments';
+import { MvCache, useMvCache } from '../../services/video/mvCache';
 import { LocalLibrary } from '../../services/local/localLibrary';
 import {
   CACHES,
@@ -58,6 +59,14 @@ const CATS: Record<StorageCat, CatMeta> = {
     en: 'Downloads',
     descVi: 'Nghe không cần mạng',
     descEn: 'Play without a connection',
+  },
+  mv: {
+    color: '#A3E635',
+    icon: 'film',
+    vi: 'MV đã lưu',
+    en: 'Saved music videos',
+    descVi: 'Xem MV khi không có mạng',
+    descEn: 'Watch music videos without a connection',
   },
   instruments: {
     color: '#00C7BE',
@@ -152,6 +161,7 @@ const CATS: Record<StorageCat, CatMeta> = {
 /** bar / legend order: biggest groups first, fixed parts last */
 const BAR: StorageCat[] = [
   'offline',
+  'mv',
   'music',
   'instruments',
   'flac',
@@ -177,11 +187,12 @@ export const StorageSettings: React.FC<{
   const [report, setReport] = useState<StorageReport | null>(StorageUsage.last);
   const [busy, setBusy] = useState(false);
   const [armed, setArmed] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<'offline' | 'music' | 'instruments' | null>(null);
+  const [sheet, setSheet] = useState<'offline' | 'mv' | 'music' | 'instruments' | null>(null);
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
   const local = useLocalLibrary();
   const inst = useInstruments();
+  const mvVersion = useMvCache();
   const downloadList = useMemo(() => Object.values(downloads || {}), [downloads]);
   const downloadsRef = useRef(downloadList);
   downloadsRef.current = downloadList;
@@ -212,6 +223,15 @@ export const StorageSettings: React.FC<{
     const t = setTimeout(() => measure(true), 250);
     return () => clearTimeout(t);
   }, [inst.version, inst.files, measure]);
+
+  // a music video saved meanwhile (from the player or a download) → measure again
+  const mvSeen = useRef(mvVersion);
+  useEffect(() => {
+    if (mvVersion === mvSeen.current || MvCache.pending() > 0) return;
+    mvSeen.current = mvVersion;
+    const t = setTimeout(() => measure(true), 250);
+    return () => clearTimeout(t);
+  }, [mvVersion, measure]);
 
   /** first tap arms, second tap (within 3 s) runs */
   const confirmTap = (id: string, run: () => void) => {
@@ -261,6 +281,7 @@ export const StorageSettings: React.FC<{
   const countOf = (c: StorageCat): string => {
     if (c === 'offline') return vi ? `${downloadList.length} bài` : `${downloadList.length} songs`;
     if (c === 'instruments') return vi ? `${instCount} nhạc cụ` : `${instCount} instruments`;
+    if (c === 'mv') return vi ? `${MvCache.count()} video` : `${MvCache.count()} videos`;
     if (c === 'music' && local.ready)
       return vi ? `${local.files.length} tệp` : `${local.files.length} files`;
     return '';
@@ -277,6 +298,21 @@ export const StorageSettings: React.FC<{
         artworkUrl: d.track.artworkUrl || '',
       })),
     [downloadList]
+  );
+  const mvItems: StorageItem[] = useMemo(
+    () =>
+      sheet === 'mv'
+        ? MvCache.list().map((m) => ({
+            id: m.videoId,
+            title: m.title,
+            subtitle: [m.artist, m.label].filter(Boolean).join(' · '),
+            bytes: m.bytes || 0,
+            date: m.savedAt,
+            artworkUrl: m.artworkUrl,
+          }))
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sheet, mvVersion]
   );
   const musicItems: StorageItem[] = useMemo(
     () =>
@@ -458,6 +494,7 @@ export const StorageSettings: React.FC<{
           <View style={styles.list}>
             {contents.map((c, i) => {
               if (c === 'offline') return row(c, i, chevron, () => setSheet('offline'));
+              if (c === 'mv') return row(c, i, chevron, () => setSheet('mv'));
               if (c === 'instruments')
                 return row(
                   c,
@@ -557,8 +594,8 @@ export const StorageSettings: React.FC<{
 
       <Text style={styles.footer}>
         {vi
-          ? 'Bộ nhớ đệm luôn xoá được an toàn: HolySic tự tạo lại khi cần. Bài đã tải, nhạc cụ và nhạc trên máy chỉ bị xoá đúng những mục bạn chọn.'
-          : 'Caches are always safe to clear: HolySic makes them again when needed. Downloads, instruments and music files are removed only item by item, as you choose.'}
+          ? 'Bộ nhớ đệm luôn xoá được an toàn: HolySic tự tạo lại khi cần. Bài đã tải, MV đã lưu, nhạc cụ và nhạc trên máy chỉ bị xoá đúng những mục bạn chọn.'
+          : 'Caches are always safe to clear: HolySic makes them again when needed. Downloads, saved videos, instruments and music files are removed only item by item, as you choose.'}
       </Text>
 
       {sheet === 'offline' && (
@@ -580,6 +617,26 @@ export const StorageSettings: React.FC<{
             LibraryNav.open('offline');
             setActiveTab('library');
           }}
+        />
+      )}
+      {sheet === 'mv' && (
+        <StorageItemsSheet
+          visible
+          onClose={() => setSheet(null)}
+          fontFamily={fontFamily}
+          title={vi ? 'MV đã lưu' : 'Saved music videos'}
+          items={mvItems}
+          onDelete={(ids) => freeing(() => MvCache.remove(ids))}
+          deleteNote={
+            vi
+              ? 'Chỉ xoá bản video lưu trên máy — bài hát và bản tải nhạc vẫn giữ. Khi có mạng, MV vẫn phát trực tuyến.'
+              : 'Only the saved video is removed — songs and audio downloads stay. With a connection the video still streams.'
+          }
+          emptyText={
+            vi
+              ? 'Chưa lưu MV nào. Trong trình phát, chạm nhãn chất lượng trên video › Lưu để xem offline — hoặc chọn “Kèm MV” khi tải bài.'
+              : 'No saved videos yet. In the player, tap the quality label on the video › Save for offline — or pick “With video” when downloading.'
+          }
         />
       )}
       {sheet === 'music' && (

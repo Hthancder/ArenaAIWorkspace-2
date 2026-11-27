@@ -14,6 +14,8 @@ import { ArtworkImage } from '../ArtworkImage';
 import { NativeMenu, nativeMenuAvailable, MenuItem } from '../ui/NativeMenu';
 import { Tap } from '../ui/Tap';
 import { openPlaylistEditor } from './PlaylistEditor';
+import { TagStore, useTags } from '../../services/library/tags';
+import { openTagSheet } from '../tags/TagSheet';
 
 const SORTS: { id: PlaylistSort; vi: string; en: string; icon: string; sf: string }[] = [
   { id: 'recent', vi: 'Nghe gần đây', en: 'Recently played', icon: 'time-outline', sf: 'clock' },
@@ -127,6 +129,8 @@ export const PlaylistShelf: React.FC<{ downloads: Record<string, unknown> }> = (
     togglePinPlaylist,
   } = useHolySic();
   const vi = prefs.language === 'vi';
+  // sub-lines show each playlist's tags
+  useTags();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const sort = prefs.playlistSort || 'custom';
   const view = prefs.playlistView || 'list';
@@ -175,6 +179,8 @@ export const PlaylistShelf: React.FC<{ downloads: Record<string, unknown> }> = (
       const off = offlineIn(pl.tracks);
       if (off > 0) bits.push(`${off} offline`);
     }
+    const tags = TagStore.tagsOfPlaylist(pl.id);
+    if (tags.length) bits.push(tags.map((t) => `#${t.name}`).join(' '));
     return bits.join(' · ');
   };
 
@@ -217,6 +223,16 @@ export const PlaylistShelf: React.FC<{ downloads: Record<string, unknown> }> = (
           },
           { id: 'cover', title: vi ? 'Đổi ảnh bìa…' : 'Change Cover…', icon: 'photo', section: 1 },
           {
+            id: 'tags',
+            title: vi ? 'Gắn thẻ…' : 'Tags…',
+            subtitle:
+              TagStore.tagsOfPlaylist(pl.id)
+                .map((t) => t.name)
+                .join(' · ') || undefined,
+            icon: 'tag',
+            section: 1,
+          },
+          {
             id: 'delete',
             title: vi ? 'Xoá playlist' : 'Delete Playlist',
             icon: 'trash',
@@ -240,6 +256,8 @@ export const PlaylistShelf: React.FC<{ downloads: Record<string, unknown> }> = (
     } else if (id === 'open') openCollection({ kind: 'playlist', playlistId: pl.id });
     else if (id === 'edit') setTimeout(() => openPlaylistEditor(pl.id), 350);
     else if (id === 'cover') setTimeout(() => openPlaylistEditor(pl.id, 'cover'), 350);
+    else if (id === 'tags')
+      setTimeout(() => openTagSheet({ kind: 'playlist', playlistId: pl.id, name: pl.name }), 350);
     else if (id === 'delete')
       setTimeout(
         () =>

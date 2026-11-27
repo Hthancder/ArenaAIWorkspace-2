@@ -364,6 +364,32 @@ export const MergedSettings: React.FC<{
             </Text>
           </View>
 
+          {/* what a download brings along (the sheet shown when a download starts) */}
+          <Text style={[styles.sectionTitle, { fontFamily }]}>{vi ? 'Tải về' : 'Downloads'}</Text>
+          <View style={styles.card}>
+            {row(
+              vi ? 'Hỏi mỗi lần tải' : 'Ask every time',
+              vi
+                ? 'Khi tải bài để nghe offline, hỏi có tải kèm lời và MV không. Tắt: tải luôn theo hai mục dưới.'
+                : 'When downloading for offline, ask whether to bring the lyrics and the video. Off: download straight away with the choices below.',
+              sw(prefs.downloadAsk !== false, (v) => updatePrefs({ downloadAsk: v }))
+            )}
+            {row(
+              vi ? 'Kèm lời bài hát' : 'With lyrics',
+              vi
+                ? 'Vài KB mỗi bài; có lời khi mất mạng'
+                : 'A few KB per song; lyrics without internet',
+              sw(prefs.downloadLyrics !== false, (v) => updatePrefs({ downloadLyrics: v }))
+            )}
+            {row(
+              vi ? 'Kèm MV' : 'With music video',
+              vi
+                ? `Lưu MV theo chất lượng video (${prefs.videoQuality || 720}p), khoảng 25–60 MB mỗi bài ở 720p; xoá bài tải về thì MV kèm theo cũng được xoá`
+                : `Saves the video at the video quality (${prefs.videoQuality || 720}p), about 25–60 MB per song at 720p; removing the download removes it too`,
+              sw(!!prefs.downloadMv, (v) => updatePrefs({ downloadMv: v }))
+            )}
+          </View>
+
           <MidiSoundCard fontFamily={fontFamily} />
         </>
       )}
@@ -570,6 +596,12 @@ export const MergedSettings: React.FC<{
                   ⟲ {pending.preview.history} {vi ? 'lượt nghe' : 'plays'} ·{' '}
                   {pending.preview.searchHistory} {vi ? 'tìm kiếm' : 'searches'}
                 </Text>
+                {pending.preview.tags > 0 && (
+                  <Text style={styles.previewLine}>
+                    # {pending.preview.tags}{' '}
+                    {vi ? 'thẻ (bài hát & playlist)' : 'tags (songs & playlists)'}
+                  </Text>
+                )}
                 {pending.preview.hasSettings &&
                   row(
                     vi ? 'Khôi phục cả cài đặt' : 'Also restore settings',

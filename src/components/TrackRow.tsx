@@ -23,6 +23,8 @@ import { Tap } from './ui/Tap';
 import { MenuItem, NativeMenu, nativeMenuAvailable } from './ui/NativeMenu';
 import { useTrackMenu } from './menu/useTrackMenu';
 import { perfCount } from '../services/perfProbe';
+import { useTrackTagColors } from '../services/library/tags';
+import { TagDots } from './tags/TagChip';
 
 interface TrackRowProps {
   track: Track;
@@ -30,6 +32,8 @@ interface TrackRowProps {
   indexBadge?: number;
   compact?: boolean;
   onRemove?: () => void;
+  /** what the ⊗ button does, for VoiceOver (default: remove from playlist) */
+  removeLabel?: string;
   /** swipe → like · ← play next (off inside horizontal carousels) */
   swipeable?: boolean;
 }
@@ -58,6 +62,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   indexBadge,
   compact = false,
   onRemove,
+  removeLabel,
   swipeable = true,
 }) => {
   const {
@@ -77,6 +82,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
     isOnline,
   } = useHolySic();
   const trackMenu = useTrackMenu();
+  const tagColors = useTrackTagColors(track.id);
   const active = currentTrack?.id === track.id;
   const isOffline = Boolean(downloads[track.id]);
   const unavailable =
@@ -106,12 +112,14 @@ export const TrackRow: React.FC<TrackRowProps> = ({
       indexBadge={indexBadge}
       compact={compact}
       removable={!!onRemove}
+      removeLabel={removeLabel}
       swipeable={swipeable}
       active={active}
       playing={active && isPlaying}
       liked={isLiked(track.id)}
       isOffline={isOffline}
       isDownloading={Boolean(downloadingIds[track.id])}
+      tagColors={tagColors}
       unavailable={unavailable}
       accent={palette.accent}
       container={palette.container}
@@ -130,12 +138,15 @@ interface BodyProps {
   indexBadge?: number;
   compact: boolean;
   removable: boolean;
+  removeLabel?: string;
   swipeable: boolean;
   active: boolean;
   playing: boolean;
   liked: boolean;
   isOffline: boolean;
   isDownloading: boolean;
+  /** this song's tag colours ("#a,#b"), shown as small dots after the title */
+  tagColors: string;
   unavailable: boolean;
   accent: string;
   container: string;
@@ -150,12 +161,14 @@ const TrackRowBody = React.memo(function TrackRowBody({
   indexBadge,
   compact,
   removable,
+  removeLabel,
   swipeable,
   active,
   playing,
   liked,
   isOffline,
   isDownloading,
+  tagColors,
   unavailable,
   accent,
   container,
@@ -305,6 +318,7 @@ const TrackRowBody = React.memo(function TrackRowBody({
               <Text style={styles.explicitText}>E</Text>
             </View>
           )}
+          <TagDots colors={tagColors} />
         </View>
 
         <View style={styles.subRow}>
@@ -384,7 +398,11 @@ const TrackRowBody = React.memo(function TrackRowBody({
           }}
           style={styles.iconBtn}
           accessibilityRole="button"
-          accessibilityLabel={(vi ? 'Xoá khỏi playlist: ' : 'Remove from playlist: ') + track.title}
+          accessibilityLabel={
+            (removeLabel || (vi ? 'Xoá khỏi playlist' : 'Remove from playlist')) +
+            ': ' +
+            track.title
+          }
         >
           <Ionicons name="close-circle-outline" size={19} color={UI.text3} />
         </Tap>

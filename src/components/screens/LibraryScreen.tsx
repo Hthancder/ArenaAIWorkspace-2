@@ -1,4 +1,4 @@
-// HolySic Library Hub — Playlists, Liked Songs, Offline Downloads, History & Playlist Importer
+// HolySic Library Hub — Playlists, Liked Songs, Offline Downloads, Tags, History & Playlist Importer
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -20,6 +20,7 @@ import { TrackRow } from '../TrackRow';
 import { LocalLibrary } from '../../services/local/localLibrary';
 import { DownloadsManager } from '../library/DownloadsManager';
 import { PlaylistShelf } from '../library/PlaylistShelf';
+import { TagShelf } from '../library/TagShelf';
 import { useLocalLibrary } from '../local/LocalLibraryScreen';
 import { LibraryNav } from '../../services/ui/libraryNav';
 import { T as UI, themedSheet } from '../../theme/ui';
@@ -31,7 +32,7 @@ import { ScrollEdgeHairline } from '../ui/ScrollEdgeBar';
 import { perfCount } from '../../services/perfProbe';
 import { useProgressive } from '../../hooks/useProgressive';
 
-type LibFilter = 'playlists' | 'liked' | 'offline' | 'history';
+type LibFilter = 'playlists' | 'liked' | 'offline' | 'tags' | 'history';
 
 export const LibraryScreen: React.FC = () => {
   perfCount('render:Library');
@@ -219,6 +220,7 @@ export const LibraryScreen: React.FC = () => {
             { id: 'playlists', label: t(prefs.language, 'playlists') },
             { id: 'liked', label: t(prefs.language, 'likedSongs') },
             { id: 'offline', label: vi ? 'Đã tải' : 'Downloads' },
+            { id: 'tags', label: vi ? 'Thẻ' : 'Tags' },
             { id: 'history', label: t(prefs.language, 'history') },
           ] as { id: LibFilter; label: string }[]
         ).map((item) => {
@@ -303,6 +305,8 @@ export const LibraryScreen: React.FC = () => {
         )}
 
         {tab === 'offline' && <DownloadsManager />}
+
+        {tab === 'tags' && <TagShelf />}
 
         {tab === 'history' && (
           <>

@@ -32,6 +32,8 @@ export interface LibraryBackup {
   searchHistory: string[];
   prefs?: Partial<HolySicPreferences>;
   audioLab?: AudioLabSettings;
+  /** song & playlist tags (TagStore data) */
+  tags?: unknown;
 }
 
 export interface BackupPreview {
@@ -41,6 +43,8 @@ export interface BackupPreview {
   history: number;
   searchHistory: number;
   hasSettings: boolean;
+  /** how many tags the backup carries */
+  tags: number;
   exportedAt: string;
   newLiked: number;
   newPlaylists: number;
@@ -89,6 +93,7 @@ export function parseBackup(text: string): LibraryBackup {
       : [],
     prefs: j.prefs && typeof j.prefs === 'object' ? j.prefs : undefined,
     audioLab: j.audioLab && typeof j.audioLab === 'object' ? j.audioLab : undefined,
+    tags: j.tags && typeof j.tags === 'object' ? j.tags : undefined,
   };
 }
 
@@ -105,6 +110,7 @@ export function previewBackup(
     history: b.history.length,
     searchHistory: b.searchHistory.length,
     hasSettings: !!b.prefs,
+    tags: Array.isArray((b.tags as any)?.tags) ? (b.tags as any).tags.length : 0,
     exportedAt: b.exportedAt,
     newLiked: b.likedTracks.filter((t) => !liked.has(t.id)).length,
     newPlaylists: b.playlists.filter((p) => !pls.has(p.id)).length,

@@ -172,6 +172,10 @@ export interface DownloadedTrackMeta {
   qualityLabel: string;
   /** the user's own grouping inside Downloads ("Nhạc buồn", "Gym"…); none = ungrouped */
   folder?: string;
+  /** chosen when downloading: the lyrics were kept with it (undefined = older download) */
+  withLyrics?: boolean;
+  /** chosen when downloading: its music video was saved too (removed along with it) */
+  withMv?: boolean;
 }
 
 export interface EqualizerBand {

@@ -379,8 +379,10 @@ export function pageBgKey(
     | { kind: 'playlist'; playlistId: string }
     | { kind: 'liked' }
     | { kind: 'offline' }
+    | { kind: 'tag'; tagId: string }
 ): string {
   if (t.kind === 'playlist') return `playlist:${t.playlistId}`;
+  if (t.kind === 'tag') return `tag:${t.tagId}`;
   if (t.kind === 'album' || t.kind === 'artist') return `${t.kind}:${t.id}`;
   return t.kind;
 }

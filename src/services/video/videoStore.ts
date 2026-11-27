@@ -5,7 +5,16 @@ import { useSyncExternalStore } from 'react';
 import type { VideoPlayer } from 'expo-video';
 
 export type VideoStatus =
-  'off' | 'searching' | 'loading' | 'ready' | 'none' | 'error' | 'offline' | 'wifi';
+  | 'off'
+  // "Tự phát MV" is off: nothing loads until the camera button asks for this song
+  | 'idle'
+  | 'searching'
+  | 'loading'
+  | 'ready'
+  | 'none'
+  | 'error'
+  | 'offline'
+  | 'wifi';
 
 export interface VideoState {
   trackId: string | null;
@@ -17,6 +26,12 @@ export interface VideoState {
   aspect: number;
   /** the audio comes from the same video (exact sync) */
   synced: boolean;
+  /** playing a saved copy (Settings › Storage › MV đã lưu) */
+  local?: boolean;
+  /** the song whose video the user asked for (camera button, while auto-play is off) */
+  requested?: string | null;
+  /** the picture's height in lines (720…), for the quality sheet */
+  height?: number;
 }
 
 let state: VideoState = {
@@ -44,6 +59,10 @@ export const VideoStore = {
   },
   subscribe,
   player: null as VideoPlayer | null,
+  /** load this song's video now (auto-play off) */
+  request(trackId: string) {
+    VideoStore.set({ requested: trackId });
+  },
 };
 
 /** the picture is wanted: "Music video" is on, or the song itself is a video (Search › Video MV) */

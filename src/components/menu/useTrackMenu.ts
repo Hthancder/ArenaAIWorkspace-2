@@ -9,6 +9,9 @@ import { Track } from '../../types/music';
 import { openSongEditor } from '../local/SongInfoEditor';
 import { sheetIntent } from '../TrackActionSheet';
 import type { MenuItem } from '../ui/NativeMenu';
+import { useDownloadRequest } from '../download/DownloadOptionsSheet';
+import { openTagSheet, tagNames } from '../tags/TagSheet';
+import { TagStore, useTags } from '../../services/library/tags';
 
 /** wait for the menu to finish dismissing before presenting something else (iOS ignores a
  *  presentation while another one is animating) */
@@ -23,7 +26,6 @@ export function useTrackMenu() {
     addToQueue,
     toggleLike,
     addTrackToPlaylist,
-    downloadTrack,
     removeDownload,
     openCollection,
     setIsPlayerOpen,
@@ -33,6 +35,9 @@ export function useTrackMenu() {
     showToast,
   } = useHolySic();
   const vi = prefs.language === 'vi';
+  const requestDownload = useDownloadRequest();
+  // the menu shows a song's tags: rebuild items when tags change
+  const tagsVersion = useTags();
 
   const itemsFor = useCallback(
     (track: Track): MenuItem[] => {
@@ -79,6 +84,14 @@ export function useTrackMenu() {
           ],
         },
       ];
+      const tagHint = tagNames(TagStore.idsOfTrack(track.id));
+      items.push({
+        id: 'tags',
+        title: vi ? 'Gắn thẻ…' : 'Tags…',
+        subtitle: tagHint || undefined,
+        icon: 'tag',
+        section: 1,
+      });
       if (local) {
         items.push(
           {
@@ -151,7 +164,8 @@ export function useTrackMenu() {
       );
       return items;
     },
-    [isLiked, downloads, playlists, vi]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isLiked, downloads, playlists, vi, tagsVersion]
   );
 
   const select = useCallback(
@@ -184,7 +198,11 @@ export function useTrackMenu() {
           });
           break;
         case 'download':
-          downloadTrack(track);
+          // may ask what comes along (lyrics / video): wait for the menu to close
+          later(() => requestDownload([track]));
+          break;
+        case 'tags':
+          later(() => openTagSheet({ kind: 'tracks', tracks: [track] }));
           break;
         case 'undownload':
           removeDownload(track.id);
@@ -227,7 +245,7 @@ export function useTrackMenu() {
       addToQueue,
       toggleLike,
       setActionTrack,
-      downloadTrack,
+      requestDownload,
       removeDownload,
       setIsPlayerOpen,
       openCollection,

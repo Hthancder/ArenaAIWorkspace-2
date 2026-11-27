@@ -25,6 +25,10 @@ import { openSongEditor } from './local/SongInfoEditor';
 import { openLyricsEditor } from './player/LyricsEditor';
 import { T as UI, themedSheet } from '../theme/ui';
 import { Tap } from './ui/Tap';
+import { useDownloadRequest } from './download/DownloadOptionsSheet';
+import { openTagSheet, tagNames } from './tags/TagSheet';
+import { TagStore, useTags } from '../services/library/tags';
+import { MvCache, useMvCache } from '../services/video/mvCache';
 
 /** set before opening the sheet to land straight on the playlist picker (native menu → "New…") */
 export const sheetIntent = { pickPlaylist: false };
@@ -40,7 +44,6 @@ export const TrackActionSheet: React.FC = () => {
     createPlaylist,
     addTrackToPlaylist,
     downloads,
-    downloadTrack,
     removeDownload,
     openCollection,
     setIsPlayerOpen,
@@ -54,6 +57,9 @@ export const TrackActionSheet: React.FC = () => {
     exportDownload,
   } = useHolySic();
 
+  const requestDownload = useDownloadRequest();
+  useTags();
+  useMvCache();
   const [pickingPlaylist, setPickingPlaylist] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
   const { height: winH } = useWindowDimensions();
@@ -134,6 +140,22 @@ export const TrackActionSheet: React.FC = () => {
   const vi = prefs.language === 'vi';
   const liked = isLiked(sheetTrack.id);
   const isOffline = Boolean(downloads[sheetTrack.id]);
+  // what this download brought along (chosen when it was downloaded)
+  const dl = downloads[sheetTrack.id];
+  const offlineExtras = dl
+    ? [
+        dl.withLyrics !== false ? (vi ? 'kèm lời' : 'with lyrics') : '',
+        MvCache.byTrack(sheetTrack.id)
+          ? 'MV'
+          : MvCache.isSaving(sheetTrack.id)
+            ? vi
+              ? 'đang lưu MV'
+              : 'saving video'
+            : '',
+      ]
+        .filter(Boolean)
+        .join(' · ') || (vi ? 'chỉ nhạc' : 'audio only')
+    : undefined;
 
   const close = () => {
     setPickingPlaylist(false);
@@ -290,6 +312,19 @@ export const TrackActionSheet: React.FC = () => {
                           onPress={() => closeThen(() => openLyricsEditor(sheetTrack))}
                         />
                       )}
+                      <SheetRow
+                        icon="pricetag-outline"
+                        tint="#FBBF24"
+                        label={vi ? 'Gắn thẻ…' : 'Tags…'}
+                        hint={
+                          tagNames(TagStore.idsOfTrack(sheetTrack.id)) ||
+                          (vi ? 'Thêm, sửa, xoá thẻ' : 'Add, edit, remove tags')
+                        }
+                        onPress={() => {
+                          const tr = sheetTrack;
+                          closeThen(() => openTagSheet({ kind: 'tracks', tracks: [tr] }));
+                        }}
+                      />
                       {isLocalTrack(sheetTrack) && (
                         <SheetRow
                           icon="create-outline"
@@ -325,10 +360,15 @@ export const TrackActionSheet: React.FC = () => {
                                 ? 'Tải xuống để nghe offline'
                                 : 'Download for offline'
                           }
+                          hint={isOffline ? offlineExtras : undefined}
                           onPress={() => {
-                            if (isOffline) removeDownload(sheetTrack.id);
-                            else downloadTrack(sheetTrack);
-                            close();
+                            if (isOffline) {
+                              removeDownload(sheetTrack.id);
+                              close();
+                            } else {
+                              const tr = sheetTrack;
+                              closeThen(() => requestDownload([tr]));
+                            }
                           }}
                         />
                       )}

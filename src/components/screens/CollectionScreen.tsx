@@ -1,4 +1,4 @@
-// Dedicated Album / Artist / Playlist / Liked / Offline Detail View
+// Dedicated Album / Artist / Playlist / Liked / Offline / Tag Detail View
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -43,6 +43,10 @@ import { openBackdropEditor } from '../backdrop/BackdropEditor';
 import { pageBgKey } from '../../services/backdrop/backdropMedia';
 import { useAppActive } from '../../services/appActivity';
 import { ToastStore } from '../../services/ui/toastStore';
+import { normTag, Tag, TagStore, useTags } from '../../services/library/tags';
+import { openTagSheet } from '../tags/TagSheet';
+import { TagChip } from '../tags/TagChip';
+import { useDownloadRequest } from '../download/DownloadOptionsSheet';
 
 export const CollectionModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -79,6 +83,9 @@ export const CollectionModal: React.FC = () => {
     togglePinPlaylist,
   } = useHolySic();
   const appActive = useAppActive();
+  // tag pages, playlist tag chips and the filter follow tag changes
+  useTags();
+  const requestDownload = useDownloadRequest();
   const [reloadTick, setReloadTick] = useState(0);
   useModalLayer('collection', Boolean(collectionTarget));
 
@@ -215,6 +222,8 @@ export const CollectionModal: React.FC = () => {
   let artworkUrl = '';
   let tracks: Track[] = [];
   let removablePlaylistId: string | null = null;
+  let tag: Tag | undefined;
+  let tagPlaylists: typeof playlists = [];
 
   if (collectionTarget.kind === 'album') {
     title = albumData?.title || 'Album';
@@ -255,7 +264,26 @@ export const CollectionModal: React.FC = () => {
     subtitle = `${dlList.length} ${vi ? 'bài hát sẵn sàng nghe offline' : 'offline tracks'}`;
     artworkUrl = dlList[0]?.artworkUrl || '';
     tracks = dlList;
+  } else if (collectionTarget.kind === 'tag') {
+    tag = TagStore.byId(collectionTarget.tagId);
+    const plIds = tag ? TagStore.playlistsWith(tag.id) : [];
+    tagPlaylists = playlists.filter((p) => plIds.includes(p.id));
+    tracks = tag ? TagStore.tracksWith(tag.id) : [];
+    title = tag ? tag.name : vi ? 'Thẻ đã xoá' : 'Deleted tag';
+    subtitle = [
+      vi ? `${tracks.length} bài hát` : `${tracks.length} songs`,
+      tagPlaylists.length
+        ? vi
+          ? `${tagPlaylists.length} playlist`
+          : `${tagPlaylists.length} playlists`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    artworkUrl = tracks[0]?.artworkUrl || '';
   }
+  // the playlist's own tags (chips under its title)
+  const plTags = removablePlaylistId ? TagStore.tagsOfPlaylist(removablePlaylistId) : [];
 
   const headerPalette = buildArtworkPalette(title);
   // the page's own photo / GIF / video (or the app's, when "also behind pages" is on)
@@ -268,8 +296,14 @@ export const CollectionModal: React.FC = () => {
   const canFilter = collectionTarget.kind !== 'album' && allTracks.length >= 6;
   if (canFilter && (filterQ.trim() || sortBy !== 'default')) {
     const q = filterQ.trim().toLowerCase();
+    // songs match on title, artist, album — and their tags ("chill" finds songs tagged Chill)
+    const tq = normTag(q);
+    const tagHit = (x: Track) =>
+      !!tq && TagStore.tagsOfTrack(x.id).some((tg) => normTag(tg.name).includes(tq));
     let list = q
-      ? allTracks.filter((x) => `${x.title} ${x.artist} ${x.album || ''}`.toLowerCase().includes(q))
+      ? allTracks.filter(
+          (x) => `${x.title} ${x.artist} ${x.album || ''}`.toLowerCase().includes(q) || tagHit(x)
+        )
       : [...allTracks];
     if (sortBy === 'title') list = list.sort((a, b) => a.title.localeCompare(b.title));
     else if (sortBy === 'artist')
@@ -290,7 +324,8 @@ export const CollectionModal: React.FC = () => {
   const canSaveAsPlaylist =
     collectionTarget.kind === 'album' ||
     collectionTarget.kind === 'artist' ||
-    collectionTarget.kind === 'liked';
+    collectionTarget.kind === 'liked' ||
+    collectionTarget.kind === 'tag';
   const loadMoreArtist = async () => {
     if (collectionTarget.kind !== 'artist') return;
     setLoadingMore(true);
@@ -310,14 +345,39 @@ export const CollectionModal: React.FC = () => {
     const pl = savePlaylistFromTracks(title, tracks, subtitle, artworkUrl);
     showToast(vi ? `Đã lưu thành playlist "${pl.name}"` : `Saved as playlist "${pl.name}"`);
   };
-  const downloadAll = () => {
-    tracks.slice(0, 50).forEach((x) => downloadTrack(x));
-    showToast(
-      vi
-        ? `Đang tải ${Math.min(50, tracks.length)} bài…`
-        : `Downloading ${Math.min(50, tracks.length)} songs…`
+  // asks what comes along (lyrics / video) when the user wants to be asked
+  const downloadAll = () => requestDownload(tracks.slice(0, 50));
+  // tag page: take the tag off songs (undo from the toast)
+  const untagWithUndo = (list: Track[]) => {
+    if (!tag) return;
+    const id = tag.id;
+    TagStore.applyToTracks(list, id, false);
+    ToastStore.show(
+      list.length === 1
+        ? vi
+          ? `Đã bỏ thẻ “${tag.name}”`
+          : `Removed “${tag.name}”`
+        : vi
+          ? `Đã bỏ thẻ khỏi ${list.length} bài`
+          : `Removed the tag from ${list.length} songs`,
+      undefined,
+      { label: vi ? 'Hoàn tác' : 'Undo', onPress: () => TagStore.applyToTracks(list, id, true) }
     );
   };
+  const deleteTag = () => {
+    if (!tag) return;
+    const name = tag.name;
+    const undo = TagStore.remove(tag.id);
+    goBack();
+    if (undo)
+      ToastStore.show(vi ? `Đã xoá thẻ “${name}”` : `Deleted “${name}”`, undefined, {
+        label: vi ? 'Hoàn tác' : 'Undo',
+        onPress: () => TagStore.restore(undo),
+      });
+  };
+  const tagPlaylist = () =>
+    removablePlaylistId &&
+    openTagSheet({ kind: 'playlist', playlistId: removablePlaylistId, name: title });
   const exportM3U = async () => {
     const rel = await exportPlaylistM3U(title, allTracks);
     if (!rel) return;
@@ -465,8 +525,28 @@ export const CollectionModal: React.FC = () => {
       section: 3,
     });
   }
+  if (tag) {
+    pageMenu.push(
+      {
+        id: 'tagManage',
+        title: vi ? 'Đổi tên, màu thẻ…' : 'Rename / Recolour Tag…',
+        icon: 'pencil',
+        section: 2,
+      },
+      {
+        id: 'tagDelete',
+        title: vi ? 'Xoá thẻ' : 'Delete Tag',
+        subtitle: vi ? 'Bài hát và playlist vẫn giữ nguyên' : 'Songs and playlists stay',
+        icon: 'trash',
+        destructive: true,
+        section: 3,
+      }
+    );
+  }
   const onPageMenu = (id: string) => {
     if (id === 'select') toggleSelecting();
+    else if (id === 'tagManage') setTimeout(() => openTagSheet({ kind: 'manage' }), 350);
+    else if (id === 'tagDelete') setTimeout(deleteTag, 350);
     else if (id === 'save') saveAsPlaylist();
     else if (id === 'download') downloadAll();
     else if (id === 'm3u') exportM3U();
@@ -650,14 +730,24 @@ export const CollectionModal: React.FC = () => {
                     style={[
                       styles.heroCover,
                       styles.placeholderCover,
-                      { backgroundColor: headerPalette.container },
+                      { backgroundColor: tag ? tag.color + '33' : headerPalette.container },
                     ]}
                   >
-                    <Ionicons name="musical-notes" size={56} color={headerPalette.accent} />
+                    <Ionicons
+                      name={tag ? 'pricetag' : 'musical-notes'}
+                      size={56}
+                      color={tag ? tag.color : headerPalette.accent}
+                    />
                   </View>
                 )}
               </Animated.View>
 
+              {tag ? (
+                <View style={styles.tagKicker}>
+                  <View style={[styles.tagKickerDot, { backgroundColor: tag.color }]} />
+                  <Text style={styles.tagKickerText}>{vi ? 'THẺ' : 'TAG'}</Text>
+                </View>
+              ) : null}
               <Text style={[styles.heroTitle, { fontFamily }]}>{title}</Text>
               {creator || pinned ? (
                 <View style={styles.creatorLine}>
@@ -692,6 +782,41 @@ export const CollectionModal: React.FC = () => {
                 </View>
               ) : null}
               <Text style={styles.heroSub}>{subtitle}</Text>
+              {/* a playlist's tags: tap one to open it, + to add / remove */}
+              {removablePlaylistId ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginTop: 10, marginHorizontal: -18, alignSelf: 'stretch' }}
+                  contentContainerStyle={styles.tagRow}
+                >
+                  {plTags.map((tg) => (
+                    <TagChip
+                      key={tg.id}
+                      tag={tg}
+                      size="sm"
+                      onPress={() => openCollection({ kind: 'tag', tagId: tg.id })}
+                      accessibilityLabel={vi ? `Thẻ ${tg.name}, mở` : `Tag ${tg.name}, open`}
+                    />
+                  ))}
+                  <Tap
+                    feedback="scale"
+                    onPress={tagPlaylist}
+                    style={styles.tagAdd}
+                    accessibilityRole="button"
+                    accessibilityLabel={vi ? 'Gắn thẻ cho playlist' : 'Tag this playlist'}
+                  >
+                    <Ionicons
+                      name={plTags.length ? 'create-outline' : 'pricetag-outline'}
+                      size={12}
+                      color={UI.text2}
+                    />
+                    <Text style={styles.tagAddText}>
+                      {plTags.length ? (vi ? 'Sửa thẻ' : 'Edit tags') : vi ? 'Gắn thẻ' : 'Add tag'}
+                    </Text>
+                  </Tap>
+                </ScrollView>
+              ) : null}
 
               {tracks.length > 0 && (
                 <View style={styles.heroBtns}>
@@ -771,6 +896,12 @@ export const CollectionModal: React.FC = () => {
                       <Text style={styles.chipText}>{vi ? 'Sửa playlist' : 'Edit'}</Text>
                     </Tap>
                   )}
+                  {tag && (
+                    <Tap onPress={() => openTagSheet({ kind: 'manage' })} style={styles.chipBtn}>
+                      <Ionicons name="pencil" size={15} color={UI.text} />
+                      <Text style={styles.chipText}>{vi ? 'Sửa thẻ' : 'Edit tag'}</Text>
+                    </Tap>
+                  )}
                   {canSaveAsPlaylist && (
                     <Tap onPress={saveAsPlaylist} style={styles.chipBtn}>
                       <Ionicons name="bookmark-outline" size={15} color={UI.text} />
@@ -780,17 +911,7 @@ export const CollectionModal: React.FC = () => {
                     </Tap>
                   )}
                   {collectionTarget.kind !== 'offline' && (
-                    <Tap
-                      onPress={() => {
-                        tracks.slice(0, 50).forEach((x) => downloadTrack(x));
-                        showToast(
-                          vi
-                            ? `Đang tải ${Math.min(50, tracks.length)} bài…`
-                            : `Downloading ${Math.min(50, tracks.length)} songs…`
-                        );
-                      }}
-                      style={styles.chipBtn}
-                    >
+                    <Tap onPress={downloadAll} style={styles.chipBtn}>
                       <Ionicons name="arrow-down-circle-outline" size={15} color={UI.text} />
                       <Text style={styles.chipText}>
                         {Object.keys(downloadingIds).length > 0
@@ -822,10 +943,68 @@ export const CollectionModal: React.FC = () => {
                     <Ionicons name="share-outline" size={15} color={UI.text} />
                     <Text style={styles.chipText}>{vi ? 'Xuất M3U' : 'Export M3U'}</Text>
                   </Tap>
+                  {tag && (
+                    <Tap
+                      onPress={deleteTag}
+                      style={styles.chipBtn}
+                      accessibilityLabel={vi ? 'Xoá thẻ' : 'Delete tag'}
+                    >
+                      <Ionicons name="trash-outline" size={15} color="#F87171" />
+                      <Text style={[styles.chipText, { color: '#F87171' }]}>
+                        {vi ? 'Xoá thẻ' : 'Delete tag'}
+                      </Text>
+                    </Tap>
+                  )}
                 </ScrollView>
               )}
             </View>
           </LinearGradient>
+
+          {/* tag page: playlists carrying the tag */}
+          {tag && tagPlaylists.length > 0 && !selecting && (
+            <View style={{ marginTop: 6, marginBottom: 6 }}>
+              <Text style={[styles.discographyHeading, { fontFamily }]}>
+                {vi ? 'Playlist' : 'Playlists'}
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
+              >
+                {tagPlaylists.map((p) => {
+                  const cover = playlistCoverOf(p);
+                  return (
+                    <Tap
+                      key={p.id}
+                      onPress={() => openCollection({ kind: 'playlist', playlistId: p.id })}
+                      style={{ width: 120 }}
+                      accessibilityLabel={p.name}
+                    >
+                      {cover ? (
+                        <ArtworkImage source={{ uri: cover }} style={styles.tagPlCover} />
+                      ) : (
+                        <View
+                          style={[
+                            styles.tagPlCover,
+                            styles.placeholderCover,
+                            { backgroundColor: p.coverTint || headerPalette.container },
+                          ]}
+                        >
+                          <Ionicons name="musical-notes" size={34} color={UI.text} />
+                        </View>
+                      )}
+                      <Text numberOfLines={1} style={styles.tagPlName}>
+                        {p.name}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.tagPlSub}>
+                        {p.tracks.length} {vi ? 'bài' : 'songs'}
+                      </Text>
+                    </Tap>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
 
           {loading && (
             <View style={{ paddingVertical: 24 }}>
@@ -868,7 +1047,9 @@ export const CollectionModal: React.FC = () => {
                     ? 'heart-outline'
                     : collectionTarget.kind === 'offline'
                       ? 'cloud-download-outline'
-                      : 'musical-notes-outline'
+                      : tag
+                        ? 'pricetag-outline'
+                        : 'musical-notes-outline'
                 }
                 accent={headerPalette.accent}
                 title={
@@ -880,14 +1061,22 @@ export const CollectionModal: React.FC = () => {
                       ? vi
                         ? 'Chưa có bài tải về'
                         : 'No downloads yet'
-                      : vi
-                        ? 'Playlist còn trống'
-                        : 'This playlist is empty'
+                      : tag
+                        ? vi
+                          ? 'Chưa có bài nào mang thẻ này'
+                          : 'No songs with this tag yet'
+                        : vi
+                          ? 'Playlist còn trống'
+                          : 'This playlist is empty'
                 }
                 message={
-                  vi
-                    ? 'Tìm một bài rồi mở menu ⋯ để thêm vào đây.'
-                    : 'Find a song, then use its ⋯ menu to add it here.'
+                  tag
+                    ? vi
+                      ? 'Mở menu ⋯ của một bài › Gắn thẻ…, hoặc Chọn bài › Gắn thẻ để gắn nhiều bài một lúc.'
+                      : 'Open a song’s ⋯ menu › Tags…, or Select songs › Tag to tag many at once.'
+                    : vi
+                      ? 'Tìm một bài rồi mở menu ⋯ để thêm vào đây.'
+                      : 'Find a song, then use its ⋯ menu to add it here.'
                 }
                 actionLabel={vi ? 'Tìm nhạc' : 'Find music'}
                 actionIcon="search"
@@ -1001,11 +1190,27 @@ export const CollectionModal: React.FC = () => {
                 <Text style={styles.chipText}>{vi ? 'Vào playlist' : 'To playlist'}</Text>
               </Tap>
               <Tap
-                onPress={() => {
-                  chosen.forEach((x) => downloadTrack(x));
-                }}
+                onPress={() => openTagSheet({ kind: 'tracks', tracks: chosen })}
                 style={styles.chipBtn}
               >
+                <Ionicons name="pricetag-outline" size={15} color={UI.text} />
+                <Text style={styles.chipText}>{vi ? 'Gắn thẻ' : 'Tag'}</Text>
+              </Tap>
+              {tag && (
+                <Tap
+                  onPress={() => {
+                    untagWithUndo(chosen);
+                    setSelected({});
+                  }}
+                  style={styles.chipBtn}
+                >
+                  <Ionicons name="close-circle-outline" size={15} color="#F87171" />
+                  <Text style={[styles.chipText, { color: '#F87171' }]}>
+                    {vi ? 'Bỏ thẻ' : 'Untag'}
+                  </Text>
+                </Tap>
+              )}
+              <Tap onPress={() => requestDownload(chosen)} style={styles.chipBtn}>
                 <Ionicons name="arrow-down-circle-outline" size={15} color={UI.text} />
                 <Text style={styles.chipText}>{vi ? 'Tải' : 'Download'}</Text>
               </Tap>
@@ -1115,7 +1320,14 @@ export const CollectionModal: React.FC = () => {
                         track={song}
                         queueContext={tracks}
                         indexBadge={idx + 1}
-                        onRemove={removablePlaylistId ? () => removeWithUndo([song.id]) : undefined}
+                        onRemove={
+                          removablePlaylistId
+                            ? () => removeWithUndo([song.id])
+                            : tag
+                              ? () => untagWithUndo([song])
+                              : undefined
+                        }
+                        removeLabel={tag ? (vi ? 'Bỏ thẻ' : 'Untag') : undefined}
                       />
                     </Rise>
                   ))
@@ -1472,4 +1684,30 @@ const styles = themedSheet(() => ({
     marginHorizontal: 18,
     marginBottom: 12,
   },
+  // tags: the kicker on a tag page, a playlist's chips, the tag page's playlists
+  tagKicker: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  tagKickerDot: { width: 8, height: 8, borderRadius: 4 },
+  tagKickerText: { color: UI.text2, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  tagRow: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 18,
+  },
+  tagAdd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: UI.fg(0.28),
+  },
+  tagAddText: { color: UI.text2, fontSize: 12, fontWeight: '600' },
+  tagPlCover: { width: 120, height: 120, borderRadius: 12 },
+  tagPlName: { color: UI.text, fontSize: 13.5, fontWeight: '700', marginTop: 6 },
+  tagPlSub: { color: UI.text2, fontSize: 12, marginTop: 1 },
 }));

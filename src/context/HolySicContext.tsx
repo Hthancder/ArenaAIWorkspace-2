@@ -114,13 +114,23 @@ import { isLocalTrack, LocalLibrary, taggedAlbumOf } from '../services/local/loc
 import { perfCount } from '../services/perfProbe';
 import { runLyricClock } from '../services/lyrics/lyricClock';
 import { ToastStore } from '../services/ui/toastStore';
+import { TagStore } from '../services/library/tags';
+import { MvCache } from '../services/video/mvCache';
 
 export type CollectionTarget =
   | { kind: 'album'; id: string; summary?: AlbumSummary }
   | { kind: 'artist'; id: string; name: string; summary?: ArtistSummary }
   | { kind: 'playlist'; playlistId: string }
   | { kind: 'liked' }
-  | { kind: 'offline' };
+  | { kind: 'offline' }
+  | { kind: 'tag'; tagId: string };
+
+/** what a download brings along besides the audio */
+export interface DownloadExtras {
+  lyrics?: boolean;
+  /** the music video, saved for offline viewing */
+  mv?: boolean;
+}
 
 export type LinkResult =
   | { kind: 'played'; title: string }
@@ -335,7 +345,8 @@ interface HolySicContextValue extends HolySicExtras {
   importPlaylistText: (name: string, rawText: string) => Promise<Playlist | null>;
   downloads: Record<string, DownloadedTrackMeta>;
   downloadingIds: Record<string, boolean>;
-  downloadTrack: (track: Track) => Promise<void>;
+  /** download for offline; `extras` = what comes along (default: the Downloads settings) */
+  downloadTrack: (track: Track, extras?: DownloadExtras) => Promise<void>;
   removeDownload: (trackId: string) => Promise<void>;
   history: ListeningEvent[];
 
@@ -519,6 +530,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Local Files moved/renamed in the app → keep likes, playlists, history and queue pointing at them
   const applyTrackRemap = useCallback((map: Record<string, Track>) => {
     if (!Object.keys(map).length) return;
+    // tags follow the song to its new id (and pick up an edited title / cover)
+    TagStore.remap(map);
     const fix = (t: Track) => map[t.id] || t;
     setLikedTracks((prev) => {
       if (!prev.some((t) => map[t.id])) return prev;
@@ -549,6 +562,19 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setQueue((prev) => (prev.some((t) => map[t.id]) ? prev.map(fix) : prev));
   }, []);
   useEffect(() => LocalLibrary.onRemap(applyTrackRemap), [applyTrackRemap]);
+  // tagged on-device songs keep their stored copy current after a rescan (new title, cover…)
+  useEffect(() => {
+    let lastFiles = LocalLibrary.getState().files;
+    return LocalLibrary.subscribe(() => {
+      const files = LocalLibrary.getState().files;
+      if (files === lastFiles) return;
+      lastFiles = files;
+      if (TagStore.count() && files.length) TagStore.refreshTracks(files.map((f) => f.track));
+    });
+  }, []);
+  useEffect(() => {
+    TagStore.ready();
+  }, []);
 
   /** Write the real listened seconds of the current play into its history event */
   const flushListenTime = useCallback(() => {
@@ -870,8 +896,12 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const p = prefsRef.current;
     loadLyrics(track, {
       refresh,
+      // on-device songs, and downloads that were saved with their lyrics
       keepOffline:
-        p.lyricsKeepOffline !== false && (!!downloadsRef.current[track.id] || isLocalTrack(track)),
+        p.lyricsKeepOffline !== false &&
+        ((!!downloadsRef.current[track.id] &&
+          downloadsRef.current[track.id].withLyrics !== false) ||
+          isLocalTrack(track)),
       sources: p.lyricsSources,
       offline: !isOnlineRef.current,
     })
@@ -2091,6 +2121,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 
   const deletePlaylist = useCallback((id: string) => {
+    TagStore.forgetPlaylist(id);
     setPlaylists((prev) => {
       LocalLibrary.forgetImage(prev.find((p) => p.id === id)?.coverUrl);
       const next = prev.filter((p) => p.id !== id);
@@ -2206,7 +2237,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 
   const downloadTrack = useCallback(
-    async (track: Track) => {
+    async (track: Track, extras?: DownloadExtras) => {
       if (downloads[track.id] || downloadingIds[track.id]) return;
       if (track.isLive) {
         showToast(
@@ -2238,25 +2269,46 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
           stream = await queue.next();
         }
         if (!stream) throw new Error('No downloadable source');
-        const meta = await StorageService.downloadTrackFile(
-          track,
-          stream.url,
-          stream.qualityLabel,
-          stream.headers
-        );
+        const withLyrics = extras?.lyrics ?? prefs.downloadLyrics !== false;
+        const withMv = extras?.mv ?? !!prefs.downloadMv;
+        const meta = {
+          ...(await StorageService.downloadTrackFile(
+            track,
+            stream.url,
+            stream.qualityLabel,
+            stream.headers
+          )),
+          withLyrics,
+          withMv,
+        };
         setDownloads((prev) => {
           const next = { ...prev, [track.id]: meta };
           StorageService.saveDownloads(next);
           return next;
         });
-        // the lyrics come along, so the song is complete offline
-        if (prefs.lyricsKeepOffline !== false)
+        const vi = prefs.language === 'vi';
+        // the lyrics come along (if chosen), so the song is complete offline
+        if (withLyrics)
           loadLyrics(track, { keepOffline: true, sources: prefs.lyricsSources }).catch(() => {});
-        showToast(
-          prefs.language === 'vi'
-            ? `Đã tải ngoại tuyến: ${track.title}`
-            : `Downloaded offline: ${track.title}`
-        );
+        showToast(vi ? `Đã tải ngoại tuyến: ${track.title}` : `Downloaded offline: ${track.title}`);
+        // the music video is big: saved after the audio, one at a time, in the background
+        if (withMv)
+          MvCache.save(track, prefs.videoQuality || 720).then((r) => {
+            if (r === 'saved')
+              ToastStore.show(vi ? `Đã lưu MV: ${track.title}` : `Video saved: ${track.title}`);
+            else if (r === 'none')
+              ToastStore.show(
+                vi
+                  ? `Không tìm thấy MV cho “${track.title}”`
+                  : `No music video for “${track.title}”`
+              );
+            else if (r === 'failed' || r === 'hls')
+              ToastStore.show(
+                vi
+                  ? `Không lưu được MV “${track.title}”`
+                  : `Couldn’t save the video “${track.title}”`
+              );
+          });
       } catch {
         showToast(prefs.language === 'vi' ? 'Không thể tải bài hát này' : 'Download failed');
       } finally {
@@ -2275,6 +2327,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const existing = downloads[trackId];
       if (!existing) return;
       await StorageService.removeDownloadedFile(existing);
+      // a video saved together with the download goes with it
+      if (existing.withMv) MvCache.removeForTracks([trackId]);
       setDownloads((prev) => {
         const copy = { ...prev };
         delete copy[trackId];
@@ -2683,6 +2737,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const cur = downloadsRef.current;
       const metas = trackIds.map((id) => cur[id]).filter(Boolean);
       for (const m of metas) await StorageService.removeDownloadedFile(m);
+      const withMv = metas.filter((m) => m.withMv).map((m) => m.track.id);
+      if (withMv.length) MvCache.removeForTracks(withMv);
       setDownloads((prev) => {
         const copy = { ...prev };
         trackIds.forEach((id) => delete copy[id]);
@@ -2847,6 +2903,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
           searchHistory,
           prefs: prefsToSave,
           audioLab,
+          tags: TagStore.count() ? TagStore.exportData() : undefined,
         })
       );
       showToast(prefsRef.current.language === 'vi' ? `Đã xuất ${name}` : `Exported ${name}`);
@@ -2873,6 +2930,9 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       StorageService.saveHistory(merged.history);
       setSearchHistory(merged.searchHistory);
       StorageService.saveSearchHistory(merged.searchHistory);
+      // tags: merged by name, or replaced along with the library
+      if (backup.tags) TagStore.importData(backup.tags, mode);
+      else if (mode === 'replace') TagStore.importData(null, 'replace');
       if (includeSettings && backup.prefs) {
         const { onboarded: _o, ...rest } = backup.prefs;
         updatePrefs({ ...rest, onboarded: true } as Partial<HolySicPreferences>);

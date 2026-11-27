@@ -17,7 +17,9 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useVideoState, VideoLive, VideoStore } from '../../services/video/videoStore';
+import { Tap } from '../ui/Tap';
 
 /** registers a moving view while mounted & live */
 function useLive(on: boolean) {
@@ -32,7 +34,9 @@ export const MusicVideoStage: React.FC<{
   accent: string;
   vi: boolean;
   style?: StyleProp<ViewStyle>;
-}> = ({ width, accent, vi, style }) => {
+  /** the badge (quality · saved · exact sync) opens the video's options */
+  onBadgePress?: () => void;
+}> = ({ width, accent, vi, style, onBadgePress }) => {
   const st = useVideoState();
   const ready = st.status === 'ready' && !!VideoStore.player;
   useLive(ready);
@@ -78,11 +82,35 @@ export const MusicVideoStage: React.FC<{
           </Text>
         </View>
       )}
-      {ready && st.synced && (
-        <View style={[styles.badge, { borderColor: accent + '66' }]}>
-          <View style={[styles.dot, { backgroundColor: accent }]} />
-          <Text style={styles.badgeText}>MV</Text>
-        </View>
+      {ready && (
+        <Tap
+          feedback="opacity"
+          hitSlop={10}
+          disabled={!onBadgePress}
+          onPress={onBadgePress}
+          style={[
+            styles.badge,
+            { borderColor: st.synced ? accent + '66' : 'rgba(255,255,255,0.18)' },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            (vi ? 'Tuỳ chọn MV: ' : 'Video options: ') +
+            [
+              st.height ? `${st.height}p` : 'MV',
+              st.local ? (vi ? 'bản đã lưu' : 'saved copy') : '',
+              st.synced ? (vi ? 'tiếng từ video' : 'audio from the video') : '',
+            ]
+              .filter(Boolean)
+              .join(', ')
+          }
+        >
+          {st.synced && <View style={[styles.dot, { backgroundColor: accent }]} />}
+          {st.local && <Ionicons name="arrow-down-circle" size={11} color="#fff" />}
+          <Text style={styles.badgeText}>
+            {st.height ? `MV · ${st.height >= 1080 ? '1080p' : `${st.height}p`}` : 'MV'}
+          </Text>
+          {onBadgePress && <Ionicons name="chevron-down" size={10} color="rgba(255,255,255,0.8)" />}
+        </Tap>
       )}
     </View>
   );

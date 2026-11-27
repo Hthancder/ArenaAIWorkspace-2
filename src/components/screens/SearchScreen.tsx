@@ -28,6 +28,9 @@ import { Tap } from '../ui/Tap';
 import { Rise } from '../ui/Rise';
 import { ScrollEdgeHairline } from '../ui/ScrollEdgeBar';
 import { perfCount } from '../../services/perfProbe';
+import { TagStore, useTags } from '../../services/library/tags';
+import { TagChip } from '../tags/TagChip';
+import { tagQueryOf } from '../tags/TagSheet';
 
 const SOURCE_FILTERS: { id: SearchFilter; vi: string; en: string }[] = [
   { id: 'all', vi: 'Tất cả', en: 'All' },
@@ -88,6 +91,25 @@ export const SearchScreen: React.FC = () => {
     [query, isLink, localState.files]
   );
   const localTracks = useMemo(() => localHits.map((f) => f.track), [localHits]);
+  // your tags: "#chill" searches tags only (songs carrying them); plain words also show
+  // the tags they name, as chips above the results
+  const tagsVersion = useTags();
+  const tagQ = isLink ? null : tagQueryOf(query);
+  const tagHits = useMemo(
+    () => (isLink ? [] : TagStore.search(tagQ ?? (query.trim().length >= 2 ? query : ''))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [query, isLink, tagQ, tagsVersion]
+  );
+  const tagTracks = useMemo(
+    () => (tagQ !== null && tagHits.length ? TagStore.tracksWithAny(tagHits.map((x) => x.id)) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tagQ, tagHits, tagsVersion]
+  );
+  const allTags = useMemo(
+    () => TagStore.list(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tagsVersion]
+  );
   const listCount =
     !isLink && /[,;\n]/.test(query)
       ? query.split(/[,;\n]/).filter((x) => x.trim().length > 1).length
@@ -99,7 +121,7 @@ export const SearchScreen: React.FC = () => {
   // Suggestions as you type (Musike)
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2 || isLink || listCount > 1) {
+    if (q.length < 2 || isLink || listCount > 1 || q.startsWith('#')) {
       setSuggestions([]);
       return;
     }
@@ -130,7 +152,8 @@ export const SearchScreen: React.FC = () => {
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed || looksLikeLink(trimmed)) {
+    // "#tag" is a search of your own tags, never sent online
+    if (!trimmed || looksLikeLink(trimmed) || trimmed.startsWith('#')) {
       setResults([]);
       setAlbumResults([]);
       setLoading(false);
@@ -325,7 +348,64 @@ export const SearchScreen: React.FC = () => {
               </View>
             )}
 
-            {localTracks.length > 0 && (
+            {tagHits.length > 0 && (
+              <>
+                <View style={styles.localHead}>
+                  <Ionicons name="pricetags-outline" size={16} color={palette.accent} />
+                  <Text style={[styles.subHeading, styles.localTitle, { fontFamily }]}>
+                    {vi ? 'Thẻ của bạn' : 'Your tags'}
+                  </Text>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={{ paddingHorizontal: 16, gap: 8, marginBottom: 12 }}
+                >
+                  {tagHits.slice(0, 12).map((tg) => (
+                    <TagChip
+                      key={tg.id}
+                      tag={tg}
+                      count={TagStore.tracksWith(tg.id).length}
+                      onPress={() => {
+                        addSearchHistory(`#${tg.name}`);
+                        openCollection({ kind: 'tag', tagId: tg.id });
+                      }}
+                      accessibilityLabel={vi ? `Mở thẻ ${tg.name}` : `Open tag ${tg.name}`}
+                    />
+                  ))}
+                </ScrollView>
+                {tagTracks.length > 0 && (
+                  <>
+                    <Text style={[styles.subHeading, { fontFamily }]}>
+                      {vi
+                        ? `Bài mang thẻ (${tagTracks.length})`
+                        : `Tagged songs (${tagTracks.length})`}
+                    </Text>
+                    {tagTracks.slice(0, 50).map((song) => (
+                      <TrackRow key={song.id} track={song} queueContext={tagTracks} />
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+
+            {tagQ !== null && tagHits.length === 0 && (
+              <View style={styles.emptyWrap}>
+                <Ionicons name="pricetag-outline" size={36} color={UI.text3} />
+                <Text style={styles.emptyText}>
+                  {tagQ
+                    ? vi
+                      ? `Chưa có thẻ “${tagQ}”. Mở menu ⋯ của một bài › Gắn thẻ… để tạo.`
+                      : `No tag “${tagQ}” yet. Open a song’s ⋯ menu › Tags… to make one.`
+                    : vi
+                      ? 'Gõ tên thẻ sau dấu # để tìm bài theo thẻ.'
+                      : 'Type a tag name after # to find songs by tag.'}
+                </Text>
+              </View>
+            )}
+
+            {tagQ === null && localTracks.length > 0 && (
               <>
                 <View style={styles.localHead}>
                   <Ionicons name="phone-portrait-outline" size={16} color={palette.accent} />
@@ -377,9 +457,11 @@ export const SearchScreen: React.FC = () => {
               </>
             )}
 
-            <Text style={[styles.subHeading, { fontFamily }]}>
-              {vi ? `Kết quả bài hát (${results.length})` : `Songs (${results.length})`}
-            </Text>
+            {tagQ === null && (
+              <Text style={[styles.subHeading, { fontFamily }]}>
+                {vi ? `Kết quả bài hát (${results.length})` : `Songs (${results.length})`}
+              </Text>
+            )}
 
             {results.map((song, i) => (
               <Rise key={song.id} index={i}>
@@ -387,7 +469,7 @@ export const SearchScreen: React.FC = () => {
               </Rise>
             ))}
 
-            {!loading && results.length === 0 && localTracks.length === 0 && (
+            {tagQ === null && !loading && results.length === 0 && localTracks.length === 0 && (
               <View style={styles.emptyWrap}>
                 <Ionicons
                   name={
@@ -468,6 +550,29 @@ export const SearchScreen: React.FC = () => {
                   ))}
                 </View>
               </View>
+            )}
+
+            {/* your tags, one tap to their page */}
+            {allTags.length > 0 && (
+              <>
+                <Text style={[styles.subHeading, { fontFamily }]}>
+                  {vi ? 'Thẻ của bạn' : 'Your tags'}
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingHorizontal: 16, gap: 8, marginBottom: 18 }}
+                >
+                  {allTags.map((tg) => (
+                    <TagChip
+                      key={tg.id}
+                      tag={tg}
+                      onPress={() => openCollection({ kind: 'tag', tagId: tg.id })}
+                      accessibilityLabel={vi ? `Mở thẻ ${tg.name}` : `Open tag ${tg.name}`}
+                    />
+                  ))}
+                </ScrollView>
+              </>
             )}
 
             {/* Top Artists Quick Access */}
