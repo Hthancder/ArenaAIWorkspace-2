@@ -40,6 +40,17 @@ export interface HolySicDSPNative {
     sampleRate: number,
     outUri: string
   ): Promise<boolean>;
+  /** the bundled sample bank (GeneralUser GS) is present — newer builds only */
+  soundBankAvailable?(): boolean;
+  /** MIDI → WAV through the sample bank; `pianoBank`/`pianoProgram` replace GM program 0 (−1 = keep) */
+  renderMidiBank?(
+    events: number[],
+    durationSec: number,
+    sampleRate: number,
+    outUri: string,
+    pianoBank: number,
+    pianoProgram: number
+  ): Promise<boolean>;
   addListener(
     event: 'onSpectrum',
     cb: (e: { bands: number[]; sampleRate: number }) => void

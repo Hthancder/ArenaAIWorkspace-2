@@ -7,7 +7,8 @@
 
 import { requireOptionalNativeModule } from 'expo';
 
-export type PipStyle = 'lyrics' | 'card' | 'minimal';
+/** lyrics / card / minimal: 16:9 · square: cover-first 1:1 · bar: lyrics-only strip · stack: portrait */
+export type PipStyle = 'lyrics' | 'card' | 'minimal' | 'square' | 'bar' | 'stack';
 
 export interface PipMeta {
   title: string;

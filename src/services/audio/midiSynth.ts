@@ -1364,7 +1364,7 @@ export async function renderMidiToWav(
 
 const DRUM_PATCH: Patch = P(Kind.Table, 'sine', 0, 1, 1, 1);
 
-function writeWavHeader(out: Uint8Array, sr: number, frames: number) {
+export function writeWavHeader(out: Uint8Array, sr: number, frames: number) {
   const dv = new DataView(out.buffer, out.byteOffset, 44);
   const w = (o: number, s: string) => {
     for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i));

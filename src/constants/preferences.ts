@@ -230,11 +230,18 @@ export interface HolySicPreferences {
   pipAuto: boolean;
   /** what fills the PiP window */
   pipStyle: PipStyle;
+
+  // ── MIDI ──
+  /** 'sampled' = real instruments (GeneralUser GS sample bank), 'synth' = light procedural synth */
+  midiSound: 'sampled' | 'synth';
+  /** piano voice for GM program 0, "bank:program" in the sample bank (see MIDI_PIANOS) */
+  midiPiano: string;
 }
 
 export type PlaylistSort = 'custom' | 'recent' | 'added' | 'alpha' | 'creator';
 export type PlaylistView = 'list' | 'compact' | 'grid';
-export type PipStyle = 'lyrics' | 'card' | 'minimal';
+/** lyrics / card / minimal: 16:9 · square: cover-first 1:1 · bar: lyrics-only strip · stack: portrait */
+export type PipStyle = 'lyrics' | 'card' | 'minimal' | 'square' | 'bar' | 'stack';
 
 export const DEFAULT_PREFERENCES: HolySicPreferences = {
   accentColor: 'dynamic',
@@ -317,6 +324,8 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   pipLyrics: true,
   pipAuto: false,
   pipStyle: 'lyrics',
+  midiSound: 'sampled',
+  midiPiano: '0:0',
 };
 
 export const PLAYER_STYLE_META: {

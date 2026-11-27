@@ -7,7 +7,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
-import { extForMime, PLAYABLE_EXT, UNPLAYABLE_EXT } from '../audio/formatSniff';
+import { extForMime, MIDI_EXT, PLAYABLE_EXT, UNPLAYABLE_EXT } from '../audio/formatSniff';
 import { HolySicPreferences } from '../../constants/preferences';
 import {
   AudioLabSettings,
@@ -214,6 +214,9 @@ const AUDIO_EXT = PLAYABLE_EXT;
 export const LOCAL_DIR = 'holysic-local';
 
 function titleFromFileName(name: string): { title: string; artist: string } {
+  // MIDI songs keep their file name as the title
+  if (MIDI_EXT.test(name))
+    return { title: name.replace(/\.[^.]+$/, '').trim() || name, artist: 'MIDI' };
   const base = name
     .replace(/\.[^.]+$/, '')
     .replace(/_/g, ' ')

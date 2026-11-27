@@ -14,6 +14,7 @@ import { Scrobbler } from '../../services/scrobble/scrobbler';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { BitPerfectCard } from '../audio/BitPerfectCard';
 import { CrossfadeCurvePreview } from '../audio/CrossfadeCurvePreview';
+import { MidiSoundCard } from '../audio/MidiSoundCard';
 import { CROSSFADE_CURVE_META } from '../../services/audio/crossfadeCurves';
 import { Tap } from '../ui/Tap';
 
@@ -362,6 +363,8 @@ export const MergedSettings: React.FC<{
                 : 'Tip: hold ⏭ / ⏮ to fast-forward / rewind; fix lyric timing with −/+ on the Lyrics screen. The next song is prepared once the current one is half way.'}
             </Text>
           </View>
+
+          <MidiSoundCard fontFamily={fontFamily} />
         </>
       )}
       {show('scrobble') && (

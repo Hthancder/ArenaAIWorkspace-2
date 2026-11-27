@@ -6,8 +6,16 @@
 import type { PipCommandEvent, PipMeta } from '../../../modules/holysic-pip';
 import { PlaybackClock } from '../audio/playbackClock';
 
-const W = 960;
-const H = 540;
+/** canvas (= PiP window shape) per style — same as the iOS module */
+export function pipCanvasSize(style: string): [number, number] {
+  if (style === 'square') return [720, 720];
+  if (style === 'bar') return [1080, 300];
+  if (style === 'stack') return [600, 800];
+  return [960, 540];
+}
+
+let W = 960;
+let H = 540;
 const LEAD = 0.15;
 
 type Listener<T> = (e: T) => void;
@@ -105,6 +113,7 @@ class WebPip {
     if (this.video && this.canvas && this.ctx) return true;
     if (!this.supported()) return false;
     const c = document.createElement('canvas');
+    if (this.meta) [W, H] = pipCanvasSize(this.meta.style);
     c.width = W;
     c.height = H;
     const v = document.createElement('video');
@@ -202,6 +211,16 @@ class WebPip {
 
   setMeta(m: PipMeta) {
     this.meta = m;
+    const [w, h] = pipCanvasSize(m.style);
+    if (w !== W || h !== H) {
+      // the floating window follows the stream's new shape
+      W = w;
+      H = h;
+      if (this.canvas) {
+        this.canvas.width = W;
+        this.canvas.height = H;
+      }
+    }
     if (m.artwork !== this.artUri) this.loadArt(m.artwork);
     this.render(true);
   }
@@ -314,7 +333,17 @@ class WebPip {
     g.addColorStop(1, '#0A0A12');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
-    if (this.art && m.style !== 'minimal') {
+    if (this.art && m.style === 'square') {
+      const a = this.art;
+      const s = Math.max(W / a.width, H / a.height);
+      ctx.drawImage(a, (W - a.width * s) / 2, (H - a.height * s) / 2, a.width * s, a.height * s);
+      const sh = ctx.createLinearGradient(0, H * 0.38, 0, H);
+      sh.addColorStop(0, 'rgba(0,0,0,0)');
+      sh.addColorStop(0.55, 'rgba(0,0,0,0.55)');
+      sh.addColorStop(1, 'rgba(0,0,0,0.85)');
+      ctx.fillStyle = sh;
+      ctx.fillRect(0, 0, W, H);
+    } else if (this.art && m.style !== 'minimal' && m.style !== 'bar') {
       const a = this.art;
       const s = Math.max(W / a.width, H / a.height) * 1.1;
       try {
@@ -448,7 +477,67 @@ class WebPip {
       );
     };
 
-    if (m.style === 'card') {
+    const thin = () => {
+      const f = m.duration > 0 ? Math.max(0, Math.min(1, pos / m.duration)) : 0;
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(0, H - 6, W, 6);
+      ctx.fillStyle = m.accent;
+      ctx.fillRect(0, H - 6, W * f, 6);
+    };
+
+    if (m.style === 'square') {
+      if (hasLyrics && line) {
+        sung(line, 36, H - 262, W - 72, 150, 44, 3, 'left');
+        text(next, 36, H - 100, W - 72, 24, 600, 'rgba(255,255,255,0.55)', 'left');
+      } else {
+        if (!this.art) cover(W / 2 - 150, 90, 300, 30);
+        text(m.title, 36, H - 230, W - 72, 44, 800, '#FFF', 'left', 2);
+        text(m.artist, 36, H - 108, W - 72, 26, 600, 'rgba(255,255,255,0.7)', 'left');
+      }
+      thin();
+    } else if (m.style === 'bar') {
+      if (hasLyrics) sung(line || '♪', 40, 34, W - 80, H - 80, 72, 2, 'center');
+      else
+        text(
+          m.artist ? `${m.title} — ${m.artist}` : m.title,
+          40,
+          H / 2 - 60,
+          W - 80,
+          52,
+          800,
+          '#FFF',
+          'center',
+          2
+        );
+      thin();
+    } else if (m.style === 'stack') {
+      cover(40, 40, 96, 16);
+      text(m.title, 156, 48, W - 196, 30, 700, '#FFF', 'left');
+      text(m.artist, 156, 90, W - 196, 23, 500, 'rgba(255,255,255,0.65)', 'left');
+      if (hasLyrics) {
+        const prev = idx >= 1 ? l.texts[idx - 1] || '' : '';
+        const after = idx + 2 < l.texts.length ? l.texts[idx + 2] : '';
+        text(prev, 40, 168, W - 80, 28, 700, 'rgba(255,255,255,0.3)', 'left', 2);
+        sung(line || '♪', 40, 250, W - 80, 270, 48, 5, 'left');
+        text(next, 40, 534, W - 80, 30, 700, 'rgba(255,255,255,0.42)', 'left', 2);
+        text(after, 40, 614, W - 80, 30, 700, 'rgba(255,255,255,0.26)', 'left', 2);
+      } else {
+        text(
+          m.showLyrics ? m.noLyrics : m.artist,
+          40,
+          300,
+          W - 80,
+          40,
+          700,
+          'rgba(255,255,255,0.85)',
+          'left',
+          3
+        );
+        text(m.upNext, 40, 480, W - 80, 24, 600, 'rgba(255,255,255,0.55)', 'left', 2);
+      }
+      progress(40, H - 74, W - 80);
+    } else if (m.style === 'card') {
       cover(40, 40, 400, 26);
       const x = 470;
       const w = W - x - 40;
@@ -474,12 +563,7 @@ class WebPip {
         sung(line, 60, 130, W - 120, 230, 56, 3, 'center');
         text(next, 60, 380, W - 120, 28, 600, 'rgba(255,255,255,0.45)', 'center');
       } else text(m.title, 60, 200, W - 120, 50, 800, '#FFF', 'center', 2);
-      const f = m.duration > 0 ? Math.max(0, Math.min(1, pos / m.duration)) : 0;
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.fillRect(0, H - 6, W, 6);
-      ctx.fillStyle = m.accent;
-      ctx.fillRect(0, H - 6, W * f, 6);
+      thin();
     } else {
       cover(40, 32, 84, 14);
       text(m.title, 142, 40, W - 190, 30, 700, '#FFF', 'left');

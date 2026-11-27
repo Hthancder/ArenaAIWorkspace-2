@@ -281,59 +281,154 @@ export const LyricsIconSettings: React.FC<{ fontFamily?: string; part?: 'lyrics'
   );
 };
 
-/** A small drawing of each PiP layout, so the choice is visible before trying it */
+/** A small drawing of each PiP layout, in the window's own shape, so the choice is visible */
 const PipSample: React.FC<{ id: PipStyle; accent: string }> = ({ id, accent }) => {
   const line = { height: 4, borderRadius: 2, backgroundColor: '#FFF' };
+  const bar = { width: '100%' as const, height: 2, backgroundColor: accent };
+  let body: React.ReactNode;
+  let aspect = 16 / 9;
   if (id === 'card')
-    return (
-      <View style={[sampleStyles.stage, { flexDirection: 'row', gap: 5, padding: 6 }]}>
+    body = (
+      <View style={[sampleStyles.window, { flexDirection: 'row', gap: 5, padding: 6 }]}>
         <View style={{ width: 26, height: 26, borderRadius: 5, backgroundColor: accent }} />
         <View style={{ flex: 1, gap: 3, justifyContent: 'center' }}>
           <View style={[line, { width: '80%' }]} />
           <View style={[line, { width: '55%', opacity: 0.5 }]} />
-          <View style={[line, { width: '100%', height: 2, backgroundColor: accent }]} />
+          <View style={[line, bar]} />
         </View>
       </View>
     );
-  if (id === 'minimal')
-    return (
+  else if (id === 'minimal')
+    body = (
       <View
-        style={[sampleStyles.stage, { alignItems: 'center', justifyContent: 'center', gap: 4 }]}
+        style={[sampleStyles.window, { alignItems: 'center', justifyContent: 'center', gap: 4 }]}
       >
         <View style={[line, { width: '75%', height: 6 }]} />
         <View style={[line, { width: '45%', opacity: 0.45 }]} />
       </View>
     );
+  else if (id === 'square') {
+    aspect = 1;
+    body = (
+      <View style={[sampleStyles.window, { backgroundColor: accent, justifyContent: 'flex-end' }]}>
+        <View style={{ padding: 4, gap: 3, backgroundColor: 'rgba(0,0,0,0.45)' }}>
+          <View style={[line, { width: '85%', height: 5 }]} />
+          <View style={[line, { width: '55%', height: 3, opacity: 0.55 }]} />
+        </View>
+        <View style={[line, bar, { borderRadius: 0 }]} />
+      </View>
+    );
+  } else if (id === 'bar') {
+    aspect = 3.6;
+    body = (
+      <View style={[sampleStyles.window, { justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={{ flexDirection: 'row' }}>
+          <View style={[line, { width: 26, height: 6 }]} />
+          <View style={[line, { width: 20, height: 6, opacity: 0.4 }]} />
+        </View>
+        <View style={[line, bar, { position: 'absolute', bottom: 0, borderRadius: 0 }]} />
+      </View>
+    );
+  } else if (id === 'stack') {
+    aspect = 0.75;
+    body = (
+      <View style={[sampleStyles.window, { padding: 4, gap: 3 }]}>
+        <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: accent }} />
+        <View style={[line, { width: '60%', height: 3, opacity: 0.3 }]} />
+        <View style={[line, { width: '90%', height: 5 }]} />
+        <View style={[line, { width: '70%', height: 3, opacity: 0.45 }]} />
+        <View style={[line, { width: '50%', height: 3, opacity: 0.25 }]} />
+      </View>
+    );
+  } else
+    body = (
+      <View style={[sampleStyles.window, { padding: 6, gap: 4 }]}>
+        <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+          <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: accent }} />
+          <View style={[line, { width: 24, height: 3, opacity: 0.7 }]} />
+        </View>
+        <View style={{ flexDirection: 'row', alignSelf: 'center' }}>
+          <View style={[line, { width: 22, height: 6 }]} />
+          <View style={[line, { width: 18, height: 6, opacity: 0.4 }]} />
+        </View>
+        <View style={[line, { width: '50%', alignSelf: 'center', opacity: 0.45 }]} />
+        <View style={[line, bar]} />
+      </View>
+    );
+  // every sample sits in the same 16:10 slot; the window inside takes its real shape
   return (
-    <View style={[sampleStyles.stage, { padding: 6, gap: 4 }]}>
-      <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-        <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: accent }} />
-        <View style={[line, { width: 24, height: 3, opacity: 0.7 }]} />
+    <View style={sampleStyles.slot}>
+      <View
+        style={
+          aspect >= 1.6
+            ? { width: '100%', aspectRatio: aspect }
+            : { height: '100%', aspectRatio: aspect }
+        }
+      >
+        {body}
       </View>
-      <View style={{ flexDirection: 'row', alignSelf: 'center' }}>
-        <View style={[line, { width: 22, height: 6 }]} />
-        <View style={[line, { width: 18, height: 6, opacity: 0.4 }]} />
-      </View>
-      <View style={[line, { width: '50%', alignSelf: 'center', opacity: 0.45 }]} />
-      <View style={[line, { width: '100%', height: 2, backgroundColor: accent }]} />
     </View>
   );
 };
 
 const sampleStyles = StyleSheet.create({
-  stage: {
+  slot: {
     width: '100%',
-    aspectRatio: 16 / 9,
+    aspectRatio: 16 / 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  window: {
+    flex: 1,
     borderRadius: 8,
     backgroundColor: '#15131F',
     overflow: 'hidden',
   },
 });
 
-const PIP_STYLES: { id: PipStyle; vi: string; en: string }[] = [
-  { id: 'lyrics', vi: 'Lời nhạc', en: 'Lyrics' },
-  { id: 'card', vi: 'Thẻ bài hát', en: 'Song card' },
-  { id: 'minimal', vi: 'Tối giản', en: 'Minimal' },
+const PIP_STYLES: { id: PipStyle; vi: string; en: string; dVi: string; dEn: string }[] = [
+  {
+    id: 'lyrics',
+    vi: 'Lời nhạc',
+    en: 'Lyrics',
+    dVi: '16:9 · dòng đang hát lớn, dòng kế, bìa nhỏ và thanh tiến độ',
+    dEn: '16:9 · big sung line, the next one, small cover and progress',
+  },
+  {
+    id: 'card',
+    vi: 'Thẻ bài',
+    en: 'Song card',
+    dVi: '16:9 · bìa lớn bên trái, tên bài và lời bên phải',
+    dEn: '16:9 · big cover on the left, title and lyrics on the right',
+  },
+  {
+    id: 'minimal',
+    vi: 'Tối giản',
+    en: 'Minimal',
+    dVi: '16:9 · chỉ chữ trên nền màu nhấn',
+    dEn: '16:9 · just text on the accent colour',
+  },
+  {
+    id: 'square',
+    vi: 'Bìa vuông',
+    en: 'Square cover',
+    dVi: 'Vuông 1:1 · ảnh bìa tràn khung, lời nằm dưới đáy',
+    dEn: 'Square 1:1 · full-bleed cover, the line at the bottom',
+  },
+  {
+    id: 'bar',
+    vi: 'Thanh lời',
+    en: 'Lyrics bar',
+    dVi: 'Dải ngang gọn · chỉ một dòng lời, chiếm ít chỗ nhất',
+    dEn: 'Slim strip · just the line, takes the least room',
+  },
+  {
+    id: 'stack',
+    vi: 'Lời dọc',
+    en: 'Tall lyrics',
+    dVi: 'Dọc 3:4 · dòng trước, dòng đang hát và hai dòng kế như màn Lời',
+    dEn: 'Portrait 3:4 · previous, sung and two next lines, like the Lyrics screen',
+  },
 ];
 
 /** Picture in Picture: the sung line floating over other apps */
@@ -410,7 +505,7 @@ const PipCard: React.FC<{ fontFamily?: string }> = ({ fontFamily }) => {
                 }}
                 style={[
                   styles.effectCard,
-                  { width: undefined, flex: 1, borderColor: sel ? palette.accent : UI.fg(0.1) },
+                  { width: '31.6%', borderColor: sel ? palette.accent : UI.fg(0.1) },
                   sel && { borderWidth: 2 },
                 ]}
                 accessibilityRole="radio"
@@ -431,6 +526,19 @@ const PipCard: React.FC<{ fontFamily?: string }> = ({ fontFamily }) => {
             );
           })}
         </View>
+        {(() => {
+          const cur = PIP_STYLES.find((o) => o.id === style) || PIP_STYLES[0];
+          return (
+            <Text style={[styles.rowDesc, { marginTop: 8 }]}>
+              {vi ? cur.dVi : cur.dEn}
+              {active
+                ? vi
+                  ? ' · cửa sổ đang mở đổi ngay'
+                  : ' · the open window changes right away'
+                : ''}
+            </Text>
+          );
+        })()}
 
         <View style={styles.divider} />
         <View style={styles.switchRow}>

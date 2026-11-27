@@ -147,9 +147,9 @@ src/
 
 ## 🙏 Credits & Attribution / Ghi công
 
-Bản port này được xây dựng trên nền tảng **Mochy Music** của **[realidkroo](https://github.com/realidkroo/Mochy-Music)** và toàn bộ cộng đồng mã nguồn mở. Xem chi tiết trong [`NOTICE`](NOTICE), [`AGENTS.md`](AGENTS.md) và màn hình **Mochy (Settings) → About & Credits** trong app.
+Bản port này được xây dựng trên nền tảng **Mochy Music** của **[realidkroo](https://github.com/realidkroo/Mochy-Music)** và toàn bộ cộng đồng mã nguồn mở. Âm thanh MIDI dùng bộ mẫu **[GeneralUser GS](https://schristiancollins.com/generaluser.php)** của S. Christian Collins. Xem chi tiết trong [`NOTICE`](NOTICE), [`AGENTS.md`](AGENTS.md) và màn hình **Mochy (Settings) → About & Credits** trong app.
 
-This iOS port is built upon **Mochy Music** by **[realidkroo](https://github.com/realidkroo/Mochy-Music)** and the open-source community. See [`NOTICE`](NOTICE), [`AGENTS.md`](AGENTS.md), and the in-app **Mochy → About & Credits** screen.
+This iOS port is built upon **Mochy Music** by **[realidkroo](https://github.com/realidkroo/Mochy-Music)** and the open-source community. MIDI playback uses the **[GeneralUser GS](https://schristiancollins.com/generaluser.php)** sound bank by S. Christian Collins. See [`NOTICE`](NOTICE), [`AGENTS.md`](AGENTS.md), and the in-app **Mochy → About & Credits** screen.
 
 | Dự án / Project | Tác giả / Author | Vai trò / Role |
 |---|---|---|

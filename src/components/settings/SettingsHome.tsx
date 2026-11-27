@@ -9,6 +9,7 @@ import { useHolySic } from '../../context/HolySicContext';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { LYRICS_EFFECTS } from '../player/LyricsView';
 import { Tap } from '../ui/Tap';
+import { storageDetail } from './StorageSettings';
 
 export type SettingsPageId =
   | 'player'
@@ -22,6 +23,7 @@ export type SettingsPageId =
   | 'sources'
   | 'scrobble'
   | 'library'
+  | 'storage'
   | 'language'
   | 'credits';
 
@@ -59,6 +61,7 @@ const PAGES: Record<SettingsPageId, { vi: string; en: string; icon: IconName; ti
     icon: 'archive',
     tint: '#94A3B8',
   },
+  storage: { vi: 'Dung lượng', en: 'Storage', icon: 'pie-chart', tint: '#8E8E93' },
   language: { vi: 'Ngôn ngữ', en: 'Language', icon: 'language', tint: '#818CF8' },
   credits: { vi: 'Giới thiệu & ghi công', en: 'About & Credits', icon: 'heart', tint: '#F43F5E' },
 };
@@ -126,10 +129,23 @@ const KEYWORDS: Record<SettingsPageId, string[]> = {
     'offline lyrics',
     'giữ màn hình',
     'keep awake',
+    'pip',
+    'picture in picture',
+    'cửa sổ nổi',
+    'thanh lời',
+    'bìa vuông',
+    'lời dọc',
   ],
   video: ['mv', 'music video', 'video', '720p', 'chất lượng video', 'ambient video'],
   icon: ['biểu tượng', 'icon', 'app icon', 'skin'],
   playback: [
+    'midi',
+    'piano',
+    'dương cầm',
+    'nhạc cụ',
+    'instrument',
+    'soundfont',
+    'generaluser',
     'chất lượng',
     'quality',
     'lossless',
@@ -188,6 +204,20 @@ const KEYWORDS: Record<SettingsPageId, string[]> = {
     'nhập',
     'import',
     'xoá dữ liệu',
+  ],
+  storage: [
+    'dung lượng',
+    'storage',
+    'bộ nhớ',
+    'bộ nhớ đệm',
+    'cache',
+    'dọn dẹp',
+    'xoá',
+    'clean',
+    'giải phóng',
+    'free space',
+    'tệp tạm',
+    'temp',
   ],
   language: ['ngôn ngữ', 'language', 'tiếng việt', 'english'],
   credits: [
@@ -335,6 +365,7 @@ export const SettingsHome: React.FC<{
         { id: 'sources' },
         { id: 'scrobble' },
         { id: 'library' },
+        { id: 'storage', detail: storageDetail(vi) },
         { id: 'language', detail: vi ? 'Tiếng Việt' : 'English' },
       ],
     },

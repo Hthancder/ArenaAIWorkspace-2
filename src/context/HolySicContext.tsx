@@ -1135,7 +1135,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
                         ? 'từ bộ nhớ đệm'
                         : 'cached'
                       : `${midi.engine === 'native' ? 'native' : 'JS'} ${midi.ms} ms`
-                  }`,
+                  }${midi.bank ? ' · GeneralUser GS' : ''}`,
                   latencyMs: midi.ms,
                 });
                 playUrl = midi.uri;
@@ -1202,7 +1202,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 module: cand.sourceLabel,
                 step: vi ? 'Tổng hợp MIDI' : 'MIDI synth',
                 ok: true,
-                detail: `${midi.instruments || 'GM'} · ${midi.notes} ${vi ? 'nốt' : 'notes'} · JS ${midi.ms} ms`,
+                detail: `${midi.instruments || 'GM'} · ${midi.notes} ${vi ? 'nốt' : 'notes'} · JS ${midi.ms} ms${midi.bank ? ' · GeneralUser GS' : ''}`,
                 latencyMs: midi.ms,
               });
               playUrl = midi.uri;
@@ -2928,6 +2928,11 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }, 3500);
     return () => clearTimeout(t);
   }, [prefs.bitPerfect, currentTrack, resolvedStream]);
+
+  // MIDI sound settings → the renderer (new renders use them; cached ones are keyed by them)
+  useEffect(() => {
+    MidiRender.configure({ sound: prefs.midiSound || 'sampled', piano: prefs.midiPiano || '0:0' });
+  }, [prefs.midiSound, prefs.midiPiano]);
 
   // Re-apply normalisation immediately when the switch changes
   useEffect(() => {

@@ -1,9 +1,10 @@
 // HolySic — Picture in Picture for music.
 //
-// iOS only floats video, so the "video" here is drawn by the app: a 960×540 card (current lyric
-// line with a karaoke fill, the next line, cover, title, progress) rendered with Core Graphics
-// into pixel buffers and fed to an AVSampleBufferDisplayLayer, which AVPictureInPictureController
-// lifts into the system PiP window.
+// iOS only floats video, so the "video" here is drawn by the app: a card (current lyric line with
+// a karaoke fill, the next line, cover, title, progress) rendered with Core Graphics into pixel
+// buffers and fed to an AVSampleBufferDisplayLayer, which AVPictureInPictureController lifts into
+// the system PiP window. The window takes the card's shape, so each style has its own canvas:
+// 16:9 (lyrics / card / minimal), square (cover), a wide strip (lyrics bar) and portrait (stack).
 //
 // Timing never waits for JavaScript: the module reads the playing AVPlayer (the expo-audio player
 // handed over by JS) directly, so the line switches on time even when JS is throttled in the
@@ -18,8 +19,16 @@ import CoreVideo
 import ExpoModulesCore
 import UIKit
 
-private let W = 960
-private let H = 540
+/// canvas (= PiP window shape) per style
+private func canvasSize(_ style: String) -> (Int, Int) {
+  switch style {
+  case "square": return (720, 720)
+  case "bar": return (1080, 300)
+  case "stack": return (600, 800)
+  default: return (960, 540)
+  }
+}
+
 private let LEAD: Double = 0.15
 
 private struct Meta {
@@ -65,6 +74,9 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
   private var timer: DispatchSourceTimer?
   private var timerInterval: Double = 0
   private var pool: CVPixelBufferPool?
+  /// canvas size of the current style (touched on `queue`)
+  private var W = 960
+  private var H = 540
   private var baseImage: UIImage?
   private var baseVersion = -1
   private var art: UIImage?
@@ -109,12 +121,12 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     } else {
       layer = AVSampleBufferDisplayLayer()
       layer.videoGravity = .resizeAspect
-      layer.frame = CGRect(x: 0, y: 0, width: 16, height: 9)
+      layer.frame = CGRect(x: 0, y: 0, width: 16, height: max(4, (16 * layerRatio).rounded()))
       if let tb = timebase { layer.controlTimebase = tb }
       displayLayer = layer
     }
     if hostView == nil {
-      let v = UIView(frame: CGRect(x: 0, y: 0, width: 16, height: 9))
+      let v = UIView(frame: layer.frame)
       v.isUserInteractionEnabled = false
       v.backgroundColor = .clear
       v.alpha = 0.011  // effectively invisible, but still "on screen" for AVKit
@@ -154,6 +166,18 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       self.renderNow(force: true)
     }
     schedule()
+  }
+
+  /// 16 pt wide, the style's aspect tall (main thread)
+  private var layerRatio: CGFloat = 9.0 / 16.0
+  private func setLayerAspect(_ ratio: CGFloat) {
+    layerRatio = ratio
+    let f = CGRect(x: 0, y: 0, width: 16, height: max(4, (16 * ratio).rounded()))
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    hostView?.frame = f
+    displayLayer?.frame = f
+    CATransaction.commit()
   }
 
   func start() -> Bool {
@@ -214,6 +238,16 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       m.upNext = dict["upNext"] as? String ?? ""
       m.version += 1
       self.meta = m
+      let size = canvasSize(m.style)
+      if size.0 != self.W || size.1 != self.H {
+        // new window shape: fresh buffers, and the source layer follows (AVKit reads its aspect)
+        self.W = size.0
+        self.H = size.1
+        self.pool = nil
+        self.lastKey = ""
+        let ratio = CGFloat(size.1) / CGFloat(size.0)
+        DispatchQueue.main.async { self.setLayerAspect(ratio) }
+      }
       if self.prepared && m.artworkUri != self.artUri { self.loadArt(m.artworkUri) }
       self.renderNow(force: true)
     }
@@ -414,7 +448,80 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     let next = idx + 1 < lyrics.texts.count && idx >= -1 && lyrics.synced ? lyrics.texts[max(0, idx + 1)] : ""
     let hasLyrics = meta.showLyrics && lyrics.synced
 
+    let fw = CGFloat(W)
+    let fh = CGFloat(H)
     switch meta.style {
+    case "square":
+      // cover fills the window, the line sits on the shade at the bottom
+      if hasLyrics && !line.isEmpty {
+        drawLine(
+          line, in: CGRect(x: 36, y: fh - 262, width: fw - 72, height: 150), size: 44,
+          maxLines: 3, fill: fill, align: .left)
+        if !next.isEmpty {
+          drawText(
+            next, CGRect(x: 36, y: fh - 106, width: fw - 72, height: 34),
+            font: .systemFont(ofSize: 24, weight: .semibold),
+            color: UIColor.white.withAlphaComponent(0.55), align: .left, lines: 1)
+        }
+      } else {
+        drawText(
+          meta.title, CGRect(x: 36, y: fh - 230, width: fw - 72, height: 110),
+          font: .systemFont(ofSize: 44, weight: .heavy), color: .white, align: .left, lines: 2)
+        drawText(
+          meta.artist, CGRect(x: 36, y: fh - 112, width: fw - 72, height: 40),
+          font: .systemFont(ofSize: 26, weight: .semibold),
+          color: UIColor.white.withAlphaComponent(0.7), align: .left, lines: 1)
+      }
+      drawThinProgress(pos: pos)
+    case "bar":
+      // the line only, as large as the strip allows
+      if hasLyrics {
+        drawLine(
+          line.isEmpty ? "♪" : line, in: CGRect(x: 40, y: 34, width: fw - 80, height: fh - 80),
+          size: 72, maxLines: 2, fill: fill, align: .center)
+      } else {
+        drawText(
+          meta.artist.isEmpty ? meta.title : "\(meta.title) — \(meta.artist)",
+          CGRect(x: 40, y: fh / 2 - 60, width: fw - 80, height: 120),
+          font: .systemFont(ofSize: 52, weight: .heavy), color: .white, align: .center, lines: 2)
+      }
+      drawThinProgress(pos: pos)
+    case "stack":
+      // previous line, the sung line, two lines ahead — like the lyrics screen
+      if hasLyrics {
+        let dim = UIColor.white.withAlphaComponent(0.42)
+        let prev = idx >= 1 && idx - 1 < lyrics.texts.count ? lyrics.texts[idx - 1] : ""
+        let after = idx + 2 < lyrics.texts.count && idx >= -1 ? lyrics.texts[idx + 2] : ""
+        if !prev.isEmpty {
+          drawText(
+            prev, CGRect(x: 40, y: 168, width: fw - 80, height: 70),
+            font: .systemFont(ofSize: 28, weight: .bold),
+            color: UIColor.white.withAlphaComponent(0.3), align: .left, lines: 2)
+        }
+        drawLine(
+          line.isEmpty ? "♪" : line, in: CGRect(x: 40, y: 250, width: fw - 80, height: 270),
+          size: 48, maxLines: 5, fill: fill, align: .left)
+        drawText(
+          next, CGRect(x: 40, y: 534, width: fw - 80, height: 76),
+          font: .systemFont(ofSize: 30, weight: .bold), color: dim, align: .left, lines: 2)
+        drawText(
+          after, CGRect(x: 40, y: 614, width: fw - 80, height: 76),
+          font: .systemFont(ofSize: 30, weight: .bold),
+          color: UIColor.white.withAlphaComponent(0.26), align: .left, lines: 2)
+      } else {
+        drawText(
+          meta.showLyrics ? meta.noLyrics : meta.artist,
+          CGRect(x: 40, y: 300, width: fw - 80, height: 160),
+          font: .systemFont(ofSize: 40, weight: .bold),
+          color: UIColor.white.withAlphaComponent(0.85), align: .left, lines: 3)
+        if !meta.upNext.isEmpty {
+          drawText(
+            meta.upNext, CGRect(x: 40, y: 480, width: fw - 80, height: 70),
+            font: .systemFont(ofSize: 24, weight: .semibold),
+            color: UIColor.white.withAlphaComponent(0.55), align: .left, lines: 2)
+        }
+      }
+      drawProgress(pos: pos, playing: playing, rect: CGRect(x: 40, y: fh - 74, width: fw - 80, height: 30))
     case "card":
       let x: CGFloat = 470
       let wdt: CGFloat = CGFloat(W) - x - 40
@@ -494,8 +601,23 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     baseImage = r.image { c in
       let ctx = c.cgContext
       let full = CGRect(x: 0, y: 0, width: W, height: H)
-      // backdrop: blurred cover (or the accent) under a dark veil
-      if let blur, m.style != "minimal" {
+      // backdrop: the cover full-bleed (square), blurred cover, or the accent — under a veil
+      if m.style == "square", let cover {
+        drawCover(cover, in: full, radius: 0, accent: m.accent)
+        let shade =
+          [
+            UIColor.black.withAlphaComponent(0).cgColor,
+            UIColor.black.withAlphaComponent(0.55).cgColor,
+            UIColor.black.withAlphaComponent(0.85).cgColor,
+          ] as CFArray
+        if let g = CGGradient(
+          colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: shade, locations: [0, 0.55, 1])
+        {
+          ctx.drawLinearGradient(
+            g, start: CGPoint(x: 0, y: CGFloat(H) * 0.38), end: CGPoint(x: 0, y: CGFloat(H)),
+            options: [.drawsAfterEndLocation])
+        }
+      } else if let blur, m.style != "minimal" && m.style != "bar" {
         let s = max(CGFloat(W) / blur.size.width, CGFloat(H) / blur.size.height)
         let sz = CGSize(width: blur.size.width * s, height: blur.size.height * s)
         blur.draw(
@@ -531,6 +653,17 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
           m.artist, CGRect(x: 470, y: 165, width: CGFloat(W) - 510, height: 40),
           font: .systemFont(ofSize: 26, weight: .semibold),
           color: UIColor.white.withAlphaComponent(0.7), align: .left, lines: 1)
+      case "square", "bar":
+        break
+      case "stack":
+        drawCover(cover, in: CGRect(x: 40, y: 40, width: 96, height: 96), radius: 16, accent: m.accent)
+        PiPEngine.text(
+          m.title, CGRect(x: 156, y: 48, width: CGFloat(W) - 196, height: 40),
+          font: .systemFont(ofSize: 30, weight: .bold), color: .white, align: .left, lines: 1)
+        PiPEngine.text(
+          m.artist, CGRect(x: 156, y: 90, width: CGFloat(W) - 196, height: 34),
+          font: .systemFont(ofSize: 23, weight: .medium),
+          color: UIColor.white.withAlphaComponent(0.65), align: .left, lines: 1)
       case "minimal":
         PiPEngine.text(
           "\(m.title)  ·  \(m.artist)", CGRect(x: 60, y: 40, width: CGFloat(W) - 120, height: 36),
@@ -655,7 +788,8 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       guard let self else { return }
       self.queue.async {
         guard self.artUri == uri, let img else { return }
-        self.art = PiPEngine.downscale(img, max: 420)
+        // big enough for the full-bleed square card
+        self.art = PiPEngine.downscale(img, max: 720)
         self.artBlur = self.blurred(img)
         self.meta.version += 1
         self.renderNow(force: true)

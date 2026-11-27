@@ -10,7 +10,8 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { id3Size, SNIFF_BYTES, sniffBytes, SniffResult } from './formatSniff';
 
-const DIR_NAME = 'holysic-stream-cache';
+export const STREAM_CACHE_DIR = 'holysic-stream-cache';
+const DIR_NAME = STREAM_CACHE_DIR;
 const MAX_FILES = 40;
 const MAX_BYTES = 900 * 1024 * 1024;
 

@@ -430,6 +430,11 @@ async function shrinkImage(uri: string, max: number): Promise<string | undefined
   return saved.uri;
 }
 
+/** MIDI songs are named exactly like their file (minus the extension) */
+export function midiTitle(name: string): { title: string; artist?: string; trackNo?: number } {
+  return { title: name.replace(/\.[^.]+$/, '').trim() || name };
+}
+
 export function titleFromFileName(name: string): {
   title: string;
   artist?: string;
@@ -848,7 +853,9 @@ class LocalLibraryStore {
   private toLocalFile(rel: string, e: Entry, folderCover?: string): LocalFile {
     const meta = this.metaCache[rel] || { size: e.size, mtime: e.mtime, addedAt: e.mtime };
     const dir = dirOf(rel);
-    const guess = titleFromFileName(e.name);
+    // MIDI: the file name is the title, as is (embedded track names are usually "Piano 1" etc.)
+    const isMidi = MIDI_EXT.test(e.name);
+    const guess = isMidi ? midiTitle(e.name) : titleFromFileName(e.name);
     const dirParts = parts(dir);
     const ext = (e.name.match(/\.([^.]+)$/)?.[1] || '').toUpperCase();
     const ed = this.edits[rel] || {};
@@ -869,7 +876,7 @@ class LocalLibraryStore {
     const codec = meta.codec || ext;
     const track: Track = {
       id: LOCAL_ID_PREFIX + rel,
-      title: ed.title || meta.title || guess.title,
+      title: ed.title || (isMidi ? guess.title : meta.title || guess.title),
       artist,
       artists: artist.split(/\s*(?:,|&|feat\.?|ft\.?|x)\s+/i).filter(Boolean),
       album,
@@ -1274,9 +1281,10 @@ class LocalLibraryStore {
     trackNo?: number;
   } {
     const m = this.metaCache[rel] || ({} as CachedMeta);
-    const g = titleFromFileName(baseOf(rel));
+    const isMidi = MIDI_EXT.test(rel);
+    const g = isMidi ? midiTitle(baseOf(rel)) : titleFromFileName(baseOf(rel));
     return {
-      title: m.title || g.title,
+      title: isMidi ? g.title : m.title || g.title,
       artist: m.artist || g.artist,
       album: m.album,
       year: m.year,

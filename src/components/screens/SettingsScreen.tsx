@@ -39,6 +39,7 @@ import { MergedSettings } from '../merge/MergedSettings';
 import { EffectsSettings } from '../settings/EffectsSettings';
 import { LyricsIconSettings } from '../settings/LyricsIconSettings';
 import { VideoSettings } from '../settings/VideoSettings';
+import { StorageSettings } from '../settings/StorageSettings';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { TabBus, useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
@@ -698,6 +699,14 @@ export const SettingsScreen: React.FC = () => {
                     {vi ? 'Xoá bộ nhớ nguồn & cache FLAC' : 'Clear source memory & FLAC cache'}
                   </Text>
                 </Tap>
+                <Tap
+                  onPress={() => openPage('storage')}
+                  style={{ marginTop: 6, alignSelf: 'flex-start' }}
+                >
+                  <Text style={{ color: UI.text2, fontSize: 12, fontWeight: '700' }}>
+                    {vi ? 'Xem toàn bộ dung lượng ›' : 'See all storage ›'}
+                  </Text>
+                </Tap>
 
                 <Tap
                   feedback="opacity"
@@ -849,6 +858,7 @@ export const SettingsScreen: React.FC = () => {
               <MergedSettings part="blacklist" />
             </>
           )}
+          {page === 'storage' && <StorageSettings fontFamily={fontFamily} />}
           {page === 'language' && (
             <>
               {/* Language Switch */}

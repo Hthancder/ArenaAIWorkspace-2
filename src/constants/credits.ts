@@ -152,4 +152,13 @@ export const UPSTREAM_CREDITS: CreditProject[] = [
     roleEn: 'Headphone equalizer preset database & word-timed lyrics',
     url: 'https://autoeq.app',
   },
+  {
+    name: 'GeneralUser GS',
+    author: 'S. Christian Collins',
+    roleVi:
+      'Bộ mẫu nhạc cụ GM/GS dùng để phát MIDI (piano, dàn dây, trống…), giấy phép GeneralUser GS v2.0',
+    roleEn:
+      'GM/GS instrument bank used to play MIDI (pianos, strings, drums…), GeneralUser GS License v2.0',
+    url: 'https://schristiancollins.com/generaluser.php',
+  },
 ];

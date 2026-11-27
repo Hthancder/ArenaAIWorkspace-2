@@ -1,7 +1,7 @@
 Pod::Spec.new do |s|
   s.name           = 'HolySicDSP'
   s.version        = '1.0.0'
-  s.summary        = 'HolySic: native real-time DSP (10-band EQ, bass, reverb, width, 8D) and spectrum'
+  s.summary        = 'HolySic: native real-time DSP (10-band EQ, bass, reverb, width, 8D), spectrum and the MIDI renderer'
   s.description    = 'Installs an MTAudioProcessingTap on the AVPlayer used by expo-audio and processes the PCM in C, with a vDSP FFT for the visualizer.'
   s.author         = 'HolySic'
   s.homepage       = 'https://github.com/Hthancder/ArenaAIWorkspace-2'
@@ -20,4 +20,6 @@ Pod::Spec.new do |s|
   }
 
   s.source_files = '**/*.{h,m,mm,swift}'
+  # sample bank for the MIDI renderer (GeneralUser GS, flattened to 22 kHz — see SoundBank/)
+  s.resource_bundles = { 'HolySicSoundBank' => ['SoundBank/*.hsb'] }
 end

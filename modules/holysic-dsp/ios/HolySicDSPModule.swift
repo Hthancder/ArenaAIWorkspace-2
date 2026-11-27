@@ -135,12 +135,57 @@ public class HolySicDSPModule: Module {
       return rc == 0
     }
 
+    // sample-bank MIDI renderer (GeneralUser GS) — falls back to renderMidi when the bank is missing
+    Function("soundBankAvailable") { () -> Bool in
+      return HolySicDSPModule.soundBankPath() != nil
+    }
+
+    AsyncFunction("renderMidiBank") {
+      (events: [Double], durationSec: Double, sampleRate: Int, outUri: String, pianoBank: Int,
+       pianoProgram: Int) -> Bool in
+      let count = events.count / 5
+      guard count > 0, durationSec > 0, let bank = HolySicDSPModule.soundBankPath() else {
+        return false
+      }
+      guard HSBankLoad(bank) == 0 else { return false }
+      let path: String
+      if let url = URL(string: outUri), url.isFileURL {
+        path = url.path
+      } else {
+        path = outUri.hasPrefix("file://") ? String(outUri.dropFirst(7)) : outUri
+      }
+      let rc = events.withUnsafeBufferPointer { buf -> Int32 in
+        guard let base = buf.baseAddress else { return -1 }
+        return HSSampleRender(
+          base, Int32(count), durationSec, Int32(sampleRate), path, Int32(pianoBank),
+          Int32(pianoProgram), nil)
+      }
+      return rc == 0
+    }
+
     OnDestroy {
       self.setTimer(false)
       self.attachments.values.forEach { $0.itemObservation?.invalidate() }
       self.attachments.removeAll()
     }
   }
+
+  // MARK: - sound bank
+
+  /// HolySicSoundBank.bundle/holysic-gm.hsb (main bundle for static pods, else the pod's bundle)
+  private static let bankPath: String? = {
+    for b in [Bundle.main, Bundle(for: HolySicDSPModule.self)] {
+      if let url = b.url(forResource: "HolySicSoundBank", withExtension: "bundle"),
+        let rb = Bundle(url: url), let p = rb.path(forResource: "holysic-gm", ofType: "hsb")
+      {
+        return p
+      }
+      if let p = b.path(forResource: "holysic-gm", ofType: "hsb") { return p }
+    }
+    return nil
+  }()
+
+  static func soundBankPath() -> String? { bankPath }
 
   // MARK: - items
 
