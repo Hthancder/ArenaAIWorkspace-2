@@ -565,14 +565,6 @@ const styles = themedSheet(() => ({
     fontSize: 12.5,
     marginTop: 3,
   },
-  emptyNote: {
-    color: UI.text2,
-    fontSize: 14,
-    textAlign: 'center',
-    paddingHorizontal: 36,
-    paddingVertical: 44,
-    lineHeight: 21,
-  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: UI.shade(0, 0, 0, 0.68),

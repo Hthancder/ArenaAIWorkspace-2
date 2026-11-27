@@ -2,9 +2,17 @@
 // Shuffle liked songs, Mix It, Search. Items are dynamic (set from JS after launch, so the
 // subtitle can name the last song); the chosen one reaches JS as an event, or — on a cold
 // start — through consumeInitial().
+//
+// Spotlight: liked songs and playlists are indexed with Core Spotlight (domain
+// "holysic.library"), so pulling down on the Home Screen and typing a song or playlist name finds
+// it in HolySic. Tapping a result arrives as a "spotlight:<id>" shortcut through the same path.
 
+import CoreSpotlight
 import ExpoModulesCore
 import UIKit
+import UniformTypeIdentifiers
+
+let holySicSpotlightDomain = "holysic.library"
 
 let holySicShortcutNotification = Notification.Name("HolySicShortcutSelected")
 /// shortcut that launched the app (cold start), until JS consumes it
@@ -30,6 +38,24 @@ public class HolySicShortcutsAppDelegate: ExpoAppDelegateSubscriber {
     NotificationCenter.default.post(
       name: holySicShortcutNotification, object: nil, userInfo: ["type": shortcutItem.type])
     completionHandler(true)
+  }
+
+  /// a Spotlight result was tapped (warm or cold start)
+  public func application(
+    _ application: UIApplication,
+    continue userActivity: NSUserActivity,
+    restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+  ) -> Bool {
+    // the subscriber manager waits for every subscriber to answer
+    defer { restorationHandler(nil) }
+    guard userActivity.activityType == CSSearchableItemActionType,
+      let id = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String
+    else { return false }
+    let type = "spotlight:" + id
+    holySicInitialShortcut = type
+    NotificationCenter.default.post(
+      name: holySicShortcutNotification, object: nil, userInfo: ["type": type])
+    return true
   }
 }
 
@@ -61,6 +87,31 @@ public class HolySicShortcutsModule: Module {
       }
       DispatchQueue.main.async {
         UIApplication.shared.shortcutItems = built
+      }
+    }
+
+    /// items: [{ id, title, subtitle?, keywords? (comma separated) }] — replaces the whole index
+    Function("indexSpotlight") { (items: [[String: String]]) in
+      guard CSSearchableIndex.isIndexingAvailable() else { return }
+      let built: [CSSearchableItem] = items.prefix(500).compactMap { d in
+        guard let id = d["id"], let title = d["title"], !title.isEmpty else { return nil }
+        let attrs = CSSearchableItemAttributeSet(contentType: UTType.audio)
+        attrs.title = title
+        attrs.displayName = title
+        if let sub = d["subtitle"], !sub.isEmpty { attrs.contentDescription = sub }
+        if let kw = d["keywords"], !kw.isEmpty {
+          attrs.keywords = kw.split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespaces)
+          }
+        }
+        let item = CSSearchableItem(
+          uniqueIdentifier: id, domainIdentifier: holySicSpotlightDomain, attributeSet: attrs)
+        item.expirationDate = Date.distantFuture
+        return item
+      }
+      let index = CSSearchableIndex.default()
+      index.deleteSearchableItems(withDomainIdentifiers: [holySicSpotlightDomain]) { _ in
+        if !built.isEmpty { index.indexSearchableItems(built, completionHandler: nil) }
       }
     }
 

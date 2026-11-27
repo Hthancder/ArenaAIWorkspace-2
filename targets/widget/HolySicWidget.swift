@@ -86,6 +86,20 @@ struct LyricLine: Codable, Hashable {
   var t: Double
   /// text ("" = instrumental gap)
   var x: String
+  /// word start times (seconds into the song), parallel to `wt`
+  var ws: [Double]? = nil
+  /// the words as shown, spacing included
+  var wt: [String]? = nil
+
+  /// words that have started at `elapsed` (-1 = this line has no word timing)
+  func wordsLit(at elapsed: Double) -> Int {
+    guard let ws = ws, let wt = wt, !ws.isEmpty, ws.count == wt.count else { return -1 }
+    var n = 0
+    for s in ws {
+      if elapsed + 0.08 >= s { n += 1 } else { break }
+    }
+    return n
+  }
 }
 
 struct LyricsPack: Codable {
@@ -896,6 +910,8 @@ struct LyricsEntry: TimelineEntry {
   let lines: [LyricLine]?
   /// current line (-1 = before the first line)
   let index: Int
+  /// words of the current line already sung (-1 = light the whole line)
+  var word: Int = -1
   var isSample = false
 }
 
@@ -904,7 +920,10 @@ struct LyricsProvider: TimelineProvider {
   static let sampleLines: [LyricLine] = [
     LyricLine(t: 60, x: "Phố đêm lên đèn, gió ru qua hồ"),
     LyricLine(t: 66, x: "Mình đi chậm thôi, để nghe thành phố thở"),
-    LyricLine(t: 72, x: "Một chút mưa bay, một chút giai điệu"),
+    LyricLine(
+      t: 72, x: "Một chút mưa bay, một chút giai điệu",
+      ws: [72, 72.4, 72.8, 73.3, 73.9, 74.3, 74.7, 75.2],
+      wt: ["Một ", "chút ", "mưa ", "bay, ", "một ", "chút ", "giai ", "điệu"]),
     LyricLine(t: 78, x: "Giữ lại đêm nay trong từng nhịp nhỏ"),
     LyricLine(t: 84, x: "Và ta cứ hát, như chưa từng vội"),
   ]
@@ -912,16 +931,19 @@ struct LyricsProvider: TimelineProvider {
   func placeholder(in context: Context) -> LyricsEntry {
     LyricsEntry(
       date: Date(), np: NowPlayingProvider.sample, art: nil, lines: Self.sampleLines, index: 2,
-      isSample: true)
+      word: 4, isSample: true)
   }
 
   func getSnapshot(in context: Context, completion: @escaping (LyricsEntry) -> Void) {
     Heartbeat.beat(context.isPreview ? "gallery" : "snapshot")
     if let np = SharedStore.nowPlaying() {
       let lines = SharedStore.lyrics(for: np)
-      let idx = lines.map { lyricIndex($0, at: np.elapsed(at: Date())) } ?? -1
+      let el = np.elapsed(at: Date())
+      let idx = lines.map { lyricIndex($0, at: el) } ?? -1
+      let word = (lines != nil && idx >= 0) ? lines![idx].wordsLit(at: el) : -1
       completion(
-        LyricsEntry(date: Date(), np: np, art: SharedStore.artwork(), lines: lines, index: idx))
+        LyricsEntry(
+          date: Date(), np: np, art: SharedStore.artwork(), lines: lines, index: idx, word: word))
     } else {
       completion(placeholder(in: context))
     }
@@ -942,27 +964,58 @@ struct LyricsProvider: TimelineProvider {
     }
     let elapsedNow = song.elapsed(at: now)
     let current = lyricIndex(ls, at: elapsedNow)
-    var entries = [LyricsEntry(date: now, np: song, art: art, lines: ls, index: current)]
+    let litNow = current >= 0 ? ls[current].wordsLit(at: elapsedNow) : -1
+    var entries = [
+      LyricsEntry(date: now, np: song, art: art, lines: ls, index: current, word: litNow)
+    ]
     guard song.isPlaying, song.duration > 0, song.isLive != true else {
       // paused: the line where it stopped; the app reloads us on resume / seek
       completion(Timeline(entries: entries, policy: .never))
       return
     }
-    // Playing: an entry at the start of every upcoming line — WidgetKit swaps them on time, so
-    // the lyrics follow the music without the app doing anything
+    // Playing: an entry at the start of every upcoming line and as each word begins — WidgetKit
+    // swaps them on time, so the line lights up word by word (like the player) without the app
+    // doing anything. Word steps keep ≥ 0.45 s apart; a word that would crowd the previous step
+    // simply lands on the next one.
     let start = song.startDate
     let end = song.endDate
+    let cap = 420
+    let minStep = 0.45
+    var lastAt = now
+    /// word steps of line `li` after `from`, before the next line begins
+    func addWords(_ li: Int, after from: Date) {
+      guard let ws = ls[li].ws, ls[li].wt?.count == ws.count else { return }
+      let lineEnd = li + 1 < ls.count ? start.addingTimeInterval(ls[li + 1].t) : end
+      for s in ws {
+        if entries.count >= cap { return }
+        var at = start.addingTimeInterval(s)
+        if at <= from { continue }
+        if at.timeIntervalSince(lastAt) < minStep { at = lastAt.addingTimeInterval(minStep) }
+        if at >= lineEnd.addingTimeInterval(-0.05) || at >= end { return }
+        let el = at.timeIntervalSince(start)
+        entries.append(
+          LyricsEntry(
+            date: at, np: song, art: art, lines: ls, index: li, word: ls[li].wordsLit(at: el)))
+        lastAt = at
+      }
+    }
+    if current >= 0 { addWords(current, after: now) }
     var i = current + 1
-    while i < ls.count && entries.count < 240 {
+    while i < ls.count && entries.count < cap {
       let at = start.addingTimeInterval(ls[i].t)
       if at >= end { break }
       if at > now {
-        entries.append(LyricsEntry(date: at, np: song, art: art, lines: ls, index: i))
+        let el = at.timeIntervalSince(start)
+        entries.append(
+          LyricsEntry(
+            date: at, np: song, art: art, lines: ls, index: i, word: ls[i].wordsLit(at: el)))
+        lastAt = at
       }
+      addWords(i, after: max(at, now))
       i += 1
     }
     var policy: TimelineReloadPolicy = .never
-    if i < ls.count && entries.count >= 240, let last = entries.last {
+    if i < ls.count && entries.count >= cap, let last = entries.last {
       // very long lyrics: ask for the rest when this batch runs out
       policy = .after(last.date)
     } else {
@@ -1002,10 +1055,26 @@ func lyricsMessage(_ np: NowPlaying) -> (icon: String, text: String) {
   }
 }
 
+/// The current line with its sung words lit and the rest still dim — karaoke-style, the way the
+/// player shows it (one Text, so it wraps and scales as a whole)
+func litLine(_ lines: [LyricLine], _ index: Int, word: Int, lit: Color, dim: Color) -> Text {
+  guard index >= 0, index < lines.count else { return Text("♪ ♪ ♪").foregroundColor(lit) }
+  let line = lines[index]
+  guard word >= 0, let wt = line.wt, !wt.isEmpty, !line.x.isEmpty else {
+    return Text(lyricText(lines, index) ?? "♪").foregroundColor(lit)
+  }
+  var out = Text("")
+  for (k, w) in wt.enumerated() {
+    out = out + Text(w).foregroundColor(k < word ? lit : dim)
+  }
+  return out
+}
+
 /// previous · current · next lines, the current one big
 struct LyricStack: View {
   let lines: [LyricLine]
   let index: Int
+  var word: Int = -1
   let accent: Color
   var before = 1
   var after = 1
@@ -1023,12 +1092,11 @@ struct LyricStack: View {
             .lineLimit(1)
         }
       }
-      Text(index >= 0 ? (lyricText(lines, index) ?? "♪") : "♪ ♪ ♪")
+      litLine(lines, index, word: word, lit: .white, dim: .white.opacity(0.4))
         .font(.system(size: currentSize, weight: .heavy, design: .rounded))
-        .foregroundColor(.white)
         .lineLimit(currentLines)
         .minimumScaleFactor(0.78)
-        .shadow(color: accent.opacity(0.55), radius: 10, x: 0, y: 0)
+        .shadow(color: accent.opacity(word >= 0 ? 0.4 : 0.55), radius: 10, x: 0, y: 0)
         .fixedSize(horizontal: false, vertical: true)
       ForEach(Array(stride(from: index + 1, through: index + after, by: 1)), id: \.self) { i in
         if let t = lyricText(lines, i) {
@@ -1114,7 +1182,8 @@ struct LyricsSmallView: View {
       Spacer(minLength: 6)
       if let lines = entry.lines {
         LyricStack(
-          lines: lines, index: entry.index, accent: theme.accent, before: 0, after: 1,
+          lines: lines, index: entry.index, word: entry.word, accent: theme.accent, before: 0,
+          after: 1,
           currentSize: 15, otherSize: 11, currentLines: 4)
       } else {
         LyricsMessageView(np: np, accent: theme.accent, size: 12.5)
@@ -1143,7 +1212,8 @@ struct LyricsMediumView: View {
       Spacer(minLength: 6)
       if let lines = entry.lines {
         LyricStack(
-          lines: lines, index: entry.index, accent: theme.accent, before: 1, after: 1,
+          lines: lines, index: entry.index, word: entry.word, accent: theme.accent, before: 1,
+          after: 1,
           currentSize: 17, otherSize: 12, currentLines: 2)
       } else {
         LyricsMessageView(np: np, accent: theme.accent, size: 14)
@@ -1173,7 +1243,8 @@ struct LyricsLargeView: View {
       Spacer(minLength: 10)
       if let lines = entry.lines {
         LyricStack(
-          lines: lines, index: entry.index, accent: theme.accent, before: 2, after: 4,
+          lines: lines, index: entry.index, word: entry.word, accent: theme.accent, before: 2,
+          after: 4,
           currentSize: 22, otherSize: 14.5, currentLines: 3)
       } else {
         LyricsMessageView(np: np, accent: theme.accent, size: 16)
@@ -1212,10 +1283,16 @@ struct LyricsAccessoryView: View {
               Text(np.title).font(.system(size: 11, weight: .heavy)).lineLimit(1)
                 .widgetAccentable()
             }
-            Text(line)
-              .font(.system(size: 14, weight: .bold, design: .rounded))
-              .lineLimit(2)
-              .minimumScaleFactor(0.8)
+            Group {
+              if let lines = entry.lines {
+                litLine(lines, entry.index, word: entry.word, lit: .primary, dim: .secondary)
+              } else {
+                Text(line)
+              }
+            }
+            .font(.system(size: 14, weight: .bold, design: .rounded))
+            .lineLimit(2)
+            .minimumScaleFactor(0.8)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
         }

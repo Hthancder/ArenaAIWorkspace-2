@@ -49,6 +49,11 @@ export interface WidgetLyricLine {
   t: number;
   /** text ('' = instrumental gap) */
   x: string;
+  /** word starts (seconds into the song) — parallel to `wt`; the widget lights the line word by
+   *  word like the player. Word-synced lyrics send real timings; line-synced ones are spread. */
+  ws?: number[];
+  /** the words as shown, spacing included (joined they equal `x`) */
+  wt?: string[];
 }
 
 export interface WidgetLyrics {

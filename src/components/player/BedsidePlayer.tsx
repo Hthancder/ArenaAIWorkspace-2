@@ -3,7 +3,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useKeepAwake } from 'expo-keep-awake';
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Tap } from '../ui/Tap';
 import { ArtworkImage } from '../ArtworkImage';
 import { BedsideClockFace, BedsideNightTint } from '../../constants/preferences';
 import { useHolySic } from '../../context/HolySicContext';
@@ -25,6 +26,7 @@ export const BedsideClockView: React.FC = () => {
     haptic,
     seekBy,
   } = useHolySic();
+  const vi = prefs.language === 'vi';
   const ff = useHoldSeek(seekBy, 1);
   const rw = useHoldSeek(seekBy, -1);
 
@@ -71,7 +73,7 @@ export const BedsideClockView: React.FC = () => {
   return (
     <View style={styles.container}>
       {/* Clock Tile */}
-      <Pressable onPress={cycleFace} style={styles.clockTile}>
+      <Tap onPress={cycleFace} style={styles.clockTile}>
         {prefs.bedsideClockFace === 'STACKED' ? (
           <View style={{ alignItems: 'center' }}>
             <Text style={[styles.stackedDigits, { color: tintColor }]}>{hh}</Text>
@@ -85,7 +87,7 @@ export const BedsideClockView: React.FC = () => {
         <Text style={[styles.dateSub, { color: tintColor + 'AA' }]}>
           {dateLabel.toUpperCase()} · NIGHTSTAND OLED
         </Text>
-      </Pressable>
+      </Tap>
 
       {/* Quiet Music Tile */}
       <View style={[styles.musicTile, { borderColor: tintColor + '28' }]}>
@@ -103,10 +105,10 @@ export const BedsideClockView: React.FC = () => {
               {currentTrack.artist}
             </Text>
           </View>
-          <Pressable onPress={cycleTint} style={styles.tintPill}>
+          <Tap onPress={cycleTint} style={styles.tintPill}>
             <Ionicons name="moon" size={13} color={tintColor} />
             <Text style={[styles.tintText, { color: tintColor }]}>{prefs.bedsideNightTint}</Text>
-          </Pressable>
+          </Tap>
         </View>
 
         {activeLyric && (
@@ -116,7 +118,10 @@ export const BedsideClockView: React.FC = () => {
         )}
 
         <View style={styles.nightControls}>
-          <Pressable
+          <Tap
+            feedback="opacity"
+            accessibilityRole="button"
+            accessibilityLabel={vi ? 'Bài trước' : 'Previous'}
             onPress={rw.guard(playPrevious)}
             onLongPress={rw.onLongPress}
             onPressOut={rw.onPressOut}
@@ -124,8 +129,10 @@ export const BedsideClockView: React.FC = () => {
             style={styles.nightBtn}
           >
             <Ionicons name="play-skip-back" size={24} color={tintColor} />
-          </Pressable>
-          <Pressable
+          </Tap>
+          <Tap
+            accessibilityRole="button"
+            accessibilityLabel={isPlaying ? (vi ? 'Tạm dừng' : 'Pause') : vi ? 'Phát' : 'Play'}
             onPress={togglePlay}
             style={[styles.nightPlayCircle, { borderColor: tintColor }]}
           >
@@ -135,8 +142,11 @@ export const BedsideClockView: React.FC = () => {
               color={tintColor}
               style={!isPlaying ? { marginLeft: 2 } : undefined}
             />
-          </Pressable>
-          <Pressable
+          </Tap>
+          <Tap
+            feedback="opacity"
+            accessibilityRole="button"
+            accessibilityLabel={vi ? 'Bài tiếp' : 'Next'}
             onPress={ff.guard(playNext)}
             onLongPress={ff.onLongPress}
             onPressOut={ff.onPressOut}
@@ -144,7 +154,7 @@ export const BedsideClockView: React.FC = () => {
             style={styles.nightBtn}
           >
             <Ionicons name="play-skip-forward" size={24} color={tintColor} />
-          </Pressable>
+          </Tap>
         </View>
       </View>
     </View>

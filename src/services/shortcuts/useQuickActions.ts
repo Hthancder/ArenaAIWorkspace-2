@@ -7,6 +7,10 @@
 //
 // The native side (modules/holysic-shortcuts) publishes the items and forwards the tap; a cold
 // start through a shortcut is picked up with consumeInitial() once the queue has been restored.
+//
+// Spotlight: liked songs and playlists are indexed too (Home Screen → swipe down → type), and a
+// tapped result comes back through the same channel as `spotlight:track:<id>` /
+// `spotlight:playlist:<id>`.
 
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
@@ -39,6 +43,8 @@ export function useQuickActions() {
     playTrack,
     startInstantMix,
     setActiveTab,
+    playlists,
+    openCollection,
   } = useHolySic();
   const vi = prefs.language === 'vi';
 
@@ -74,6 +80,45 @@ export function useQuickActions() {
     }
   }, [vi, currentTrack?.id, currentTrack, likedTracks.length]);
 
+  // Spotlight index — rebuilt (debounced) when the liked songs or playlists change
+  const spotlightKey =
+    likedTracks.map((t) => t.id).join('|') +
+    '#' +
+    playlists.map((p) => `${p.id}:${p.name}:${p.tracks.length}`).join('|') +
+    (vi ? 'vi' : 'en');
+  useEffect(() => {
+    const m = mod();
+    if (!m?.indexSpotlight) return;
+    const t = setTimeout(() => {
+      const items = [
+        ...playlists
+          .filter((p) => !p.isSystem)
+          .slice(0, 100)
+          .map((p) => ({
+            id: `playlist:${p.id}`,
+            title: p.name,
+            subtitle: `Playlist · ${p.tracks.length} ${vi ? 'bài' : 'songs'}`,
+            keywords: ['HolySic', 'playlist', ...p.tracks.slice(0, 8).map((x) => x.artist)]
+              .filter(Boolean)
+              .join(','),
+          })),
+        ...likedTracks.slice(0, 400).map((tr) => ({
+          id: `track:${tr.id}`,
+          title: tr.title,
+          subtitle: [tr.artist, tr.album].filter(Boolean).join(' · '),
+          keywords: ['HolySic', tr.artist, tr.album].filter(Boolean).join(','),
+        })),
+      ];
+      try {
+        m.indexSpotlight!(items);
+      } catch {
+        // ignore
+      }
+    }, 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spotlightKey]);
+
   const acts = useRef({
     currentTrack,
     isPlaying,
@@ -83,6 +128,8 @@ export function useQuickActions() {
     playTrack,
     startInstantMix,
     setActiveTab,
+    playlists,
+    openCollection,
   });
   acts.current = {
     currentTrack,
@@ -93,6 +140,8 @@ export function useQuickActions() {
     playTrack,
     startInstantMix,
     setActiveTab,
+    playlists,
+    openCollection,
   };
 
   useEffect(() => {
@@ -105,6 +154,23 @@ export function useQuickActions() {
       if (Date.now() - lastRun < 1500) return;
       lastRun = Date.now();
       const x = acts.current;
+      if (type.startsWith('spotlight:')) {
+        const [, kind, ...rest] = type.split(':');
+        const id = rest.join(':');
+        if (kind === 'playlist') {
+          if (!x.playlists.some((p) => p.id === id)) return;
+          x.setIsPlayerOpen(false);
+          x.setActiveTab('library');
+          x.openCollection({ kind: 'playlist', playlistId: id });
+        } else if (kind === 'track') {
+          const i = x.likedTracks.findIndex((t) => t.id === id);
+          if (i < 0) return;
+          // play it inside the liked songs, so the queue carries on from there
+          x.playTrack(x.likedTracks[i], x.likedTracks);
+          x.setIsPlayerOpen(true);
+        }
+        return;
+      }
       switch (type as ShortcutType) {
         case 'resume':
           if (!x.currentTrack) return;

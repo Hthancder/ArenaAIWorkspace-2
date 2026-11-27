@@ -2,7 +2,8 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Tap } from '../ui/Tap';
 import { ArtworkImage } from '../ArtworkImage';
 import { IpodTheme } from '../../constants/preferences';
 import { useHolySic } from '../../context/HolySicContext';
@@ -81,6 +82,7 @@ export const IpodClassicView: React.FC = () => {
   if (!currentTrack) return null;
 
   const skin = IPOD_PALETTES[prefs.ipodTheme] || IPOD_PALETTES.BLACK;
+  const vi = prefs.language === 'vi';
   const progress = durationSec > 0 ? Math.min(1, Math.max(0, positionSec / durationSec)) : 0;
 
   const cycleSkin = () => {
@@ -127,7 +129,8 @@ export const IpodClassicView: React.FC = () => {
               {queue.slice(0, 14).map((item, idx) => {
                 const selected = idx === queueIndex;
                 return (
-                  <Pressable
+                  <Tap
+                    feedback="opacity"
                     key={`${item.id}-${idx}`}
                     onPress={() => {
                       haptic('selection');
@@ -152,7 +155,7 @@ export const IpodClassicView: React.FC = () => {
                       size={13}
                       color={selected ? '#FFF' : '#94A3B8'}
                     />
-                  </Pressable>
+                  </Tap>
                 );
               })}
             </ScrollView>
@@ -213,7 +216,8 @@ export const IpodClassicView: React.FC = () => {
 
               {/* Classic iPod glossy blue progress bar */}
               <View style={styles.lcdProgressArea}>
-                <Pressable
+                <Tap
+                  feedback="none"
                   onPress={(e) => {
                     const locX = (e.nativeEvent as any).locationX;
                     if (typeof locX === 'number' && durationSec > 0) {
@@ -226,7 +230,7 @@ export const IpodClassicView: React.FC = () => {
                   ]}
                 >
                   <View style={[styles.lcdBarFill, { width: `${progress * 100}%` }]} />
-                </Pressable>
+                </Tap>
                 <View style={styles.lcdTimes}>
                   <Text
                     style={{
@@ -254,7 +258,10 @@ export const IpodClassicView: React.FC = () => {
 
         {/* Tactile Click Wheel */}
         <View style={[styles.wheel, { backgroundColor: skin.wheel }]}>
-          <Pressable
+          <Tap
+            feedback="opacity"
+            accessibilityRole="button"
+            accessibilityLabel="Menu"
             hitSlop={12}
             onPress={() => {
               haptic('selection');
@@ -263,9 +270,12 @@ export const IpodClassicView: React.FC = () => {
             style={styles.wheelTop}
           >
             <Text style={[styles.wheelMenuText, { color: skin.wheelText }]}>MENU</Text>
-          </Pressable>
+          </Tap>
 
-          <Pressable
+          <Tap
+            feedback="opacity"
+            accessibilityRole="button"
+            accessibilityLabel={vi ? 'Bài trước' : 'Previous'}
             hitSlop={12}
             onPress={rw.guard(playPrevious)}
             onLongPress={rw.onLongPress}
@@ -274,9 +284,12 @@ export const IpodClassicView: React.FC = () => {
             style={styles.wheelLeft}
           >
             <Ionicons name="play-back" size={18} color={skin.wheelText} />
-          </Pressable>
+          </Tap>
 
-          <Pressable
+          <Tap
+            feedback="opacity"
+            accessibilityRole="button"
+            accessibilityLabel={vi ? 'Bài tiếp' : 'Next'}
             hitSlop={12}
             onPress={ff.guard(playNext)}
             onLongPress={ff.onLongPress}
@@ -285,22 +298,26 @@ export const IpodClassicView: React.FC = () => {
             style={styles.wheelRight}
           >
             <Ionicons name="play-forward" size={18} color={skin.wheelText} />
-          </Pressable>
+          </Tap>
 
-          <Pressable hitSlop={12} onPress={togglePlay} style={styles.wheelBottom}>
+          <Tap
+            feedback="opacity"
+            accessibilityRole="button"
+            accessibilityLabel={isPlaying ? (vi ? 'Tạm dừng' : 'Pause') : vi ? 'Phát' : 'Play'}
+            hitSlop={12}
+            onPress={togglePlay}
+            style={styles.wheelBottom}
+          >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
               <Ionicons name="play" size={15} color={skin.wheelText} />
               <Ionicons name="pause" size={15} color={skin.wheelText} />
             </View>
-          </Pressable>
+          </Tap>
 
           {/* Center Button cycles iPod Chassis Finish (Silver / Black / U2 / True Dark) */}
-          <Pressable
-            onPress={cycleSkin}
-            style={[styles.centerBtn, { backgroundColor: skin.center }]}
-          >
+          <Tap onPress={cycleSkin} style={[styles.centerBtn, { backgroundColor: skin.center }]}>
             <Text style={[styles.skinHint, { color: skin.wheelText }]}>{prefs.ipodTheme}</Text>
-          </Pressable>
+          </Tap>
         </View>
       </View>
     </View>

@@ -11,8 +11,10 @@ import {
   publishLyrics,
   publishNowPlaying,
   WidgetAction,
+  WidgetLyricLine,
   widgetSupported,
 } from './nowPlayingWidget';
+import type { LyricLine } from '../../types/music';
 
 const BRAND_TOP = '#2A1452';
 const BRAND_BOTTOM = '#06050B';
@@ -27,6 +29,51 @@ function shade(hex: string | undefined, k: number): string | undefined {
       .toString(16)
       .padStart(2, '0');
   return `#${c((n >> 16) & 255)}${c((n >> 8) & 255)}${c(n & 255)}`;
+}
+
+const r2 = (n: number) => Math.max(0, Math.round(n * 100) / 100);
+
+/**
+ * One lyric line for the widget, with per-word start times so it can light the words one by one
+ * (as the player does). Real word timings are used when the lyrics have them; otherwise the
+ * words are spread across the line by length — a gentle karaoke sweep that ends a little before
+ * the next line, never racing ahead of a slow line.
+ */
+function widgetLine(
+  l: LyricLine,
+  nextStart: number | undefined,
+  offset: number,
+  songSec: number
+): WidgetLyricLine {
+  const t = r2(l.startSec + offset);
+  const words = (l.words || []).filter((w) => (w.text || '').trim());
+  if (words.length > 1) {
+    const ws: number[] = [];
+    const wt: string[] = [];
+    words.forEach((w, i) => {
+      const txt = w.text.replace(/\s+/g, ' ');
+      const next = words[i + 1]?.text || '';
+      const gap = i < words.length - 1 && !/\s$/.test(txt) && !/^\s/.test(next) ? ' ' : '';
+      ws.push(r2(Math.max(l.startSec, w.startSec) + offset));
+      wt.push(txt + gap);
+    });
+    const x = wt.join('').trim();
+    if (x.length <= 200) return { t, x, ws, wt };
+  }
+  const x = (l.text || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+  const parts = x.match(/\S+\s*/g) || [];
+  if (parts.length < 2) return { t, x };
+  // the time this line owns: until the next line (or its own end), at most ~0.42 s per word
+  const end = l.endSec ?? nextStart ?? Math.min(songSec || l.startSec + 6, l.startSec + 6);
+  const span = Math.max(0.6, Math.min((end - l.startSec) * 0.85, parts.length * 0.42 + 0.6));
+  const total = parts.reduce((n, p) => n + p.trim().length + 1, 0);
+  let acc = 0;
+  const ws = parts.map((p) => {
+    const at = l.startSec + (acc / total) * span;
+    acc += p.trim().length + 1;
+    return r2(at + offset);
+  });
+  return { t, x, ws, wt: parts };
 }
 
 export function useWidgetBridge() {
@@ -80,16 +127,18 @@ export function useWidgetBridge() {
       publishLyrics(null);
       return;
     }
+    const main = songLyrics.lines.filter((l) => !l.isBackground).slice(0, 600);
     publishLyrics({
       id: lyricsId,
       synced: true,
-      lines: songLyrics.lines
-        .filter((l) => !l.isBackground)
-        .slice(0, 600)
-        .map((l) => ({
-          t: Math.max(0, Math.round((l.startSec + lyricsOffsetSec) * 100) / 100),
-          x: (l.text || '').replace(/\s+/g, ' ').trim().slice(0, 160),
-        })),
+      lines: main.map((l, i) =>
+        widgetLine(
+          l,
+          main[i + 1]?.startSec,
+          lyricsOffsetSec,
+          durationSec || currentTrack!.durationSec
+        )
+      ),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, lyricsId, songLyrics]);

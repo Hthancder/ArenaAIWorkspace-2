@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArtistBioCard } from '../ArtistBioCard';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Easing,
   Modal,
@@ -30,6 +31,7 @@ import { exportPlaylistM3U } from '../../services/import/playlistFiles';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { EmptyState } from '../ui/EmptyState';
 import { Tap } from '../ui/Tap';
+import { GlassSurface } from '../GlassSurface';
 
 export const CollectionModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -65,6 +67,8 @@ export const CollectionModal: React.FC = () => {
   // (or the back button) slides it away while the app shows through, dimmed, behind it ──
   const { width: screenW } = useWindowDimensions();
   const pushX = useRef(new Animated.Value(screenW)).current;
+  // scroll offset (native-driven) for the pinned bar that materialises as the hero scrolls away
+  const scrollY = useRef(new Animated.Value(0)).current;
   // a transformed layer only while the page moves; a plain view once it has settled
   const [moving, setMoving] = useState(true);
   const open = Boolean(collectionTarget);
@@ -132,6 +136,7 @@ export const CollectionModal: React.FC = () => {
   const [sortBy, setSortBy] = useState<'default' | 'title' | 'artist' | 'duration'>('default');
 
   useEffect(() => {
+    scrollY.setValue(0);
     setSelecting(false);
     setSelected({});
     setFilterQ('');
@@ -302,26 +307,24 @@ export const CollectionModal: React.FC = () => {
           moving && { transform: [{ translateX: pushX }] },
         ]}
       >
-        <ScrollView
+        <Animated.ScrollView
           contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
           showsVerticalScrollIndicator={false}
           automaticallyAdjustKeyboardInsets
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          scrollEventThrottle={16}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+            useNativeDriver: true,
+          })}
         >
           <LinearGradient
             colors={[headerPalette.gradient[0], UI.surface('#0A0A0F')]}
             style={[styles.hero, { paddingTop: Math.max(insets.top, 16) }]}
           >
             <View style={styles.navBar}>
-              <Tap
-                onPress={goBack}
-                style={styles.backBtn}
-                accessibilityRole="button"
-                accessibilityLabel={prefs.language === 'vi' ? 'Quay lại' : 'Back'}
-              >
-                <Ionicons name="chevron-back" size={22} color={UI.text} />
-              </Tap>
+              {/* the back button lives in the pinned bar below (it stays put while you scroll) */}
+              <View style={{ width: 38, height: 38 }} />
 
               <View style={{ flex: 1 }} />
               {tracks.length > 0 && (
@@ -343,10 +346,24 @@ export const CollectionModal: React.FC = () => {
               {removablePlaylistId && (
                 <Tap
                   onPress={() => {
-                    deletePlaylist(removablePlaylistId!);
-                    openCollection(null);
+                    const id = removablePlaylistId!;
+                    const doDelete = () => {
+                      deletePlaylist(id);
+                      goBack();
+                    };
+                    const q = vi ? `Xoá playlist “${title}”?` : `Delete “${title}”?`;
+                    if (Platform.OS === 'web') {
+                      // eslint-disable-next-line no-alert
+                      if (typeof window !== 'undefined' && window.confirm(q)) doDelete();
+                      return;
+                    }
+                    Alert.alert(q, vi ? 'Không thể hoàn tác.' : 'This can’t be undone.', [
+                      { text: vi ? 'Huỷ' : 'Cancel', style: 'cancel' },
+                      { text: vi ? 'Xoá' : 'Delete', style: 'destructive', onPress: doDelete },
+                    ]);
                   }}
                   style={styles.backBtn}
+                  accessibilityLabel={vi ? 'Xoá playlist' : 'Delete playlist'}
                 >
                   <Ionicons name="trash-outline" size={19} color="#F87171" />
                 </Tap>
@@ -810,7 +827,71 @@ export const CollectionModal: React.FC = () => {
                 </ScrollView>
               </View>
             )}
-        </ScrollView>
+        </Animated.ScrollView>
+
+        {/* pinned bar: back stays in reach; once the hero has scrolled away a frosted bar with the
+            title fades in behind it (UINavigationBar scroll-edge behaviour) */}
+        <View
+          pointerEvents="box-none"
+          style={[styles.pinnedBar, { paddingTop: Math.max(insets.top, 16) }]}
+        >
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                opacity: scrollY.interpolate({
+                  inputRange: [120, 185],
+                  outputRange: [0, 1],
+                  extrapolate: 'clamp',
+                }),
+              },
+            ]}
+          >
+            <GlassSurface
+              intensity={70}
+              tintColor={UI.shade(12, 12, 18, 0.9)}
+              style={[StyleSheet.absoluteFill, styles.pinnedGlass]}
+            >
+              <View />
+            </GlassSurface>
+          </Animated.View>
+          <Tap
+            onPress={goBack}
+            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel={vi ? 'Quay lại' : 'Back'}
+          >
+            <Ionicons name="chevron-back" size={22} color={UI.text} />
+          </Tap>
+          <Animated.Text
+            numberOfLines={1}
+            pointerEvents="none"
+            style={[
+              styles.pinnedTitle,
+              { fontFamily },
+              {
+                opacity: scrollY.interpolate({
+                  inputRange: [215, 255],
+                  outputRange: [0, 1],
+                  extrapolate: 'clamp',
+                }),
+                transform: [
+                  {
+                    translateY: scrollY.interpolate({
+                      inputRange: [215, 255],
+                      outputRange: [6, 0],
+                      extrapolate: 'clamp',
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {title}
+          </Animated.Text>
+          <View style={{ width: 38 }} />
+        </View>
       </Animated.View>
       <SheetSlot layer="collection" />
     </Modal>
@@ -863,6 +944,29 @@ const styles = themedSheet(() => ({
   hero: {
     paddingHorizontal: 18,
     paddingBottom: 22,
+  },
+  pinnedBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingBottom: 8,
+    gap: 10,
+  },
+  pinnedGlass: {
+    borderWidth: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: UI.fg(0.12),
+  },
+  pinnedTitle: {
+    flex: 1,
+    textAlign: 'center',
+    color: UI.text,
+    fontSize: 16,
+    fontWeight: '800',
   },
   navBar: {
     flexDirection: 'row',

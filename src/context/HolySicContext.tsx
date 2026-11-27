@@ -1134,7 +1134,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
           showToast(
             prefsRef.current.language === 'vi'
               ? 'Đã dừng nhạc theo hẹn giờ cuối bài'
-              : 'Paused at end of track (Sleep Timer)'
+              : 'Sleep timer: paused at the end of the track'
           );
           return;
         }
