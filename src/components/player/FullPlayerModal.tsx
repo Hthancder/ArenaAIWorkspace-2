@@ -57,6 +57,7 @@ import { MusicVideoStage, VideoAmbient } from '../video/VideoSurfaces';
 import { useVideoState, videoWanted } from '../../services/video/videoStore';
 import { perfCount } from '../../services/perfProbe';
 import { openLyricsEditor } from './LyricsEditor';
+import { PipButton } from './PipButton';
 
 // "show the cover instead" survives closing / re-opening the player (this app session)
 let videoHiddenMemo = false;
@@ -1030,6 +1031,7 @@ export const FullPlayerModal: React.FC = () => {
                       style={{ flex: 1, marginVertical: -12 }}
                     />
                     <Ionicons name="volume-high" size={16} color="rgba(255,255,255,0.5)" />
+                    <PipButton style={styles.airplayBtn} />
                     {output.supported && (
                       <Tap
                         hitSlop={12}

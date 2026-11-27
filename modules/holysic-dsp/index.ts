@@ -33,6 +33,13 @@ export interface HolySicDSPNative {
   /** spectrum events per second (15…60) — older builds lack it */
   setSpectrumFps?(fps: number): void;
   getStatus(): DSPStatus;
+  /** MIDI → 16-bit stereo WAV at `outUri` (events: [t, kind, ch, a, b] × n) — newer builds only */
+  renderMidi?(
+    events: number[],
+    durationSec: number,
+    sampleRate: number,
+    outUri: string
+  ): Promise<boolean>;
   addListener(
     event: 'onSpectrum',
     cb: (e: { bands: number[]; sampleRate: number }) => void

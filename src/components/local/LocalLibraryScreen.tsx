@@ -347,7 +347,19 @@ export const LocalLibraryScreen: React.FC = () => {
   const importHere = async (dir: string) => {
     try {
       const n = await LocalLibrary.importFromPicker(dir);
-      if (n) showToast(vi ? `Đã thêm ${n} bài vào thư mục` : `Added ${n} songs`);
+      const skipped = LocalLibrary.lastSkipped;
+      const kinds = [...new Set(skipped.map((x) => x.reason))].join(', ');
+      const skipMsg = skipped.length
+        ? vi
+          ? `bỏ qua ${skipped.length} tệp iOS không phát được (${kinds})`
+          : `skipped ${skipped.length} file(s) iOS can't play (${kinds})`
+        : '';
+      if (n)
+        showToast(
+          (vi ? `Đã thêm ${n} bài vào thư mục` : `Added ${n} songs`) +
+            (skipMsg ? ` · ${skipMsg}` : '')
+        );
+      else if (skipMsg) showToast(skipMsg.charAt(0).toUpperCase() + skipMsg.slice(1));
     } catch (e: any) {
       showToast(String(e?.message || e));
     }
@@ -1367,9 +1379,9 @@ const HelpCard: React.FC<{
       vi
         ? [
             'musical-notes-outline',
-            'Kéo thả bài hát (MP3, M4A, AAC, FLAC, WAV, AIFF, ALAC) vào đó.',
+            'Kéo thả bài hát (MP3, M4A, AAC, FLAC, WAV, AIFF, ALAC, MIDI) vào đó.',
           ]
-        : ['musical-notes-outline', 'Drop songs in (MP3, M4A, AAC, FLAC, WAV, AIFF, ALAC).'],
+        : ['musical-notes-outline', 'Drop songs in (MP3, M4A, AAC, FLAC, WAV, AIFF, ALAC, MIDI).'],
       vi
         ? [
             'git-network-outline',

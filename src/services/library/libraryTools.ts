@@ -7,6 +7,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
+import { extForMime, PLAYABLE_EXT, UNPLAYABLE_EXT } from '../audio/formatSniff';
 import { HolySicPreferences } from '../../constants/preferences';
 import {
   AudioLabSettings,
@@ -209,7 +210,7 @@ export async function pickBackupFile(): Promise<string | null> {
 
 // ---------- Files app import (Cog) ----------
 
-const AUDIO_EXT = /\.(mp3|m4a|aac|flac|wav|aif|aiff|caf|alac|mp4|opus|ogg)$/i;
+const AUDIO_EXT = PLAYABLE_EXT;
 export const LOCAL_DIR = 'holysic-local';
 
 function titleFromFileName(name: string): { title: string; artist: string } {
@@ -242,11 +243,17 @@ export async function importLocalAudioFiles(): Promise<DownloadedTrackMeta[]> {
     if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
   }
   for (const a of res.assets) {
-    if (!AUDIO_EXT.test(a.name) && !(a.mimeType || '').startsWith('audio/')) continue;
+    const mimeExt = extForMime(a.mimeType);
+    const playable =
+      AUDIO_EXT.test(a.name) ||
+      (!UNPLAYABLE_EXT.test(a.name) && !!mimeExt && AUDIO_EXT.test(`.${mimeExt}`));
+    if (!playable) continue;
     const id = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
     let uri = a.uri;
     if (dir) {
-      const ext = (a.name.match(/\.[^.]+$/) || ['.m4a'])[0].toLowerCase();
+      const ext = AUDIO_EXT.test(a.name)
+        ? a.name.slice(a.name.lastIndexOf('.')).toLowerCase()
+        : `.${mimeExt || 'm4a'}`;
       const target = new File(dir, `${id}${ext}`);
       new File(a.uri).copy(target);
       uri = target.uri;

@@ -84,6 +84,7 @@ const EditorBody: React.FC<{ pl: Playlist; focus?: 'cover' | 'order' }> = ({ pl,
 
   const [name, setName] = useState(pl.name);
   const [desc, setDesc] = useState(pl.description || '');
+  const [creator, setCreator] = useState(pl.creator || '');
   const [cover, setCover] = useState<CoverDraft>(undefined);
   const [songs, setSongs] = useState<Track[]>(pl.tracks);
   const [showArtPicker, setShowArtPicker] = useState(focus === 'cover');
@@ -98,6 +99,7 @@ const EditorBody: React.FC<{ pl: Playlist; focus?: 'cover' | 'order' }> = ({ pl,
   const dirty =
     name.trim() !== pl.name ||
     desc.trim() !== (pl.description || '') ||
+    creator.trim() !== (pl.creator || '') ||
     cover !== undefined ||
     orderChanged;
 
@@ -166,6 +168,7 @@ const EditorBody: React.FC<{ pl: Playlist; focus?: 'cover' | 'order' }> = ({ pl,
     updatePlaylist(pl.id, {
       name: name.trim() || pl.name,
       description: desc,
+      creator: creator.trim() || null,
       ...(coverRef !== undefined ? { coverUrl: coverRef } : {}),
       ...(orderChanged ? { tracks: songs } : {}),
     });
@@ -338,6 +341,40 @@ const EditorBody: React.FC<{ pl: Playlist; focus?: 'cover' | 'order' }> = ({ pl,
               style={[s.input, { minHeight: 64, textAlignVertical: 'top' }]}
               accessibilityLabel={vi ? 'Mô tả' : 'Description'}
             />
+            <Text style={s.label}>{vi ? 'Người tạo' : 'Creator'}</Text>
+            <View style={s.creatorWrap}>
+              <TextInput
+                value={creator}
+                onChangeText={setCreator}
+                placeholder={vi ? 'Tên người tạo playlist…' : 'Who made this playlist…'}
+                placeholderTextColor={c.text3}
+                maxLength={60}
+                autoCapitalize="words"
+                style={[s.input, { flex: 1, paddingRight: 40 }]}
+                accessibilityLabel={vi ? 'Tên người tạo playlist' : 'Playlist creator'}
+              />
+              {creator ? (
+                <Tap
+                  feedback="opacity"
+                  hitSlop={10}
+                  onPress={() => {
+                    setCreator('');
+                    haptic('light');
+                  }}
+                  style={s.creatorClear}
+                  accessibilityLabel={vi ? 'Xoá tên người tạo' : 'Remove creator'}
+                >
+                  <Ionicons name="close-circle" size={18} color={c.text3} />
+                </Tap>
+              ) : null}
+            </View>
+            {pl.creator && !creator.trim() ? (
+              <Text style={s.creatorHint}>
+                {vi
+                  ? 'Tên người tạo sẽ bị xoá khi lưu'
+                  : 'The creator name will be removed when you save'}
+              </Text>
+            ) : null}
 
             {/* songs */}
             <View
@@ -687,6 +724,19 @@ const makeStyles = (c: UiColors) => ({
     color: c.text,
     fontSize: 15,
   },
+  creatorWrap: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  creatorClear: {
+    position: 'absolute' as const,
+    right: 10,
+    width: 28,
+    height: 28,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  creatorHint: { color: c.text3, fontSize: 12, marginTop: 5, marginLeft: 2 },
   songsHead: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

@@ -3,28 +3,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
   Animated,
   KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
-import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { TrackRow } from '../TrackRow';
-import { Track } from '../../types/music';
-import { isLocalTrack, LocalLibrary, playlistCoverOf } from '../../services/local/localLibrary';
+import { LocalLibrary } from '../../services/local/localLibrary';
 import { DownloadsManager } from '../library/DownloadsManager';
-import { openPlaylistEditor } from '../library/PlaylistEditor';
+import { PlaylistShelf } from '../library/PlaylistShelf';
 import { useLocalLibrary } from '../local/LocalLibraryScreen';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { useTabScrollToTop } from '../../services/ui/tabBus';
@@ -32,7 +27,6 @@ import { Tap } from '../ui/Tap';
 import { EmptyState } from '../ui/EmptyState';
 import { PopIn } from '../ui/PopIn';
 import { ScrollEdgeHairline } from '../ui/ScrollEdgeBar';
-import { NativeMenu, nativeMenuAvailable } from '../ui/NativeMenu';
 import { perfCount } from '../../services/perfProbe';
 import { useProgressive } from '../../hooks/useProgressive';
 
@@ -52,9 +46,7 @@ export const LibraryScreen: React.FC = () => {
     openCollection,
     setIsRecapOpen,
     setActiveTab,
-    playTrack,
-    setIsPlayerOpen,
-    deletePlaylist,
+    updatePrefs,
   } = useHolySic();
   // one queue array for the whole history list (it used to be rebuilt for every row)
   const historyTracks = useMemo(() => history.map((h) => h.track), [history]);
@@ -65,13 +57,12 @@ export const LibraryScreen: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [plName, setPlName] = useState('');
   const [plDesc, setPlDesc] = useState('');
+  const [plCreator, setPlCreator] = useState<string | null>(null);
 
   const vi = prefs.language === 'vi';
   const local = useLocalLibrary();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const offlineList = Object.values(downloads);
-  const offlineIn = (list: Track[]) =>
-    list.reduce((n, x) => n + (downloads[x.id] || isLocalTrack(x) ? 1 : 0), 0);
   // 4" phones: header pills go icon-only so the title never wraps
   const narrow = useWindowDimensions().width < 360;
 
@@ -275,142 +266,7 @@ export const LibraryScreen: React.FC = () => {
             onAction={() => setShowCreateModal(true)}
           />
         )}
-        {tab === 'playlists' && (
-          <View style={styles.playlistList}>
-            {playlists.map((pl) => (
-              <NativeMenu
-                key={pl.id}
-                trigger="longPress"
-                previewRadius={16}
-                previewBackground={UI.surface('#14141B')}
-                items={[
-                  {
-                    id: 'play',
-                    title: vi ? 'Phát' : 'Play',
-                    icon: 'play.fill',
-                    disabled: pl.tracks.length === 0,
-                    section: 0,
-                  },
-                  {
-                    id: 'shuffle',
-                    title: vi ? 'Trộn bài' : 'Shuffle',
-                    icon: 'shuffle',
-                    disabled: pl.tracks.length === 0,
-                    section: 0,
-                  },
-                  {
-                    id: 'open',
-                    title: vi ? 'Mở playlist' : 'Open Playlist',
-                    icon: 'music.note.list',
-                    section: 1,
-                  },
-                  ...(pl.isSystem
-                    ? []
-                    : [
-                        {
-                          id: 'edit',
-                          title: vi ? 'Sửa tên & thứ tự…' : 'Edit Name & Order…',
-                          icon: 'pencil',
-                          section: 1,
-                        },
-                        {
-                          id: 'cover',
-                          title: vi ? 'Đổi ảnh bìa…' : 'Change Cover…',
-                          icon: 'photo',
-                          section: 1,
-                        },
-                        {
-                          id: 'delete',
-                          title: vi ? 'Xoá playlist' : 'Delete Playlist',
-                          icon: 'trash',
-                          destructive: true,
-                          section: 2,
-                        },
-                      ]),
-                ]}
-                onSelect={(id) => {
-                  if (id === 'play' && pl.tracks.length) {
-                    playTrack(pl.tracks[0], pl.tracks);
-                    setIsPlayerOpen(true);
-                  } else if (id === 'shuffle' && pl.tracks.length) {
-                    const list = [...pl.tracks].sort(() => Math.random() - 0.5);
-                    playTrack(list[0], list);
-                    setIsPlayerOpen(true);
-                  } else if (id === 'open') {
-                    openCollection({ kind: 'playlist', playlistId: pl.id });
-                  } else if (id === 'edit') {
-                    setTimeout(() => openPlaylistEditor(pl.id), 350);
-                  } else if (id === 'cover') {
-                    setTimeout(() => openPlaylistEditor(pl.id, 'cover'), 350);
-                  } else if (id === 'delete') {
-                    setTimeout(
-                      () =>
-                        Alert.alert(
-                          vi ? `Xoá playlist “${pl.name}”?` : `Delete “${pl.name}”?`,
-                          vi ? 'Không thể hoàn tác.' : 'This can’t be undone.',
-                          [
-                            { text: vi ? 'Huỷ' : 'Cancel', style: 'cancel' },
-                            {
-                              text: vi ? 'Xoá' : 'Delete',
-                              style: 'destructive',
-                              onPress: () => deletePlaylist(pl.id),
-                            },
-                          ]
-                        ),
-                      350
-                    );
-                  }
-                }}
-              >
-                <Tap
-                  onPress={() => openCollection({ kind: 'playlist', playlistId: pl.id })}
-                  // a hold belongs to the native context menu (and must not open the page on release)
-                  onLongPress={nativeMenuAvailable ? () => {} : undefined}
-                  style={styles.playlistCard}
-                >
-                  {playlistCoverOf(pl) ? (
-                    <ArtworkImage source={{ uri: playlistCoverOf(pl) }} style={styles.plCover} />
-                  ) : (
-                    <View
-                      style={[
-                        styles.plCover,
-                        styles.plCoverFallback,
-                        { backgroundColor: pl.coverTint || palette.container },
-                      ]}
-                    >
-                      <Ionicons name="musical-notes" size={26} color={UI.text} />
-                    </View>
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text numberOfLines={1} style={[styles.plName, { fontFamily }]}>
-                      {pl.name}
-                    </Text>
-                    <Text numberOfLines={1} style={styles.plSub}>
-                      {pl.tracks.length} {vi ? 'bài hát' : 'songs'}
-                      {offlineIn(pl.tracks) > 0 ? ` · ${offlineIn(pl.tracks)} offline` : ''}
-                      {pl.description ? ` · ${pl.description}` : ''}
-                    </Text>
-                  </View>
-                  {!nativeMenuAvailable && !pl.isSystem ? (
-                    <Tap
-                      feedback="opacity"
-                      hitSlop={8}
-                      onPress={(e) => {
-                        e.stopPropagation?.();
-                        openPlaylistEditor(pl.id);
-                      }}
-                      style={styles.plEdit}
-                      accessibilityLabel={vi ? `Sửa ${pl.name}` : `Edit ${pl.name}`}
-                    >
-                      <Ionicons name="pencil" size={15} color={UI.text2} />
-                    </Tap>
-                  ) : null}
-                  <Ionicons name="chevron-forward" size={18} color={UI.text3} />
-                </Tap>
-              </NativeMenu>
-            ))}
-          </View>
-        )}
+        {tab === 'playlists' && playlists.length > 0 && <PlaylistShelf downloads={downloads} />}
 
         {tab === 'liked' && (
           <>
@@ -498,6 +354,28 @@ export const LibraryScreen: React.FC = () => {
                   placeholderTextColor={UI.text3}
                   style={styles.modalInput}
                 />
+                <View style={styles.creatorRow}>
+                  <Ionicons name="person-circle-outline" size={20} color={UI.text2} />
+                  <TextInput
+                    value={plCreator ?? prefs.playlistCreator ?? ''}
+                    onChangeText={setPlCreator}
+                    placeholder={vi ? 'Người tạo (tuỳ chọn)…' : 'Creator (optional)…'}
+                    placeholderTextColor={UI.text3}
+                    autoCapitalize="words"
+                    style={[styles.modalInput, styles.creatorInput]}
+                    accessibilityLabel={vi ? 'Tên người tạo playlist' : 'Playlist creator name'}
+                  />
+                  {(plCreator ?? prefs.playlistCreator) ? (
+                    <Tap
+                      feedback="opacity"
+                      hitSlop={8}
+                      onPress={() => setPlCreator('')}
+                      accessibilityLabel={vi ? 'Xoá tên người tạo' : 'Clear creator'}
+                    >
+                      <Ionicons name="close-circle" size={18} color={UI.text3} />
+                    </Tap>
+                  ) : null}
+                </View>
                 <View style={styles.modalActions}>
                   <Tap onPress={() => setShowCreateModal(false)} style={styles.cancelModalBtn}>
                     <Text style={{ color: UI.text, fontWeight: '600' }}>
@@ -507,9 +385,13 @@ export const LibraryScreen: React.FC = () => {
                   <Tap
                     onPress={() => {
                       if (!plName.trim()) return;
-                      createPlaylist(plName, plDesc);
+                      const creator = (plCreator ?? prefs.playlistCreator ?? '').trim();
+                      createPlaylist(plName, plDesc, creator);
+                      if (creator !== (prefs.playlistCreator || ''))
+                        updatePrefs({ playlistCreator: creator });
                       setPlName('');
                       setPlDesc('');
+                      setPlCreator(null);
                       setShowCreateModal(false);
                     }}
                     disabled={!plName.trim()}
@@ -637,46 +519,13 @@ const styles = themedSheet(() => ({
   scrollContent: {
     paddingBottom: 175,
   },
-  playlistList: {
-    paddingHorizontal: 14,
-    gap: 10,
-  },
-  playlistCard: {
+  creatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 11,
-    borderRadius: 18,
-    backgroundColor: UI.fg(0.05),
-    borderWidth: 1,
-    borderColor: UI.fg(0.07),
-    gap: 13,
+    gap: 8,
   },
-  plCover: {
-    width: 58,
-    height: 58,
-    borderRadius: 14,
-  },
-  plEdit: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: UI.fg(0.07),
-  },
-  plCoverFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  plName: {
-    color: UI.text,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  plSub: {
-    color: UI.text2,
-    fontSize: 12.5,
-    marginTop: 3,
+  creatorInput: {
+    flex: 1,
   },
   modalBackdrop: {
     flex: 1,

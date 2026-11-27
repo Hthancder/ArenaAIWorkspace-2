@@ -51,6 +51,13 @@ const WidgetBridge: React.FC = () => {
   useWidgetBridge();
   return null;
 };
+import { usePipBridge } from './src/services/pip/usePipBridge';
+
+/** Picture in Picture (lyrics / now playing card): own component for the same reason */
+const PipBridge: React.FC = () => {
+  usePipBridge();
+  return null;
+};
 import { useQuickActions } from './src/services/shortcuts/useQuickActions';
 import { PlayerStack } from './src/services/ui/playerStack';
 import {
@@ -334,6 +341,7 @@ export default function App() {
           <HolySicShell />
         </Perf>
         <WidgetBridge />
+        <PipBridge />
       </HolySicProvider>
     </SafeAreaProvider>
   );

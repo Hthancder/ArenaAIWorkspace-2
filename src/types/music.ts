@@ -107,6 +107,12 @@ export interface Playlist {
   createdAt: number;
   updatedAt: number;
   isSystem?: boolean;
+  /** who made it (shown as “by …”; editable, can be cleared) */
+  creator?: string;
+  /** pinned to the top of Library — the time it was pinned (newest pin first) */
+  pinnedAt?: number;
+  /** last time something was played from it (sort “Recently played”) */
+  lastPlayedAt?: number;
 }
 
 export interface LyricWord {

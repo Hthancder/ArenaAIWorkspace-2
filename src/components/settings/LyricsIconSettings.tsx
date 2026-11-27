@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect } from 'react';
 import { ActivityIndicator, Image, Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import { APP_ICON_SKINS, nativeIconName, skinIdFromNative } from '../../constants/appIcons';
-import { LyricsEffect, LyricsPosition, LyricsSize } from '../../constants/preferences';
+import { LyricsEffect, LyricsPosition, LyricsSize, PipStyle } from '../../constants/preferences';
 import { useHolySic } from '../../context/HolySicContext';
 import { LocalLibrary } from '../../services/local/localLibrary';
 import { LYRICS_SOURCES } from '../../services/lyrics/lyricsSources';
@@ -19,6 +19,7 @@ import {
 import { T as UI, themedSheet } from '../../theme/ui';
 import { LYRICS_EFFECTS } from '../player/LyricsView';
 import { Tap } from '../ui/Tap';
+import { Pip, usePipState } from '../../services/pip/pip';
 import type { HolySicShortcutsNative } from '../../../modules/holysic-shortcuts';
 
 function iconModule(): HolySicShortcutsNative | null {
@@ -222,6 +223,7 @@ export const LyricsIconSettings: React.FC<{ fontFamily?: string; part?: 'lyrics'
             )}
           </View>
 
+          <PipCard fontFamily={fontFamily} />
           <LyricsSourcesCard fontFamily={fontFamily} />
         </>
       )}
@@ -275,6 +277,211 @@ export const LyricsIconSettings: React.FC<{ fontFamily?: string; part?: 'lyrics'
           </View>
         </>
       )}
+    </>
+  );
+};
+
+/** A small drawing of each PiP layout, so the choice is visible before trying it */
+const PipSample: React.FC<{ id: PipStyle; accent: string }> = ({ id, accent }) => {
+  const line = { height: 4, borderRadius: 2, backgroundColor: '#FFF' };
+  if (id === 'card')
+    return (
+      <View style={[sampleStyles.stage, { flexDirection: 'row', gap: 5, padding: 6 }]}>
+        <View style={{ width: 26, height: 26, borderRadius: 5, backgroundColor: accent }} />
+        <View style={{ flex: 1, gap: 3, justifyContent: 'center' }}>
+          <View style={[line, { width: '80%' }]} />
+          <View style={[line, { width: '55%', opacity: 0.5 }]} />
+          <View style={[line, { width: '100%', height: 2, backgroundColor: accent }]} />
+        </View>
+      </View>
+    );
+  if (id === 'minimal')
+    return (
+      <View
+        style={[sampleStyles.stage, { alignItems: 'center', justifyContent: 'center', gap: 4 }]}
+      >
+        <View style={[line, { width: '75%', height: 6 }]} />
+        <View style={[line, { width: '45%', opacity: 0.45 }]} />
+      </View>
+    );
+  return (
+    <View style={[sampleStyles.stage, { padding: 6, gap: 4 }]}>
+      <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+        <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: accent }} />
+        <View style={[line, { width: 24, height: 3, opacity: 0.7 }]} />
+      </View>
+      <View style={{ flexDirection: 'row', alignSelf: 'center' }}>
+        <View style={[line, { width: 22, height: 6 }]} />
+        <View style={[line, { width: 18, height: 6, opacity: 0.4 }]} />
+      </View>
+      <View style={[line, { width: '50%', alignSelf: 'center', opacity: 0.45 }]} />
+      <View style={[line, { width: '100%', height: 2, backgroundColor: accent }]} />
+    </View>
+  );
+};
+
+const sampleStyles = StyleSheet.create({
+  stage: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 8,
+    backgroundColor: '#15131F',
+    overflow: 'hidden',
+  },
+});
+
+const PIP_STYLES: { id: PipStyle; vi: string; en: string }[] = [
+  { id: 'lyrics', vi: 'Lời nhạc', en: 'Lyrics' },
+  { id: 'card', vi: 'Thẻ bài hát', en: 'Song card' },
+  { id: 'minimal', vi: 'Tối giản', en: 'Minimal' },
+];
+
+/** Picture in Picture: the sung line floating over other apps */
+const PipCard: React.FC<{ fontFamily?: string }> = ({ fontFamily }) => {
+  const { prefs, updatePrefs, palette, haptic, showToast, currentTrack } = useHolySic();
+  const { supported, active } = usePipState();
+  const vi = prefs.language === 'vi';
+  const style = prefs.pipStyle || 'lyrics';
+  const ios = Platform.OS === 'ios';
+  const sw = (value: boolean, onChange: (v: boolean) => void, label: string) => (
+    <Switch
+      value={value}
+      disabled={!supported}
+      onValueChange={(v) => {
+        haptic('selection');
+        onChange(v);
+      }}
+      trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+      accessibilityLabel={label}
+    />
+  );
+  const tryNow = async () => {
+    haptic('light');
+    if (active) {
+      await Pip.stop();
+      return;
+    }
+    if (!currentTrack) {
+      showToast(vi ? 'Phát một bài trước đã' : 'Play a song first');
+      return;
+    }
+    const ok = await Pip.start();
+    if (!ok) {
+      const err = Pip.get().error;
+      showToast(
+        vi
+          ? `Chưa mở được PiP${err ? ` · ${err}` : ''}`
+          : `Couldn't start PiP${err ? ` · ${err}` : ''}`
+      );
+    }
+  };
+  return (
+    <>
+      <Text style={[styles.sectionTitle, { fontFamily }]}>
+        {vi ? 'Cửa sổ nổi (PiP)' : 'Picture in Picture'}
+      </Text>
+      <View style={styles.card}>
+        <Text style={styles.rowDesc}>
+          {supported
+            ? vi
+              ? 'Lời đang hát nổi trên mọi ứng dụng — vừa nhắn tin, lướt web vẫn hát theo được. Cửa sổ có nút phát/dừng, tua ±15 giây, thanh tiến độ; chạm "quay lại" để mở ngay màn hình Lời. Mở bằng nút PiP cạnh thanh âm lượng hoặc trong màn hình Lời.'
+              : 'The sung line floats over every app — sing along while you chat or browse. The window has play/pause, ±15 s skip and progress; tap "back" to land on the Lyrics screen. Open it with the PiP button by the volume bar or on the Lyrics screen.'
+            : vi
+              ? 'Máy hoặc trình duyệt này chưa hỗ trợ PiP. Có trong bản cài trên iPhone/iPad và Chrome, Edge, Safari.'
+              : 'PiP isn’t available here. It works in the installed iPhone/iPad app and in Chrome, Edge and Safari.'}
+        </Text>
+
+        <Text style={[styles.subLabel, { marginTop: 14 }]}>
+          {vi ? 'Kiểu cửa sổ' : 'Window style'}
+        </Text>
+        <View style={styles.effectGrid}>
+          {PIP_STYLES.map((o) => {
+            const sel = style === o.id;
+            return (
+              <Tap
+                key={o.id}
+                onPress={() => {
+                  haptic('selection');
+                  updatePrefs({ pipStyle: o.id });
+                }}
+                style={[
+                  styles.effectCard,
+                  { width: undefined, flex: 1, borderColor: sel ? palette.accent : UI.fg(0.1) },
+                  sel && { borderWidth: 2 },
+                ]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: sel }}
+                accessibilityLabel={vi ? o.vi : o.en}
+              >
+                <PipSample id={o.id} accent={palette.accent} />
+                <View style={styles.effectMeta}>
+                  <Text
+                    style={[styles.effectName, sel && { color: palette.accent }]}
+                    numberOfLines={1}
+                  >
+                    {vi ? o.vi : o.en}
+                  </Text>
+                  {sel && <Ionicons name="checkmark-circle" size={15} color={palette.accent} />}
+                </View>
+              </Tap>
+            );
+          })}
+        </View>
+
+        <View style={styles.divider} />
+        <View style={styles.switchRow}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.rowTitle}>{vi ? 'Hiện lời trong PiP' : 'Lyrics in PiP'}</Text>
+            <Text style={styles.rowDesc}>
+              {vi
+                ? 'Dòng đang hát tô màu theo nhịp, kèm dòng kế tiếp. Tắt để chỉ hiện bài hát và bài tiếp theo.'
+                : 'The sung line fills in time, with the next line below. Off: just the song and what plays next.'}
+            </Text>
+          </View>
+          {sw(
+            prefs.pipLyrics !== false,
+            (v) => updatePrefs({ pipLyrics: v }),
+            vi ? 'Hiện lời' : 'Lyrics'
+          )}
+        </View>
+        {ios && (
+          <View style={[styles.switchRow, { borderBottomWidth: 0 }]}>
+            <View style={{ flex: 1, paddingRight: 10 }}>
+              <Text style={styles.rowTitle}>
+                {vi ? 'Tự mở khi rời ứng dụng' : 'Open on leaving the app'}
+              </Text>
+              <Text style={styles.rowDesc}>
+                {vi
+                  ? 'Vuốt về màn hình chính khi đang phát nhạc: cửa sổ lời tự bật lên.'
+                  : 'Swipe home while music plays and the lyrics window pops up by itself.'}
+              </Text>
+            </View>
+            {sw(!!prefs.pipAuto, (v) => updatePrefs({ pipAuto: v }), vi ? 'Tự mở' : 'Auto open')}
+          </View>
+        )}
+        {supported && (
+          <Tap
+            onPress={tryNow}
+            style={[styles.bigBtn, { backgroundColor: active ? UI.fg(0.08) : palette.accent }]}
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name={active ? 'close-circle-outline' : 'albums-outline'}
+              size={17}
+              color={active ? UI.text : palette.onAccent}
+            />
+            <Text style={[styles.bigBtnText, { color: active ? UI.text : palette.onAccent }]}>
+              {active
+                ? vi
+                  ? 'Đóng cửa sổ nổi'
+                  : 'Close the floating window'
+                : vi
+                  ? 'Mở thử cửa sổ nổi'
+                  : 'Try the floating window'}
+            </Text>
+          </Tap>
+        )}
+      </View>
     </>
   );
 };

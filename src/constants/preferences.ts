@@ -215,7 +215,26 @@ export interface HolySicPreferences {
   videoAudio: boolean;
   /** only load videos on Wi-Fi */
   videoWifiOnly: boolean;
+
+  // ── Library ──
+  /** how the playlists list is ordered (pinned ones always stay on top) */
+  playlistSort: PlaylistSort;
+  playlistView: PlaylistView;
+  /** creator name typed last time — pre-filled for the next new playlist */
+  playlistCreator: string;
+
+  // ── Picture in Picture ──
+  /** PiP floating window shows the current lyric line */
+  pipLyrics: boolean;
+  /** open PiP by itself when you leave the app while music plays */
+  pipAuto: boolean;
+  /** what fills the PiP window */
+  pipStyle: PipStyle;
 }
+
+export type PlaylistSort = 'custom' | 'recent' | 'added' | 'alpha' | 'creator';
+export type PlaylistView = 'list' | 'compact' | 'grid';
+export type PipStyle = 'lyrics' | 'card' | 'minimal';
 
 export const DEFAULT_PREFERENCES: HolySicPreferences = {
   accentColor: 'dynamic',
@@ -292,6 +311,12 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   videoQuality: 720,
   videoAudio: true,
   videoWifiOnly: false,
+  playlistSort: 'custom',
+  playlistView: 'list',
+  playlistCreator: '',
+  pipLyrics: true,
+  pipAuto: false,
+  pipStyle: 'lyrics',
 };
 
 export const PLAYER_STYLE_META: {

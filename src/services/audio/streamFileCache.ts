@@ -8,6 +8,7 @@
 
 import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
+import { id3Size, SNIFF_BYTES, sniffBytes, SniffResult } from './formatSniff';
 
 const DIR_NAME = 'holysic-stream-cache';
 const MAX_FILES = 40;
@@ -20,8 +21,8 @@ export interface LocalFacts {
   size: number;
   /** extension in the file name (lower-case, no dot) */
   ext: string;
-  /** container found in the bytes */
-  real?: { ext: string; label: string; playable: boolean };
+  /** container / codec found in the bytes */
+  real?: SniffResult;
 }
 
 const extOf = (uri: string) => (uri.match(/\.([a-z0-9]{2,5})(?:[?#]|$)/i)?.[1] || '').toLowerCase();
@@ -32,38 +33,29 @@ function hashOf(s: string): string {
   return (h >>> 0).toString(36);
 }
 
-function containerOf(b: Uint8Array): LocalFacts['real'] {
-  const at = (o: number, txt: string) =>
-    b.length >= o + txt.length && [...txt].every((c, i) => b[o + i] === c.charCodeAt(0));
-  if (at(0, 'fLaC')) return { ext: 'flac', label: 'FLAC', playable: true };
-  if (at(4, 'ftyp')) return { ext: 'm4a', label: 'MPEG-4 (AAC/ALAC)', playable: true };
-  if (at(0, 'RIFF') && at(8, 'WAVE')) return { ext: 'wav', label: 'WAV', playable: true };
-  if (at(0, 'FORM') && (at(8, 'AIFF') || at(8, 'AIFC')))
-    return { ext: 'aiff', label: 'AIFF', playable: true };
-  if (at(0, 'caff')) return { ext: 'caf', label: 'CAF', playable: true };
-  if (at(0, 'OggS')) return { ext: 'ogg', label: 'Ogg (Vorbis/Opus)', playable: false };
-  if (at(0, '#EXTM3U')) return { ext: 'm3u', label: 'Playlist text, not audio', playable: false };
-  if (at(0, '<')) return { ext: 'html', label: 'Web page, not audio', playable: false };
-  if (at(0, 'ID3')) {
-    // ID3v2 block (synch-safe size) — FLAC behind it is the classic "won't play" case
-    const size = ((b[6] & 127) << 21) | ((b[7] & 127) << 14) | ((b[8] & 127) << 7) | (b[9] & 127);
-    return size + 10 < b.length && at(size + 10, 'fLaC')
-      ? { ext: 'flac', label: 'FLAC + ID3', playable: true }
-      : { ext: 'mp3', label: 'MP3', playable: true };
-  }
-  if (b.length > 1 && b[0] === 0xff && (b[1] & 0xe0) === 0xe0) {
-    // MPEG audio frame sync: layer bits 00 = ADTS AAC, otherwise MP3
-    return (b[1] & 0x06) === 0
-      ? { ext: 'aac', label: 'AAC (ADTS)', playable: true }
-      : { ext: 'mp3', label: 'MP3', playable: true };
-  }
-  return undefined;
-}
-
 function cacheDir(): Directory {
   const dir = new Directory(Paths.cache, DIR_NAME);
   if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
   return dir;
+}
+
+/** Plain-named copies of device files live apart from the stream cache (own, small budget) */
+function copyDir(): Directory {
+  const dir = new Directory(Paths.cache, `${DIR_NAME}/play-copies`);
+  if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
+  return dir;
+}
+
+function evictCopies(dir: Directory, keep: string) {
+  try {
+    const files = dir
+      .list()
+      .filter((e): e is File => e instanceof File && e.name !== keep)
+      .sort((a, b) => (b.modificationTime || 0) - (a.modificationTime || 0));
+    for (const f of files.slice(29)) f.delete();
+  } catch {
+    // ignore
+  }
 }
 
 function fileFor(key: string, ext: string): File {
@@ -191,15 +183,45 @@ export const StreamFileCache = {
       const size = f.size || 0;
       const h = f.open();
       let b: Uint8Array;
+      let after: Uint8Array | undefined;
       try {
-        b = h.readBytes(Math.min(64, size));
+        b = h.readBytes(Math.min(SNIFF_BYTES, size));
+        // a big ID3 block (embedded cover) hides what follows: peek right behind it
+        const tag = id3Size(b);
+        if (tag && tag + 16 > b.length && tag + 16 <= size) {
+          h.offset = tag;
+          after = h.readBytes(Math.min(SNIFF_BYTES, size - tag));
+        }
       } finally {
         h.close();
       }
-      return { exists: true, size, ext: extOf(uri), real: containerOf(b) };
+      return { exists: true, size, ext: extOf(uri), real: sniffBytes(b, after) };
     } catch {
       return null;
     }
+  },
+
+  /**
+   * Names AVPlayer / NSURL trip over even when percent-encoded correctly: a literal %, # or ?,
+   * emoji and other non-BMP characters, control characters, combining marks left in NFD form,
+   * trailing dots/spaces, or an extremely long path. Such files are played from a plain copy
+   * straight away instead of after a failed first attempt.
+   */
+  riskyName(uri: string): boolean {
+    let path = uri;
+    try {
+      path = decodeURIComponent(uri.replace(/^file:\/\//i, ''));
+    } catch {
+      return true; // undecodable escapes are risky by definition
+    }
+    const name = path.slice(path.lastIndexOf('/') + 1);
+    return (
+      /[%#?\u0000-\u001f\u007f]/.test(name) ||
+      /[\ud800-\udfff]/.test(name) ||
+      name !== name.normalize('NFC') ||
+      /[. ]$/.test(name) ||
+      encodeURIComponent(path).replace(/%[0-9A-F]{2}/gi, 'x').length > 900
+    );
   },
 
   /**
@@ -212,11 +234,13 @@ export const StreamFileCache = {
       const src = new File(uri);
       if (!src.exists) return null;
       const key = `play-${hashOf(uri + (src.size || 0) + (src.modificationTime || 0))}`;
-      const dst = fileFor(key, ext);
+      const dir = copyDir();
+      const dst = new File(dir, `${key}.${(ext || 'm4a').replace(/[^a-z0-9]/gi, '')}`);
       if (!dst.exists || (dst.size || 0) !== (src.size || 0)) {
         if (dst.exists) dst.delete();
+        // APFS clones the file (copy-on-write): instant and no extra space
         src.copy(dst);
-        evict();
+        evictCopies(dir, dst.name);
       }
       return dst.uri;
     } catch {

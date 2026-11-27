@@ -76,6 +76,7 @@ export const CollectionModal: React.FC = () => {
     isPlaying,
     ambient,
     updatePlaylist,
+    togglePinPlaylist,
   } = useHolySic();
   const appActive = useAppActive();
   const [reloadTick, setReloadTick] = useState(0);
@@ -209,6 +210,8 @@ export const CollectionModal: React.FC = () => {
 
   let title = '';
   let subtitle = '';
+  let creator = '';
+  let pinned = false;
   let artworkUrl = '';
   let tracks: Track[] = [];
   let removablePlaylistId: string | null = null;
@@ -236,6 +239,8 @@ export const CollectionModal: React.FC = () => {
     const pl = playlists.find((p) => p.id === collectionTarget.playlistId);
     title = pl?.name || 'Playlist';
     subtitle = pl?.description || `${pl?.tracks.length || 0} ${vi ? 'bài hát' : 'songs'}`;
+    creator = pl?.creator || '';
+    pinned = !!pl?.pinnedAt;
     artworkUrl = playlistCoverOf(pl);
     tracks = pl?.tracks || [];
     removablePlaylistId = pl?.id || null;
@@ -427,9 +432,21 @@ export const CollectionModal: React.FC = () => {
   if (removablePlaylistId) {
     pageMenu.push(
       {
+        id: 'pin',
+        title: pinned
+          ? vi
+            ? 'Bỏ ghim'
+            : 'Unpin'
+          : vi
+            ? 'Ghim lên đầu Thư viện'
+            : 'Pin to Top of Library',
+        icon: pinned ? 'pin.slash' : 'pin',
+        section: 2,
+      },
+      {
         id: 'edit',
         title: vi ? 'Sửa playlist…' : 'Edit Playlist…',
-        subtitle: vi ? 'Tên, mô tả, thứ tự' : 'Name, description, order',
+        subtitle: vi ? 'Tên, người tạo, mô tả, thứ tự' : 'Name, creator, description, order',
         icon: 'pencil',
         section: 2,
       },
@@ -464,6 +481,7 @@ export const CollectionModal: React.FC = () => {
           }),
         350
       );
+    else if (id === 'pin' && removablePlaylistId) togglePinPlaylist(removablePlaylistId);
     else if (id === 'edit' && removablePlaylistId)
       setTimeout(() => openPlaylistEditor(removablePlaylistId), 350);
     else if (id === 'cover' && removablePlaylistId)
@@ -641,6 +659,38 @@ export const CollectionModal: React.FC = () => {
               </Animated.View>
 
               <Text style={[styles.heroTitle, { fontFamily }]}>{title}</Text>
+              {creator || pinned ? (
+                <View style={styles.creatorLine}>
+                  {pinned ? (
+                    <Ionicons
+                      name="pin"
+                      size={12}
+                      color={headerPalette.accent}
+                      style={{ transform: [{ rotate: '45deg' }] }}
+                    />
+                  ) : null}
+                  {creator ? (
+                    <Tap
+                      feedback="opacity"
+                      disabled={!removablePlaylistId}
+                      onPress={() => removablePlaylistId && openPlaylistEditor(removablePlaylistId)}
+                      accessibilityLabel={
+                        vi
+                          ? `Người tạo: ${creator}. Chạm để sửa`
+                          : `Creator: ${creator}. Tap to edit`
+                      }
+                      style={styles.creatorTap}
+                    >
+                      <Ionicons name="person-circle" size={15} color={UI.text2} />
+                      <Text style={styles.creatorText} numberOfLines={1}>
+                        {vi ? `Tạo bởi ${creator}` : `By ${creator}`}
+                      </Text>
+                    </Tap>
+                  ) : (
+                    <Text style={styles.creatorText}>{vi ? 'Đã ghim' : 'Pinned'}</Text>
+                  )}
+                </View>
+              ) : null}
               <Text style={styles.heroSub}>{subtitle}</Text>
 
               {tracks.length > 0 && (
@@ -695,6 +745,23 @@ export const CollectionModal: React.FC = () => {
                     <Ionicons name="image-outline" size={15} color={UI.text} />
                     <Text style={styles.chipText}>{vi ? 'Ảnh nền' : 'Background'}</Text>
                   </Tap>
+                  {removablePlaylistId && (
+                    <Tap
+                      onPress={() => togglePinPlaylist(removablePlaylistId)}
+                      style={[styles.chipBtn, pinned && { borderColor: headerPalette.accent }]}
+                      accessibilityLabel={pinned ? (vi ? 'Bỏ ghim' : 'Unpin') : vi ? 'Ghim' : 'Pin'}
+                      accessibilityState={{ selected: pinned }}
+                    >
+                      <Ionicons
+                        name={pinned ? 'pin' : 'pin-outline'}
+                        size={15}
+                        color={pinned ? headerPalette.accent : UI.text}
+                      />
+                      <Text style={styles.chipText}>
+                        {pinned ? (vi ? 'Đã ghim' : 'Pinned') : vi ? 'Ghim' : 'Pin'}
+                      </Text>
+                    </Tap>
+                  )}
                   {removablePlaylistId && (
                     <Tap
                       onPress={() => openPlaylistEditor(removablePlaylistId)}
@@ -1305,6 +1372,24 @@ const styles = themedSheet(() => ({
     fontSize: 13.5,
     marginTop: 4,
     textAlign: 'center',
+  },
+  creatorLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  creatorTap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: 260,
+  },
+  creatorText: {
+    color: UI.text2,
+    fontSize: 13,
+    fontWeight: '600',
   },
   // secondary actions on one line (scrolls sideways on narrow screens instead of wrapping)
   chipRow: {

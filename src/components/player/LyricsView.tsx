@@ -1,5 +1,6 @@
 // Synchronized Word-by-Word & Line-Synced Glowing Lyrics View — ported from LyricsScreen.kt & LyricsGlowLine.kt
 
+import { PipButton } from './PipButton';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -341,6 +342,9 @@ export const LyricsView: React.FC = () => {
           </View>
         )}
 
+        {lyrics.synced && (
+          <PipButton size={16} color="#FFF" style={[styles.alignBtn, { marginRight: 6 }]} />
+        )}
         <Tap
           onPress={cycleEffect}
           style={[styles.alignBtn, { marginRight: 6 }]}

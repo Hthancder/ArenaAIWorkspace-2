@@ -7,6 +7,9 @@
 //            and duration from mvhd (works when moov is at the end of the file too)
 //   • FLAC — STREAMINFO duration, VORBIS_COMMENT, PICTURE (front cover preferred)
 //   • WAV / AIFF — duration from the format header (+ LIST/INFO tags in WAV)
+//   • MIDI / RMID / karaoke .kar — length from the tempo map, title, and syllable lyrics as LRC
+
+import { parseMidi } from '../audio/midiSynth';
 
 export interface TagPicture {
   mime: string;
@@ -805,7 +808,16 @@ export async function readTags(r: ByteReader, fileName: string): Promise<TagMeta
     const head = await r.read(0, Math.min(64, r.size));
     const magic4 = latin1(head, 0, 4);
     const ext = (fileName.match(/\.([^.]+)$/)?.[1] || '').toLowerCase();
-    if (magic4 === 'fLaC') await readFlac(r, meta);
+    if (magic4 === 'MThd' || (magic4 === 'RIFF' && latin1(head, 8, 12) === 'RMID')) {
+      if (r.size <= 8 * 1024 * 1024) {
+        const midi = parseMidi(await r.read(0, r.size));
+        meta.durationSec = Math.round(midi.durationSec);
+        meta.codec = 'MIDI';
+        if (midi.title) meta.title = midi.title;
+        if (midi.artist) meta.artist = midi.artist;
+        if (midi.lyrics) meta.lyrics = midi.lyrics;
+      }
+    } else if (magic4 === 'fLaC') await readFlac(r, meta);
     else if (latin1(head, 4, 8) === 'ftyp') await readMp4(r, meta);
     else if (magic4 === 'RIFF' && latin1(head, 8, 12) === 'WAVE') await readWav(r, meta);
     else if (magic4 === 'FORM' && /^AIF[FC]$/.test(latin1(head, 8, 12))) await readAiff(r, meta);

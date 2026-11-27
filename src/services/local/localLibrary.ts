@@ -18,8 +18,11 @@ import { Track } from '../../types/music';
 import { buildM3U, locationParts } from '../import/m3u';
 import { bestMatch, MetaCandidate } from './metadataLookup';
 import { ByteReader, decodeText, readTags, TagMeta } from './tagReader';
+import { extForMime, MIDI_EXT, PLAYABLE_EXT, UNPLAYABLE_EXT } from '../audio/formatSniff';
+import { MidiRender } from '../audio/midiRender';
 
-export const AUDIO_EXT = /\.(mp3|m4a|aac|flac|wav|aif|aiff|caf|alac|mp4|m4b)$/i;
+/** Everything iOS (or the app's MIDI synth) can play — see formatSniff.ts */
+export const AUDIO_EXT = PLAYABLE_EXT;
 const COVER_NAME = /^(cover|folder|front|album|artwork|albumart)\.(jpe?g|png)$/i;
 /** Internal app folders that live in Documents but are not the user's music */
 const INTERNAL_DIRS = new Set(['holysic-offline', 'holysic-local', '.Trash']);
@@ -726,7 +729,12 @@ class LocalLibraryStore {
     const todo = all.filter(({ rel, e }) => {
       const c = this.metaCache[rel];
       return (
-        !c || c.size !== e.size || c.mtime !== e.mtime || (c.art && !this.backend.artUri(c.art))
+        !c ||
+        c.size !== e.size ||
+        c.mtime !== e.mtime ||
+        (c.art && !this.backend.artUri(c.art)) ||
+        // read before the app understood MIDI: no length / title / karaoke lyrics yet
+        (MIDI_EXT.test(rel) && !c.durationSec)
       );
     });
     this.set({ progress: { done: 0, total: todo.length } });
@@ -980,30 +988,66 @@ class LocalLibraryStore {
     return n;
   }
 
+  /** Files the last import skipped, with the reason (formats iOS can't decode) */
+  lastSkipped: { name: string; reason: string }[] = [];
+
+  /**
+   * Name a picked file keeps in the library: its own extension when it has a known one; else one
+   * from the MIME type (a MIDI stays .mid — it is never renamed to .m4a); else .m4a as before.
+   */
+  private importName(name: string, mime?: string | null): string {
+    const clean = sanitizeName(name);
+    if (clean && (PLAYABLE_EXT.test(clean) || UNPLAYABLE_EXT.test(clean))) return clean;
+    const ext = extForMime(mime) || 'm4a';
+    return `${clean || `audio-${Date.now()}`}.${ext}`;
+  }
+
   /** Copy songs picked in the Files app / iCloud Drive into a library folder (original names). */
   async importFromPicker(toDir = ''): Promise<number> {
     const res = await DocumentPicker.getDocumentAsync({
-      type: Platform.OS === 'web' ? ['audio/*'] : ['public.audio', 'audio/*'],
+      type:
+        Platform.OS === 'web'
+          ? ['audio/*', '.mid', '.midi', '.kar', '.rmi', 'audio/midi', 'audio/x-midi']
+          : ['public.audio', 'public.midi-audio', 'audio/*'],
       copyToCacheDirectory: true,
       multiple: true,
     });
     if (res.canceled || !res.assets?.length) return 0;
     if (toDir && !this.folder(toDir)) this.backend.mkdir(toDir);
     const taken = new Set(this.namesIn(toDir));
+    this.lastSkipped = [];
+    const midis: string[] = [];
     let n = 0;
     for (const a of res.assets) {
       // lyrics picked together with their song, or playlists
       const isLrc = /\.(lrc|m3u8?)$/i.test(a.name);
-      const isAudio = AUDIO_EXT.test(a.name) || (a.mimeType || '').startsWith('audio/');
+      const mime = a.mimeType || '';
+      const isAudio =
+        PLAYABLE_EXT.test(a.name) ||
+        UNPLAYABLE_EXT.test(a.name) ||
+        mime.startsWith('audio/') ||
+        !!extForMime(mime);
       if (!isAudio && !isLrc) continue;
-      let name = sanitizeName(a.name) || `audio-${Date.now()}.m4a`;
-      if (!isLrc && !AUDIO_EXT.test(name)) name += '.m4a';
+      let name = isLrc
+        ? sanitizeName(a.name) || `lyrics-${Date.now()}.lrc`
+        : this.importName(a.name, mime);
+      if (!isLrc && UNPLAYABLE_EXT.test(name)) {
+        const ext = name.slice(name.lastIndexOf('.') + 1).toUpperCase();
+        this.lastSkipped.push({ name: a.name, reason: ext });
+        continue;
+      }
       name = this.uniqueName(toDir, name, taken);
       taken.add(name.toLowerCase());
       await this.backend.importAsset(a, join(toDir, name));
       if (!isLrc) n++;
+      if (MIDI_EXT.test(name)) midis.push(join(toDir, name));
     }
     await this.scan();
+    // MIDI: synthesize in the background now so the first play starts instantly
+    if (midis.length)
+      MidiRender.prewarm(
+        midis.filter((r) => this.backend.exists(r)).map((r) => this.backend.uri(r))
+      );
     return n;
   }
 
@@ -1020,8 +1064,12 @@ class LocalLibraryStore {
     const taken = new Set(this.namesIn(toDir));
     const rels: (string | null)[] = [];
     for (const it of items) {
-      let name = sanitizeName(it.name) || `song-${Date.now()}.m4a`;
-      if (!AUDIO_EXT.test(name)) name += '.m4a';
+      let name = this.importName(it.name || `song-${Date.now()}`);
+      // iOS can't decode it: don't move a file the library would only list as broken
+      if (UNPLAYABLE_EXT.test(name)) {
+        rels.push(null);
+        continue;
+      }
       name = this.uniqueName(toDir, name, taken);
       taken.add(name.toLowerCase());
       const rel = join(toDir, name);
@@ -1051,6 +1099,11 @@ class LocalLibraryStore {
     }
     this.saveEdits();
     await this.scan();
+    const midis = rels.filter((r): r is string => !!r && MIDI_EXT.test(r));
+    if (midis.length)
+      MidiRender.prewarm(
+        midis.filter((r) => this.backend.exists(r)).map((r) => this.backend.uri(r))
+      );
     return rels.map((r) =>
       r ? (this.state.files.find((f) => f.path === r)?.track ?? null) : null
     );

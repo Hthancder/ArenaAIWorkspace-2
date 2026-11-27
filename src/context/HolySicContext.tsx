@@ -64,6 +64,8 @@ import { exportDownloadToFiles, shareTrack as shareTrackSheet } from '../service
 import { AUTO_EQ_PRESETS, OFFLINE_SHOWCASE_TRACKS } from '../data/curatedCatalog';
 import { audioEngine } from '../services/audio/audioEngine';
 import { StreamFileCache } from '../services/audio/streamFileCache';
+import { sameFamily, MIDI_EXT } from '../services/audio/formatSniff';
+import { MidiRender } from '../services/audio/midiRender';
 import { loadLyrics } from '../services/lyrics/lyricsStore';
 import {
   fetchInnerTubeSuggestions,
@@ -170,8 +172,17 @@ interface HolySicExtras {
   /** rename / describe / re-cover a playlist (coverUrl null = back to the first song's cover) */
   updatePlaylist: (
     id: string,
-    patch: { name?: string; description?: string; coverUrl?: string | null; tracks?: Track[] }
+    patch: {
+      name?: string;
+      description?: string;
+      coverUrl?: string | null;
+      tracks?: Track[];
+      /** '' or null clears it */
+      creator?: string | null;
+    }
   ) => void;
+  /** pin / unpin a playlist at the top of Library */
+  togglePinPlaylist: (id: string) => void;
   /** move one song inside a playlist */
   movePlaylistTrack: (id: string, from: number, to: number) => void;
   /** put downloads in one of your Downloads folders (null = take them out) */
@@ -314,7 +325,7 @@ interface HolySicContextValue extends HolySicExtras {
   isLiked: (trackId: string) => boolean;
   toggleLike: (track: Track) => void;
   playlists: Playlist[];
-  createPlaylist: (name: string, description?: string) => Playlist;
+  createPlaylist: (name: string, description?: string, creator?: string) => Playlist;
   deletePlaylist: (id: string) => void;
   addTrackToPlaylist: (playlistId: string, track: Track) => void;
   removeTrackFromPlaylist: (playlistId: string, trackId: string) => void;
@@ -365,6 +376,20 @@ function continuesAlbum(cur: Track, next: Track | undefined): boolean {
   const a = taggedAlbumOf(cur);
   if (!a || a !== taggedAlbumOf(next)) return false;
   return next.artist === cur.artist || next.source === cur.source;
+}
+
+/**
+ * Web preview: is this local blob a MIDI file? The bytes decide (a "#" or "?" in a file name
+ * used to cut the ".mid" off the id, so the song went to the browser as-is and failed).
+ */
+async function webBlobIsMidi(url: string, id: string): Promise<boolean> {
+  if (MIDI_EXT.test(id)) return true;
+  try {
+    const head = new Uint8Array(await (await (await fetch(url)).blob()).slice(0, 16).arrayBuffer());
+    return MidiRender.isMidiHead(head);
+  } catch {
+    return false;
+  }
 }
 
 export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -1063,26 +1088,69 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
             }
             const real = facts.real;
             if (real && !real.playable) {
+              const why =
+                real.kind === 'empty'
+                  ? vi
+                    ? 'Tệp toàn số 0 — có thể chưa tải xong từ iCloud. Mở ứng dụng Tệp, tải tệp về rồi thử lại'
+                    : 'The file is all zeros — probably not downloaded from iCloud yet. Download it in the Files app and try again'
+                  : real.kind === 'audio' || real.kind === 'video'
+                    ? vi
+                      ? `${real.label} — iOS (AVPlayer) không phát được định dạng này. Hãy đổi sang MP3, M4A, FLAC hoặc WAV`
+                      : `${real.label} — iOS (AVPlayer) can't play this format. Convert it to MP3, M4A, FLAC or WAV`
+                    : vi
+                      ? `Đây không phải tệp âm thanh: ${real.label}`
+                      : `Not an audio file: ${real.label}`;
               queue.diagnostics.push({
                 module: cand.sourceLabel,
                 step: vi ? 'Định dạng không hỗ trợ' : 'Unsupported format',
                 ok: false,
-                detail: vi
-                  ? `${real.label} — iOS (AVPlayer) không phát được định dạng này`
-                  : `${real.label} — iOS (AVPlayer) can't play this format`,
+                detail: real.note && real.kind !== 'empty' ? `${why} (${real.note})` : why,
               });
               setResolvedStream({ ...cand, diagnostics: [...queue.diagnostics] });
               continue;
             }
-            const misnamed =
-              !!real &&
-              real.ext !== facts.ext &&
-              !(real.ext === 'm4a' && /^(m4a|mp4|m4b|aac|alac|mov)$/.test(facts.ext)) &&
-              !(real.ext === 'aiff' && facts.ext === 'aif');
+            const misnamed = !!real && !!real.ext && !sameFamily(real.ext, facts.ext);
             const fixLabel = real
               ? `${real.label}${misnamed ? ` (.${facts.ext || '?'})` : ''}`
               : `.${facts.ext || '?'}`;
-            if (misnamed || real?.label === 'FLAC + ID3') {
+            if (real?.synth) {
+              // MIDI: render once with the built-in synthesizer, then play the cached WAV
+              queue.diagnostics.push({
+                module: cand.sourceLabel,
+                step: vi ? 'Kiểm tra tệp' : 'File check',
+                ok: true,
+                detail: `${fixLabel} · ${(facts.size / 1024).toFixed(0)} KB`,
+              });
+              setResolvedStream({ ...cand, diagnostics: [...queue.diagnostics] });
+              try {
+                const midi = await MidiRender.wavFor(playUrl);
+                if (!isCurrent()) return;
+                queue.diagnostics.push({
+                  module: cand.sourceLabel,
+                  step: vi ? 'Tổng hợp MIDI' : 'MIDI synth',
+                  ok: true,
+                  detail: `${midi.instruments || 'GM'} · ${midi.notes} ${vi ? 'nốt' : 'notes'} · ${
+                    midi.engine === 'cache'
+                      ? vi
+                        ? 'từ bộ nhớ đệm'
+                        : 'cached'
+                      : `${midi.engine === 'native' ? 'native' : 'JS'} ${midi.ms} ms`
+                  }`,
+                  latencyMs: midi.ms,
+                });
+                playUrl = midi.uri;
+              } catch (e: any) {
+                if (!isCurrent()) return;
+                queue.diagnostics.push({
+                  module: cand.sourceLabel,
+                  step: vi ? 'Tổng hợp MIDI' : 'MIDI synth',
+                  ok: false,
+                  detail: String(e?.message || e),
+                });
+                setResolvedStream({ ...cand, diagnostics: [...queue.diagnostics] });
+                continue;
+              }
+            } else if (misnamed || real?.label === 'FLAC + ID3') {
               const copy = StreamFileCache.playableCopy(playUrl, real!.ext);
               queue.diagnostics.push({
                 module: cand.sourceLabel,
@@ -1097,6 +1165,22 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
                     : `Actually ${fixLabel} — couldn't make a copy`,
               });
               if (copy) playUrl = copy;
+            } else if (StreamFileCache.riskyName(playUrl)) {
+              // %, #, ?, emoji, decomposed accents… — play a plain-named clone straight away
+              const copy = StreamFileCache.playableCopy(playUrl, real?.ext || facts.ext || 'm4a');
+              queue.diagnostics.push({
+                module: cand.sourceLabel,
+                step: vi ? 'Kiểm tra tệp' : 'File check',
+                ok: true,
+                detail: `${fixLabel} · ${(facts.size / 1048576).toFixed(1)} MB${
+                  copy
+                    ? vi
+                      ? ' · tên đặc biệt → phát từ bản sao'
+                      : ' · unusual name → playing a copy'
+                    : ''
+                }`,
+              });
+              if (copy) playUrl = copy;
             } else {
               queue.diagnostics.push({
                 module: cand.sourceLabel,
@@ -1104,6 +1188,33 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 ok: true,
                 detail: `${fixLabel} · ${(facts.size / 1048576).toFixed(1)} MB`,
               });
+            }
+          } else if (
+            Platform.OS === 'web' &&
+            /^blob:/i.test(playUrl) &&
+            (await webBlobIsMidi(playUrl, track.id))
+          ) {
+            // web preview: local MIDI through the same synth (TypeScript version)
+            try {
+              const midi = await MidiRender.wavFor(playUrl);
+              if (!isCurrent()) return;
+              queue.diagnostics.push({
+                module: cand.sourceLabel,
+                step: vi ? 'Tổng hợp MIDI' : 'MIDI synth',
+                ok: true,
+                detail: `${midi.instruments || 'GM'} · ${midi.notes} ${vi ? 'nốt' : 'notes'} · JS ${midi.ms} ms`,
+                latencyMs: midi.ms,
+              });
+              playUrl = midi.uri;
+            } catch (e: any) {
+              queue.diagnostics.push({
+                module: cand.sourceLabel,
+                step: vi ? 'Tổng hợp MIDI' : 'MIDI synth',
+                ok: false,
+                detail: String(e?.message || e),
+              });
+              setResolvedStream({ ...cand, diagnostics: [...queue.diagnostics] });
+              continue;
             }
           }
 
@@ -1127,6 +1238,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
           if (
             result !== 'ok' &&
             facts?.exists &&
+            !facts.real?.synth &&
             Platform.OS !== 'web' &&
             !/\/holysic-stream-cache\//.test(playUrl)
           ) {
@@ -1290,6 +1402,29 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     []
   );
 
+  /** a queue that is one of your playlists (same songs, any order) → “Recently played” */
+  const markPlaylistPlayed = useCallback((queue: Track[]) => {
+    setPlaylists((prev) => {
+      let hit = prev.findIndex((pl) => pl.tracks === queue);
+      if (hit < 0) {
+        const n = queue.length;
+        hit = prev.findIndex((pl) => {
+          if (pl.trackIds.length !== n || n === 0) return false;
+          const ids = new Set(pl.trackIds);
+          return queue.every((t) => ids.has(t.id));
+        });
+      }
+      if (hit < 0) return prev;
+      const now = Date.now();
+      const pl = prev[hit];
+      if (pl.lastPlayedAt && now - pl.lastPlayedAt < 60_000) return prev;
+      const next = [...prev];
+      next[hit] = { ...pl, lastPlayedAt: now };
+      StorageService.savePlaylists(next);
+      return next;
+    });
+  }, []);
+
   const playTrack = useCallback(
     async (track: Track, newQueue?: Track[]) => {
       triggerHaptic('light');
@@ -1318,6 +1453,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       if (newQueue && newQueue.length > 0) {
         const idx = newQueue.findIndex((t) => t.id === track.id);
+        markPlaylistPlayed(newQueue);
         setQueue(newQueue);
         setQueueIndex(idx >= 0 ? idx : 0);
       } else {
@@ -1333,7 +1469,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (prefsRef.current.openPlayerOnPlay) setIsPlayerOpen(true);
       await internalStartTrack(track);
     },
-    [internalStartTrack, playableNow, showToast]
+    [internalStartTrack, markPlaylistPlayed, playableNow, showToast]
   );
 
   const playNext = useCallback(() => {
@@ -1896,13 +2032,14 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 
   const createPlaylist = useCallback(
-    (name: string, description?: string): Playlist => {
+    (name: string, description?: string, creator?: string): Playlist => {
       triggerHaptic('medium');
       const hues = ['#6366F1', '#EC4899', '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6'];
       const pl: Playlist = {
         id: `pl-${Date.now()}`,
         name: name.trim() || 'HolySic Playlist',
         description: description?.trim(),
+        creator: creator?.trim() || undefined,
         coverTint: hues[playlists.length % hues.length],
         trackIds: [],
         tracks: [],
@@ -2417,13 +2554,20 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updatePlaylist = useCallback(
     (
       id: string,
-      patch: { name?: string; description?: string; coverUrl?: string | null; tracks?: Track[] }
+      patch: {
+        name?: string;
+        description?: string;
+        coverUrl?: string | null;
+        tracks?: Track[];
+        creator?: string | null;
+      }
     ) => {
       setPlaylists((prev) => {
         const next = prev.map((pl) => {
           if (pl.id !== id) return pl;
           const out = { ...pl, updatedAt: Date.now() };
           if (patch.name !== undefined) out.name = patch.name.trim() || pl.name;
+          if (patch.creator !== undefined) out.creator = patch.creator?.trim() || undefined;
           if (patch.description !== undefined)
             out.description = patch.description.trim() || undefined;
           if (patch.coverUrl !== undefined && patch.coverUrl !== pl.coverUrl) {
@@ -2441,6 +2585,38 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
     },
     []
+  );
+
+  const togglePinPlaylist = useCallback(
+    (id: string) => {
+      triggerHaptic('light');
+      let pinned = false;
+      let name = '';
+      setPlaylists((prev) => {
+        const next = prev.map((pl) => {
+          if (pl.id !== id) return pl;
+          pinned = !pl.pinnedAt;
+          name = pl.name;
+          return { ...pl, pinnedAt: pl.pinnedAt ? undefined : Date.now() };
+        });
+        StorageService.savePlaylists(next);
+        return next;
+      });
+      const vi = prefsRef.current.language === 'vi';
+      setTimeout(() => {
+        if (!name) return;
+        showToast(
+          pinned
+            ? vi
+              ? `Đã ghim “${name}” lên đầu`
+              : `Pinned “${name}” to the top`
+            : vi
+              ? `Đã bỏ ghim “${name}”`
+              : `Unpinned “${name}”`
+        );
+      }, 0);
+    },
+    [showToast]
   );
 
   const movePlaylistTrack = useCallback((id: string, from: number, to: number) => {
@@ -2687,11 +2863,20 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       // copies the picked songs (original names) into the Local Files library folder
       const n = await LocalLibrary.importFromPicker('');
-      if (n === 0) return 0;
+      const vi = prefsRef.current.language === 'vi';
+      const skipped = LocalLibrary.lastSkipped;
+      const skipMsg = skipped.length
+        ? vi
+          ? `Bỏ qua ${skipped.length} tệp iOS không phát được (${[...new Set(skipped.map((x) => x.reason))].join(', ')})`
+          : `Skipped ${skipped.length} file(s) iOS can't play (${[...new Set(skipped.map((x) => x.reason))].join(', ')})`
+        : '';
+      if (n === 0) {
+        if (skipMsg) showToast(skipMsg);
+        return 0;
+      }
       showToast(
-        prefsRef.current.language === 'vi'
-          ? `Đã thêm ${n} tệp vào Nhạc trên máy`
-          : `Added ${n} files to Local Files`
+        (vi ? `Đã thêm ${n} tệp vào Nhạc trên máy` : `Added ${n} files to Local Files`) +
+          (skipMsg ? ` · ${skipMsg}` : '')
       );
       return n;
     } catch (e: any) {
@@ -2874,6 +3059,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       queueTracks,
       removeTracksFromPlaylist,
       updatePlaylist,
+      togglePinPlaylist,
       movePlaylistTrack,
       removeDownloads,
       switchToVideoAudio,
@@ -2920,6 +3106,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       queueTracks,
       removeTracksFromPlaylist,
       updatePlaylist,
+      togglePinPlaylist,
       movePlaylistTrack,
       removeDownloads,
       switchToVideoAudio,

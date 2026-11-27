@@ -268,6 +268,22 @@ class HolySicAudioEngine {
     });
   }
 
+  private playerSubs = new Set<() => void>();
+  private notifyPlayer(): void {
+    this.playerSubs.forEach((f) => f());
+  }
+  /** the expo-audio player of the current song (iOS/Android; null on web, between songs, while
+   *  a crossfade hands over) — PiP times its lyrics from it natively */
+  currentNativePlayer(): AudioPlayer | null {
+    return this.nativePlayer;
+  }
+  subscribePlayer(cb: () => void): () => void {
+    this.playerSubs.add(cb);
+    return () => {
+      this.playerSubs.delete(cb);
+    };
+  }
+
   /** True when a player with a loaded source exists (false after stop() or before first load). */
   hasActiveSource(): boolean {
     return Platform.OS !== 'web' ? !!this.nativePlayer : !!this.webAudio;
@@ -548,6 +564,7 @@ class HolySicAudioEngine {
     if (this.nativePlayer) {
       const old = this.nativePlayer;
       this.nativePlayer = null;
+      this.notifyPlayer();
       try {
         old.pause();
       } catch {
@@ -591,6 +608,7 @@ class HolySicAudioEngine {
         preferredForwardBufferDuration: 10,
       });
       this.nativePlayer = player;
+      this.notifyPlayer();
       this.setDspTap({ state: 'idle' });
       this.dspAttach(player, true);
 
@@ -956,6 +974,7 @@ class HolySicAudioEngine {
       this.sampleSub = null;
       this.fadeHold = { kind: 'native', p: this.nativePlayer };
       this.nativePlayer = null;
+      this.notifyPlayer();
     } else {
       if (!this.webAudio) return;
       if (this.webPollTimer) {

@@ -116,6 +116,25 @@ public class HolySicDSPModule: Module {
       ]
     }
 
+    /// MIDI → WAV (HSMidiSynth.m). `events` = [t, kind, ch, a, b] × n from the JS parser. Runs off
+    /// the JS thread; a 4-minute song renders in a fraction of a second.
+    AsyncFunction("renderMidi") {
+      (events: [Double], durationSec: Double, sampleRate: Int, outUri: String) -> Bool in
+      let count = events.count / 5
+      guard count > 0, durationSec > 0 else { return false }
+      let path: String
+      if let url = URL(string: outUri), url.isFileURL {
+        path = url.path
+      } else {
+        path = outUri.hasPrefix("file://") ? String(outUri.dropFirst(7)) : outUri
+      }
+      let rc = events.withUnsafeBufferPointer { buf -> Int32 in
+        guard let base = buf.baseAddress else { return -1 }
+        return HSMidiRender(base, Int32(count), durationSec, Int32(sampleRate), path, nil)
+      }
+      return rc == 0
+    }
+
     OnDestroy {
       self.setTimer(false)
       self.attachments.values.forEach { $0.itemObservation?.invalidate() }
