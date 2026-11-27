@@ -3,6 +3,8 @@
 Tài liệu này mô tả cách làm việc đã dùng qua các phase của HolySic, cách mà chủ dự án thấy hiệu
 quả. Mọi AI làm việc trên repo này nên đọc hết trước khi sửa code.
 
+> Phong cách chung cho mọi dự án: [`AI-WORKING-STYLE.md`](AI-WORKING-STYLE.md). Tệp này là phần riêng của HolySic.
+>
 > **Thứ tự ưu tiên:** `AGENTS.md` (các hard rule về credit và license) > yêu cầu của người dùng >
 > tài liệu này > thói quen mặc định của bạn. **Không bao giờ sửa `AGENTS.md`.** Phần credit trong
 > `README.md` (các khối `mochy-credit`) phải giữ nguyên.
