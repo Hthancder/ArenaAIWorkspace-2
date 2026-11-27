@@ -131,6 +131,7 @@ interface Backend {
   writeText(rel: string, text: string): void;
 }
 
+const KEPT_REF = 'kept:';
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 const dirOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '');
 const baseOf = (rel: string) => rel.slice(rel.lastIndexOf('/') + 1);
@@ -1006,6 +1007,98 @@ class LocalLibraryStore {
     return n;
   }
 
+  /**
+   * Bring outside audio files (e.g. HolySic's own downloads) into the library: each file is moved
+   * into `toDir` under a readable name, and its details / cover are kept as a "Sửa thông tin"
+   * edit (the file itself is untouched). Returns the new tracks (null where a move failed).
+   */
+  async adopt(
+    items: { uri: string; name: string; edit?: LocalEdit; cover?: string }[],
+    toDir: string
+  ): Promise<(Track | null)[]> {
+    if (toDir && !this.folder(toDir)) this.backend.mkdir(toDir);
+    const taken = new Set(this.namesIn(toDir));
+    const rels: (string | null)[] = [];
+    for (const it of items) {
+      let name = sanitizeName(it.name) || `song-${Date.now()}.m4a`;
+      if (!AUDIO_EXT.test(name)) name += '.m4a';
+      name = this.uniqueName(toDir, name, taken);
+      taken.add(name.toLowerCase());
+      const rel = join(toDir, name);
+      try {
+        await this.backend.importAsset(
+          { uri: it.uri, name } as unknown as DocumentPicker.DocumentPickerAsset,
+          rel
+        );
+      } catch {
+        rels.push(null);
+        continue;
+      }
+      const edit: LocalEdit = { ...(it.edit || {}), lookedUpAt: Date.now() };
+      if (it.cover) {
+        try {
+          const art = `ed-${hash(rel + it.cover)}.jpg`;
+          await this.backend.saveArt(it.cover, art);
+          edit.art = art;
+        } catch {
+          // no cover: the song still moves
+        }
+      }
+      for (const k of Object.keys(edit) as (keyof LocalEdit)[])
+        if (edit[k] === undefined || edit[k] === '') delete edit[k];
+      this.edits[rel] = edit;
+      rels.push(rel);
+    }
+    this.saveEdits();
+    await this.scan();
+    return rels.map((r) =>
+      r ? (this.state.files.find((f) => f.path === r)?.track ?? null) : null
+    );
+  }
+
+  /**
+   * Keep an image for good (playlist covers): shrunk and stored with the kept covers. Returns a
+   * "kept:<name>" reference (an app update moves the data folder, so no absolute path is stored);
+   * show it with `resolveImageRef`. On the web the picked data: URI is kept as is.
+   */
+  async keepImage(uri: string, key: string, max = 900): Promise<string | undefined> {
+    if (this.backend.kind === 'web') return /^(data:|https?:)/i.test(uri) ? uri : undefined;
+    const name = `ed-pl-${hash(key + uri + Date.now())}.jpg`;
+    let src = uri;
+    if (!/^https?:/i.test(uri)) src = (await shrinkImage(uri, max).catch(() => undefined)) || uri;
+    try {
+      await this.backend.saveArt(src, name);
+    } catch {
+      return undefined;
+    }
+    return KEPT_REF + name;
+  }
+
+  /** Drop an image kept by `keepImage` */
+  forgetImage(ref?: string) {
+    if (ref?.startsWith(KEPT_REF)) this.backend.removeArt?.(ref.slice(KEPT_REF.length));
+  }
+
+  /** Display URI for an image reference (kept:<name> → the file; anything else unchanged) */
+  resolveImageRef(ref?: string): string | undefined {
+    if (!ref?.startsWith(KEPT_REF)) return ref;
+    return this.backend.artUri(ref.slice(KEPT_REF.length));
+  }
+
+  /** Every folder, depth-first, for "move to folder" pickers */
+  allFolders(): { path: string; name: string; depth: number; total: number }[] {
+    const out: { path: string; name: string; depth: number; total: number }[] = [];
+    const walk = (n: FolderNode, depth: number) => {
+      for (const f of n.folders) {
+        if (f.path === 'Playlists') continue;
+        out.push({ path: f.path, name: f.name, depth, total: f.total });
+        walk(f, depth + 1);
+      }
+    };
+    walk(this.state.root, 0);
+    return out;
+  }
+
   /** Keep "Song.lrc" with "Song.mp3" when the song is moved or renamed in the app */
   private carrySidecar(rel: string, toDir: string, newName: string) {
     const lrc = this.lrcByBase.get(stripExt(rel).toLowerCase());
@@ -1417,6 +1510,12 @@ class LocalLibraryStore {
 }
 
 export const LocalLibrary = new LocalLibraryStore();
+/** the cover a playlist shows: its own (kept or a link), else its first song's */
+export const playlistCoverOf = (pl?: {
+  coverUrl?: string;
+  tracks: Track[];
+}): string =>
+  (pl && (LocalLibrary.resolveImageRef(pl.coverUrl) || pl.tracks[0]?.artworkUrl)) || '';
 export const isLocalTrack = (t?: Track | null) => !!t && t.id.startsWith(LOCAL_ID_PREFIX);
 export const localPathOf = (t: Track) => t.id.slice(LOCAL_ID_PREFIX.length);
 export const localDirOf = (t: Track) => dirOf(localPathOf(t));

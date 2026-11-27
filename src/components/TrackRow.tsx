@@ -56,6 +56,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
     prefs,
     haptic,
     addToQueue,
+    isOnline,
   } = useHolySic();
 
   // ── Apple-Music-style swipe actions: → like / unlike, ← play next. The row follows the finger
@@ -127,6 +128,13 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   const liked = isLiked(track.id);
   const isOffline = Boolean(downloads[track.id]);
   const isDownloading = Boolean(downloadingIds[track.id]);
+  // offline: online-only songs are skipped in a mixed list — show them greyed out
+  const unavailable =
+    !isOnline &&
+    !isOffline &&
+    track.source !== 'local' &&
+    track.source !== 'synth' &&
+    !track.synthPreset;
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
   const handlePress = () => {
@@ -168,6 +176,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         styles.row,
         compact && styles.rowCompact,
         active && { backgroundColor: palette.container + '55' },
+        unavailable && { opacity: 0.38 },
         pressed && { opacity: 0.78 },
       ]}
     >

@@ -28,6 +28,8 @@ import { AlbumSummary, ArtistSummary, Track } from '../../types/music';
 import { TrackRow } from '../TrackRow';
 import { SheetSlot, useModalLayer } from '../overlay/ModalLayers';
 import { exportPlaylistM3U } from '../../services/import/playlistFiles';
+import { playlistCoverOf } from '../../services/local/localLibrary';
+import { openPlaylistEditor } from '../library/PlaylistEditor';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { EmptyState } from '../ui/EmptyState';
 import { Tap } from '../ui/Tap';
@@ -54,6 +56,7 @@ export const CollectionModal: React.FC = () => {
     likeTracks,
     queueTracks,
     removeTracksFromPlaylist,
+    removeDownloads,
     downloadTrack,
     downloadingIds,
     searchTracks,
@@ -220,7 +223,7 @@ export const CollectionModal: React.FC = () => {
     const pl = playlists.find((p) => p.id === collectionTarget.playlistId);
     title = pl?.name || 'Playlist';
     subtitle = pl?.description || `${pl?.tracks.length || 0} ${vi ? 'bài hát' : 'songs'}`;
-    artworkUrl = pl?.coverUrl || pl?.tracks[0]?.artworkUrl || '';
+    artworkUrl = playlistCoverOf(pl);
     tracks = pl?.tracks || [];
     removablePlaylistId = pl?.id || null;
   } else if (collectionTarget.kind === 'liked') {
@@ -367,12 +370,27 @@ export const CollectionModal: React.FC = () => {
     });
   }
   if (removablePlaylistId) {
+    pageMenu.push(
+      {
+        id: 'edit',
+        title: vi ? 'Sửa playlist…' : 'Edit Playlist…',
+        subtitle: vi ? 'Tên, mô tả, thứ tự' : 'Name, description, order',
+        icon: 'pencil',
+        section: 2,
+      },
+      {
+        id: 'cover',
+        title: vi ? 'Đổi ảnh bìa…' : 'Change Cover…',
+        icon: 'photo',
+        section: 2,
+      }
+    );
     pageMenu.push({
       id: 'delete',
       title: vi ? 'Xoá playlist' : 'Delete Playlist',
       icon: 'trash',
       destructive: true,
-      section: 2,
+      section: 3,
     });
   }
   const onPageMenu = (id: string) => {
@@ -380,6 +398,10 @@ export const CollectionModal: React.FC = () => {
     else if (id === 'save') saveAsPlaylist();
     else if (id === 'download') downloadAll();
     else if (id === 'm3u') exportM3U();
+    else if (id === 'edit' && removablePlaylistId)
+      setTimeout(() => openPlaylistEditor(removablePlaylistId), 350);
+    else if (id === 'cover' && removablePlaylistId)
+      setTimeout(() => openPlaylistEditor(removablePlaylistId, 'cover'), 350);
     // the alert waits for the menu to finish closing
     else if (id === 'delete') setTimeout(confirmDelete, 350);
   };
@@ -480,7 +502,30 @@ export const CollectionModal: React.FC = () => {
             </View>
 
             <View style={styles.heroContent}>
-              {artworkUrl ? (
+              {removablePlaylistId ? (
+                <Tap
+                  feedback="scale"
+                  onPress={() => openPlaylistEditor(removablePlaylistId, 'cover')}
+                  accessibilityLabel={vi ? 'Đổi ảnh bìa' : 'Change cover'}
+                >
+                  {artworkUrl ? (
+                    <ArtworkImage source={{ uri: artworkUrl }} style={styles.heroCover} />
+                  ) : (
+                    <View
+                      style={[
+                        styles.heroCover,
+                        styles.placeholderCover,
+                        { backgroundColor: headerPalette.container },
+                      ]}
+                    >
+                      <Ionicons name="musical-notes" size={56} color={headerPalette.accent} />
+                    </View>
+                  )}
+                  <View style={styles.coverEditBadge}>
+                    <Ionicons name="pencil" size={13} color="#fff" />
+                  </View>
+                </Tap>
+              ) : artworkUrl ? (
                 <ArtworkImage source={{ uri: artworkUrl }} style={styles.heroCover} />
               ) : (
                 <View
@@ -534,6 +579,15 @@ export const CollectionModal: React.FC = () => {
                   style={{ marginTop: 10, marginHorizontal: -18, alignSelf: 'stretch' }}
                   contentContainerStyle={styles.chipRow}
                 >
+                  {removablePlaylistId && (
+                    <Tap
+                      onPress={() => openPlaylistEditor(removablePlaylistId)}
+                      style={styles.chipBtn}
+                    >
+                      <Ionicons name="pencil" size={15} color={UI.text} />
+                      <Text style={styles.chipText}>{vi ? 'Sửa playlist' : 'Edit'}</Text>
+                    </Tap>
+                  )}
                   {canSaveAsPlaylist && (
                     <Tap onPress={saveAsPlaylist} style={styles.chipBtn}>
                       <Ionicons name="bookmark-outline" size={15} color={UI.text} />
@@ -772,6 +826,20 @@ export const CollectionModal: React.FC = () => {
                 <Ionicons name="arrow-down-circle-outline" size={15} color={UI.text} />
                 <Text style={styles.chipText}>{vi ? 'Tải' : 'Download'}</Text>
               </Tap>
+              {collectionTarget.kind === 'offline' && (
+                <Tap
+                  onPress={() => {
+                    removeDownloads(chosen.map((x) => x.id));
+                    setSelected({});
+                  }}
+                  style={styles.chipBtn}
+                >
+                  <Ionicons name="trash-outline" size={15} color="#F87171" />
+                  <Text style={[styles.chipText, { color: '#F87171' }]}>
+                    {vi ? 'Xoá bản tải' : 'Delete'}
+                  </Text>
+                </Tap>
+              )}
               {removablePlaylistId && (
                 <Tap
                   onPress={() => {
@@ -1098,6 +1166,19 @@ const styles = themedSheet(() => ({
   placeholderCover: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  coverEditBadge: {
+    position: 'absolute',
+    right: 10,
+    bottom: 26,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   heroTitle: {
     color: UI.text,

@@ -21,7 +21,10 @@ import { t } from '../../constants/i18n';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { TrackRow } from '../TrackRow';
-import { LocalLibrary } from '../../services/local/localLibrary';
+import { Track } from '../../types/music';
+import { isLocalTrack, LocalLibrary, playlistCoverOf } from '../../services/local/localLibrary';
+import { DownloadsManager } from '../library/DownloadsManager';
+import { openPlaylistEditor } from '../library/PlaylistEditor';
 import { useLocalLibrary } from '../local/LocalLibraryScreen';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { useTabScrollToTop } from '../../services/ui/tabBus';
@@ -60,6 +63,8 @@ export const LibraryScreen: React.FC = () => {
   const local = useLocalLibrary();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const offlineList = Object.values(downloads);
+  const offlineIn = (list: Track[]) =>
+    list.reduce((n, x) => n + (downloads[x.id] || isLocalTrack(x) ? 1 : 0), 0);
   // 4" phones: header pills go icon-only so the title never wraps
   const narrow = useWindowDimensions().width < 360;
 
@@ -150,7 +155,7 @@ export const LibraryScreen: React.FC = () => {
         </Tap>
 
         <Tap
-          onPress={() => openCollection({ kind: 'offline' })}
+          onPress={() => setTab('offline')}
           style={[
             styles.shelfCard,
             narrow && styles.shelfCardNarrow,
@@ -167,7 +172,7 @@ export const LibraryScreen: React.FC = () => {
             minimumFontScale={0.75}
             style={styles.shelfLabel}
           >
-            Offline
+            {vi ? 'Đã tải' : 'Downloads'}
           </Text>
         </Tap>
 
@@ -205,7 +210,7 @@ export const LibraryScreen: React.FC = () => {
           [
             { id: 'playlists', label: t(prefs.language, 'playlists') },
             { id: 'liked', label: t(prefs.language, 'likedSongs') },
-            { id: 'offline', label: 'Offline' },
+            { id: 'offline', label: vi ? 'Đã tải' : 'Downloads' },
             { id: 'history', label: t(prefs.language, 'history') },
           ] as { id: LibFilter; label: string }[]
         ).map((item) => {
@@ -294,6 +299,18 @@ export const LibraryScreen: React.FC = () => {
                     ? []
                     : [
                         {
+                          id: 'edit',
+                          title: vi ? 'Sửa tên & thứ tự…' : 'Edit Name & Order…',
+                          icon: 'pencil',
+                          section: 1,
+                        },
+                        {
+                          id: 'cover',
+                          title: vi ? 'Đổi ảnh bìa…' : 'Change Cover…',
+                          icon: 'photo',
+                          section: 1,
+                        },
+                        {
                           id: 'delete',
                           title: vi ? 'Xoá playlist' : 'Delete Playlist',
                           icon: 'trash',
@@ -312,6 +329,10 @@ export const LibraryScreen: React.FC = () => {
                     setIsPlayerOpen(true);
                   } else if (id === 'open') {
                     openCollection({ kind: 'playlist', playlistId: pl.id });
+                  } else if (id === 'edit') {
+                    setTimeout(() => openPlaylistEditor(pl.id), 350);
+                  } else if (id === 'cover') {
+                    setTimeout(() => openPlaylistEditor(pl.id, 'cover'), 350);
                   } else if (id === 'delete') {
                     setTimeout(
                       () =>
@@ -338,11 +359,8 @@ export const LibraryScreen: React.FC = () => {
                   onLongPress={nativeMenuAvailable ? () => {} : undefined}
                   style={styles.playlistCard}
                 >
-                  {pl.coverUrl || pl.tracks[0]?.artworkUrl ? (
-                    <ArtworkImage
-                      source={{ uri: pl.coverUrl || pl.tracks[0]?.artworkUrl }}
-                      style={styles.plCover}
-                    />
+                  {playlistCoverOf(pl) ? (
+                    <ArtworkImage source={{ uri: playlistCoverOf(pl) }} style={styles.plCover} />
                   ) : (
                     <View
                       style={[
@@ -360,9 +378,24 @@ export const LibraryScreen: React.FC = () => {
                     </Text>
                     <Text numberOfLines={1} style={styles.plSub}>
                       {pl.tracks.length} {vi ? 'bài hát' : 'songs'}
+                      {offlineIn(pl.tracks) > 0 ? ` · ${offlineIn(pl.tracks)} offline` : ''}
                       {pl.description ? ` · ${pl.description}` : ''}
                     </Text>
                   </View>
+                  {!nativeMenuAvailable && !pl.isSystem ? (
+                    <Tap
+                      feedback="opacity"
+                      hitSlop={8}
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        openPlaylistEditor(pl.id);
+                      }}
+                      style={styles.plEdit}
+                      accessibilityLabel={vi ? `Sửa ${pl.name}` : `Edit ${pl.name}`}
+                    >
+                      <Ionicons name="pencil" size={15} color={UI.text2} />
+                    </Tap>
+                  ) : null}
                   <Ionicons name="chevron-forward" size={18} color={UI.text3} />
                 </Tap>
               </NativeMenu>
@@ -394,30 +427,7 @@ export const LibraryScreen: React.FC = () => {
           </>
         )}
 
-        {tab === 'offline' && (
-          <>
-            {offlineList.length === 0 ? (
-              <EmptyState
-                icon="cloud-download-outline"
-                accent={palette.accent}
-                title={vi ? 'Chưa có bài tải về' : 'No downloads yet'}
-                message={
-                  vi
-                    ? 'Mở menu ⋯ của một bài hát và chọn “Tải xuống để nghe offline”.'
-                    : 'Open a song’s ⋯ menu and choose “Download for offline”.'
-                }
-              />
-            ) : (
-              offlineList.map((item) => (
-                <TrackRow
-                  key={item.track.id}
-                  track={item.track}
-                  queueContext={offlineList.map((d) => d.track)}
-                />
-              ))
-            )}
-          </>
-        )}
+        {tab === 'offline' && <DownloadsManager />}
 
         {tab === 'history' && (
           <>
@@ -636,6 +646,14 @@ const styles = themedSheet(() => ({
     width: 58,
     height: 58,
     borderRadius: 14,
+  },
+  plEdit: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: UI.fg(0.07),
   },
   plCoverFallback: {
     alignItems: 'center',

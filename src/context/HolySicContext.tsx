@@ -157,6 +157,19 @@ interface HolySicExtras {
   likeTracks: (tracks: Track[]) => void;
   queueTracks: (tracks: Track[], playNext?: boolean) => void;
   removeTracksFromPlaylist: (playlistId: string, trackIds: string[]) => void;
+  /** rename / describe / re-cover a playlist (coverUrl null = back to the first song's cover) */
+  updatePlaylist: (
+    id: string,
+    patch: { name?: string; description?: string; coverUrl?: string | null; tracks?: Track[] }
+  ) => void;
+  /** move one song inside a playlist */
+  movePlaylistTrack: (id: string, from: number, to: number) => void;
+  /** put downloads in one of your Downloads folders (null = take them out) */
+  setDownloadsFolder: (trackIds: string[], folder: string | null) => void;
+  /** delete several downloads at once */
+  removeDownloads: (trackIds: string[]) => Promise<void>;
+  /** turn downloads into Local Files in a folder (likes, playlists and history follow) */
+  moveDownloadsToLocal: (trackIds: string[], dir: string) => Promise<number>;
   // blacklist (Spotube)
   isBlocked: (track: Track) => boolean;
   blockTrack: (track: Track) => void;
@@ -425,40 +438,38 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     flushed?: number;
   } | null>(null);
   // Local Files moved/renamed in the app → keep likes, playlists, history and queue pointing at them
-  useEffect(
-    () =>
-      LocalLibrary.onRemap((map) => {
-        const fix = (t: Track) => map[t.id] || t;
-        setLikedTracks((prev) => {
-          if (!prev.some((t) => map[t.id])) return prev;
-          const next = prev.map(fix);
-          StorageService.saveLikedTracks(next);
-          return next;
-        });
-        setPlaylists((prev) => {
-          if (!prev.some((pl) => pl.tracks.some((t) => map[t.id]))) return prev;
-          const next = prev.map((pl) =>
-            pl.tracks.some((t) => map[t.id])
-              ? {
-                  ...pl,
-                  tracks: pl.tracks.map(fix),
-                  trackIds: pl.trackIds.map((id) => map[id]?.id || id),
-                }
-              : pl
-          );
-          StorageService.savePlaylists(next);
-          return next;
-        });
-        setHistory((prev) => {
-          if (!prev.some((e) => map[e.track.id])) return prev;
-          const next = prev.map((e) => (map[e.track.id] ? { ...e, track: fix(e.track) } : e));
-          StorageService.saveHistory(next);
-          return next;
-        });
-        setQueue((prev) => (prev.some((t) => map[t.id]) ? prev.map(fix) : prev));
-      }),
-    []
-  );
+  const applyTrackRemap = useCallback((map: Record<string, Track>) => {
+    if (!Object.keys(map).length) return;
+    const fix = (t: Track) => map[t.id] || t;
+    setLikedTracks((prev) => {
+      if (!prev.some((t) => map[t.id])) return prev;
+      const next = prev.map(fix);
+      StorageService.saveLikedTracks(next);
+      return next;
+    });
+    setPlaylists((prev) => {
+      if (!prev.some((pl) => pl.tracks.some((t) => map[t.id]))) return prev;
+      const next = prev.map((pl) =>
+        pl.tracks.some((t) => map[t.id])
+          ? {
+              ...pl,
+              tracks: pl.tracks.map(fix),
+              trackIds: pl.trackIds.map((id) => map[id]?.id || id),
+            }
+          : pl
+      );
+      StorageService.savePlaylists(next);
+      return next;
+    });
+    setHistory((prev) => {
+      if (!prev.some((e) => map[e.track.id])) return prev;
+      const next = prev.map((e) => (map[e.track.id] ? { ...e, track: fix(e.track) } : e));
+      StorageService.saveHistory(next);
+      return next;
+    });
+    setQueue((prev) => (prev.some((t) => map[t.id]) ? prev.map(fix) : prev));
+  }, []);
+  useEffect(() => LocalLibrary.onRemap(applyTrackRemap), [applyTrackRemap]);
 
   /** Write the real listened seconds of the current play into its history event */
   const flushListenTime = useCallback(() => {
@@ -1191,9 +1202,43 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [showToast]
   );
 
+  /** Offline, a swipe / skip lands only on songs that can play without the network */
+  const playableNow = useCallback(
+    (t: Track) =>
+      isOnlineRef.current ||
+      isLocalTrack(t) ||
+      !!downloadsRef.current[t.id] ||
+      t.source === 'synth' ||
+      !!t.synthPreset,
+    []
+  );
+
   const playTrack = useCallback(
     async (track: Track, newQueue?: Track[]) => {
       triggerHaptic('light');
+      // offline in a mixed list: an online-only song can't start — take the next one that can
+      if (!playableNow(track)) {
+        const list = newQueue && newQueue.length ? newQueue : queueRef.current;
+        const at = Math.max(
+          0,
+          list.findIndex((t) => t.id === track.id)
+        );
+        const order = [...list.slice(at + 1), ...list.slice(0, at)];
+        const alt = order.find(playableNow);
+        const vi = prefsRef.current.language === 'vi';
+        if (!alt) {
+          showToast(
+            vi
+              ? 'Đang ngoại tuyến — bài này cần mạng. Hãy tải về để nghe offline.'
+              : 'You’re offline — this song needs the internet. Download it to play offline.'
+          );
+          return;
+        }
+        showToast(
+          vi ? 'Đang ngoại tuyến — phát bài có sẵn trên máy' : 'Offline — playing a saved song'
+        );
+        track = alt;
+      }
       if (newQueue && newQueue.length > 0) {
         const idx = newQueue.findIndex((t) => t.id === track.id);
         setQueue(newQueue);
@@ -1211,18 +1256,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (prefsRef.current.openPlayerOnPlay) setIsPlayerOpen(true);
       await internalStartTrack(track);
     },
-    [internalStartTrack]
-  );
-
-  /** Offline, a swipe / skip lands only on songs that can play without the network */
-  const playableNow = useCallback(
-    (t: Track) =>
-      isOnlineRef.current ||
-      isLocalTrack(t) ||
-      !!downloadsRef.current[t.id] ||
-      t.source === 'synth' ||
-      !!t.synthPreset,
-    []
+    [internalStartTrack, playableNow, showToast]
   );
 
   const playNext = useCallback(() => {
@@ -1792,6 +1826,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deletePlaylist = useCallback((id: string) => {
     setPlaylists((prev) => {
+      LocalLibrary.forgetImage(prev.find((p) => p.id === id)?.coverUrl);
       const next = prev.filter((p) => p.id !== id);
       StorageService.savePlaylists(next);
       return next;
@@ -2280,6 +2315,126 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, []);
 
+  const updatePlaylist = useCallback(
+    (
+      id: string,
+      patch: { name?: string; description?: string; coverUrl?: string | null; tracks?: Track[] }
+    ) => {
+      setPlaylists((prev) => {
+        const next = prev.map((pl) => {
+          if (pl.id !== id) return pl;
+          const out = { ...pl, updatedAt: Date.now() };
+          if (patch.name !== undefined) out.name = patch.name.trim() || pl.name;
+          if (patch.description !== undefined)
+            out.description = patch.description.trim() || undefined;
+          if (patch.coverUrl !== undefined && patch.coverUrl !== pl.coverUrl) {
+            LocalLibrary.forgetImage(pl.coverUrl);
+            out.coverUrl = patch.coverUrl || undefined;
+          }
+          if (patch.tracks) {
+            out.tracks = patch.tracks;
+            out.trackIds = patch.tracks.map((t) => t.id);
+          }
+          return out;
+        });
+        StorageService.savePlaylists(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  const movePlaylistTrack = useCallback((id: string, from: number, to: number) => {
+    setPlaylists((prev) => {
+      const next = prev.map((pl) => {
+        if (pl.id !== id || from === to) return pl;
+        if (from < 0 || from >= pl.tracks.length) return pl;
+        const tracks = [...pl.tracks];
+        const [t] = tracks.splice(from, 1);
+        tracks.splice(Math.max(0, Math.min(tracks.length, to)), 0, t);
+        return { ...pl, tracks, trackIds: tracks.map((x) => x.id), updatedAt: Date.now() };
+      });
+      StorageService.savePlaylists(next);
+      return next;
+    });
+  }, []);
+
+  const removeDownloads = useCallback(
+    async (trackIds: string[]) => {
+      const cur = downloadsRef.current;
+      const metas = trackIds.map((id) => cur[id]).filter(Boolean);
+      for (const m of metas) await StorageService.removeDownloadedFile(m);
+      setDownloads((prev) => {
+        const copy = { ...prev };
+        trackIds.forEach((id) => delete copy[id]);
+        StorageService.saveDownloads(copy);
+        return copy;
+      });
+      showToast(
+        prefsRef.current.language === 'vi'
+          ? `Đã xoá ${metas.length} bản tải`
+          : `Removed ${metas.length} downloads`
+      );
+    },
+    [showToast]
+  );
+
+  const setDownloadsFolder = useCallback((trackIds: string[], folder: string | null) => {
+    const name = folder?.trim() || undefined;
+    setDownloads((prev) => {
+      const copy = { ...prev };
+      trackIds.forEach((id) => {
+        if (copy[id]) copy[id] = { ...copy[id], folder: name };
+      });
+      StorageService.saveDownloads(copy);
+      return copy;
+    });
+  }, []);
+
+  const moveDownloadsToLocal = useCallback(
+    async (trackIds: string[], dir: string) => {
+      const cur = downloadsRef.current;
+      const metas = trackIds.map((id) => cur[id]).filter(Boolean);
+      if (!metas.length) return 0;
+      const items = metas.map((m) => {
+        const t = m.track;
+        const ext = (
+          m.localUri.match(/\.(m4a|flac|mp3|aac|mp4|wav)(?:$|\?)/i)?.[1] || 'm4a'
+        ).toLowerCase();
+        return {
+          uri: m.localUri,
+          name: `${t.artist ? `${t.artist} - ` : ''}${t.title}.${ext}`,
+          edit: {
+            title: t.title,
+            artist: t.artist,
+            album: t.album,
+          },
+          cover: /^https?:/i.test(t.artworkUrl || '') ? t.artworkUrl : undefined,
+        };
+      });
+      const moved = await LocalLibrary.adopt(items, dir);
+      const map: Record<string, Track> = {};
+      const done: string[] = [];
+      metas.forEach((m, i) => {
+        const nt = moved[i];
+        if (nt) {
+          map[m.track.id] = nt;
+          done.push(m.track.id);
+        }
+      });
+      applyTrackRemap(map);
+      // the files were moved, so only the records go
+      setDownloads((prev) => {
+        const copy = { ...prev };
+        done.forEach((id) => delete copy[id]);
+        StorageService.saveDownloads(copy);
+        return copy;
+      });
+      return done.length;
+    },
+    [applyTrackRemap]
+  );
+
   const likeTracks = useCallback(
     (tracks: Track[]) => {
       setLikedTracks((prev) => {
@@ -2607,6 +2762,11 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       likeTracks,
       queueTracks,
       removeTracksFromPlaylist,
+      updatePlaylist,
+      movePlaylistTrack,
+      removeDownloads,
+      setDownloadsFolder,
+      moveDownloadsToLocal,
       isBlocked,
       blockTrack,
       blockArtist,
@@ -2646,6 +2806,11 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       likeTracks,
       queueTracks,
       removeTracksFromPlaylist,
+      updatePlaylist,
+      movePlaylistTrack,
+      removeDownloads,
+      setDownloadsFolder,
+      moveDownloadsToLocal,
       isBlocked,
       blockTrack,
       blockArtist,

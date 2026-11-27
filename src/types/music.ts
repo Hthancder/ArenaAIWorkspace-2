@@ -148,6 +148,8 @@ export interface DownloadedTrackMeta {
   sizeBytes: number;
   downloadedAt: number;
   qualityLabel: string;
+  /** the user's own grouping inside Downloads ("Nhạc buồn", "Gym"…); none = ungrouped */
+  folder?: string;
 }
 
 export interface EqualizerBand {

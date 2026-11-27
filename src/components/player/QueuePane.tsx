@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
+import { isLocalTrack } from '../../services/local/localLibrary';
 import { useHolySic } from '../../context/HolySicContext';
 import { ArtworkImage } from '../ArtworkImage';
 import { Tap } from '../ui/Tap';
@@ -34,6 +35,8 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     darkPalette: palette,
     prefs,
     haptic,
+    isOnline,
+    downloads,
   } = useHolySic();
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
@@ -181,6 +184,10 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
           const current = idx === queueIndex;
           const past = idx < queueIndex;
           const lifted = dragFrom === idx;
+          const local = isLocalTrack(item);
+          const saved = local || !!downloads[item.id];
+          // offline: songs that need the network are skipped — show them greyed out
+          const unavailable = !isOnline && !saved && item.source !== 'synth' && !item.synthPreset;
           return (
             <Animated.View
               key={`${item.id}-${idx}`}
@@ -203,6 +210,7 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
                   current && { backgroundColor: palette.container + '66' },
                   lifted && { backgroundColor: '#24242F' },
                   past && !lifted && { opacity: 0.5 },
+                  unavailable && !lifted && { opacity: 0.32 },
                 ]}
               >
                 <View>
@@ -228,9 +236,26 @@ export const QueuePane: React.FC<{ onDone: () => void }> = ({ onDone }) => {
                   >
                     {item.title}
                   </Text>
-                  <Text numberOfLines={1} style={styles.rowArtist}>
-                    {item.artist}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    {saved || unavailable ? (
+                      <Ionicons
+                        name={
+                          unavailable
+                            ? 'cloud-offline-outline'
+                            : local
+                              ? 'phone-portrait-outline'
+                              : 'arrow-down-circle'
+                        }
+                        size={12}
+                        color={
+                          unavailable ? HOLYSIC_COLORS.textSecondary : HOLYSIC_COLORS.flacEmerald
+                        }
+                      />
+                    ) : null}
+                    <Text numberOfLines={1} style={[styles.rowArtist, { flexShrink: 1 }]}>
+                      {item.artist}
+                    </Text>
+                  </View>
                 </View>
 
                 <Tap

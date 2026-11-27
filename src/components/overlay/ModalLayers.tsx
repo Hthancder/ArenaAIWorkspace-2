@@ -17,6 +17,7 @@ import { useHolySic } from '../../context/HolySicContext';
 import { GlassSurface } from '../GlassSurface';
 import { AudioLabModal } from '../screens/AudioLabModal';
 import { SongInfoEditor, useSongEditorTarget } from '../local/SongInfoEditor';
+import { PlaylistEditor, usePlaylistEditorTarget } from '../library/PlaylistEditor';
 import { CollectionModal } from '../screens/CollectionScreen';
 import { TrackActionSheet } from '../TrackActionSheet';
 import { T as UI, themedSheet } from '../../theme/ui';
@@ -32,7 +33,7 @@ export type LayerId =
   | 'recap'
   | 'welcome';
 
-type SheetId = 'collection' | 'audiolab' | 'action' | 'editor';
+type SheetId = 'collection' | 'audiolab' | 'action' | 'editor' | 'plEditor';
 
 let stack: LayerId[] = ['root'];
 const subs = new Set<() => void>();
@@ -97,12 +98,14 @@ const anchors: Record<SheetId, { layer: LayerId; open: boolean }> = {
   audiolab: { layer: 'root', open: false },
   action: { layer: 'root', open: false },
   editor: { layer: 'root', open: false },
+  plEditor: { layer: 'root', open: false },
 };
 const OWN_LAYER: Record<SheetId, LayerId | undefined> = {
   collection: 'collection',
   audiolab: 'audiolab',
   action: undefined,
   editor: undefined,
+  plEditor: undefined,
 };
 
 function anchorFor(sheet: SheetId, visible: boolean): LayerId {
@@ -126,12 +129,15 @@ export const SheetSlot: React.FC<{ layer: LayerId }> = ({ layer }) => {
   const act = anchorFor('action', !!actionTrack) === layer;
   const editing = useSongEditorTarget();
   const ed = anchorFor('editor', !!editing) === layer;
+  const plEditing = usePlaylistEditorTarget();
+  const ple = anchorFor('plEditor', !!plEditing) === layer;
   return (
     <>
       {col && <CollectionModal />}
       {lab && <AudioLabModal />}
       {act && <TrackActionSheet />}
       {ed && <SongInfoEditor />}
+      {ple && <PlaylistEditor />}
       {top === layer && <ToastPill />}
     </>
   );

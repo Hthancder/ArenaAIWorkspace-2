@@ -173,6 +173,8 @@ export const LocalLibraryScreen: React.FC = () => {
     addToQueue,
     setActionTrack,
     savePlaylistFromTracks,
+    playlists,
+    addTracksToPlaylist,
     showToast,
     haptic,
     currentTrack,
@@ -399,6 +401,34 @@ export const LocalLibraryScreen: React.FC = () => {
         );
         showToast(vi ? `Đã lưu playlist ${tracks.length} bài` : `Saved ${tracks.length} songs`);
       },
+    });
+
+  /** selected songs → a new playlist or one you already have (mixing local and online songs) */
+  const toPlaylistMenu = (tracks: Track[], name: string, done?: () => void) =>
+    setOverlay({
+      type: 'actions',
+      title: vi ? `Thêm ${tracks.length} bài vào playlist` : `Add ${tracks.length} to a playlist`,
+      items: [
+        {
+          icon: 'add-circle-outline',
+          label: vi ? 'Playlist mới…' : 'New playlist…',
+          onPress: () => {
+            savePlaylist(tracks, name);
+            done?.();
+          },
+        },
+        ...playlists
+          .filter((p) => !p.isSystem)
+          .slice(0, 30)
+          .map((p) => ({
+            icon: 'musical-notes-outline' as const,
+            label: `${p.name} · ${p.tracks.length}`,
+            onPress: () => {
+              addTracksToPlaylist(p.id, tracks);
+              done?.();
+            },
+          })),
+      ],
     });
 
   const folderMenu = () =>
@@ -1253,7 +1283,12 @@ export const LocalLibraryScreen: React.FC = () => {
             icon="albums-outline"
             label="Playlist"
             disabled={!selected.size}
-            onPress={() => savePlaylist(tracksForPaths([...selected]), title)}
+            onPress={() =>
+              toPlaylistMenu(tracksForPaths([...selected]), title, () => {
+                setSelecting(false);
+                setSelected(new Set());
+              })
+            }
           />
           <SelAction
             icon="trash-outline"
