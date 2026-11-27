@@ -45,6 +45,7 @@ export function useQuickActions() {
     setActiveTab,
     playlists,
     openCollection,
+    prefsReady,
   } = useHolySic();
   const vi = prefs.language === 'vi';
 
@@ -168,6 +169,7 @@ export function useQuickActions() {
     openCollection,
   };
 
+  const runRef = useRef<(type: string | null) => void>(() => undefined);
   useEffect(() => {
     const m = mod();
     if (!m) return;
@@ -221,18 +223,24 @@ export function useQuickActions() {
           break;
       }
     };
+    runRef.current = run;
     const sub = m.addListener('onShortcut', (e) => run(e?.type ?? null));
-    // cold start: wait for the restored session (queue, likes) before acting
+    return () => sub.remove();
+  }, []);
+  // cold start: act once the saved library (queue, likes, playlists) is loaded — not on a guess
+  const initialDone = useRef(false);
+  useEffect(() => {
+    const m = mod();
+    if (!m || !prefsReady || initialDone.current) return;
+    initialDone.current = true;
+    // a moment for the restored state to reach the action refs
     const t = setTimeout(() => {
       try {
-        run(m.consumeInitial());
+        runRef.current(m.consumeInitial());
       } catch {
         // ignore
       }
-    }, 1200);
-    return () => {
-      clearTimeout(t);
-      sub.remove();
-    };
-  }, []);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [prefsReady]);
 }

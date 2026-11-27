@@ -87,6 +87,8 @@ export interface LyricsCandidate {
   score: number;
   /** a few lines to recognise it by */
   preview?: string;
+  /** not a search hit: the source is simply asked for this song when opened (no match score) */
+  probe?: boolean;
   load: () => Promise<LyricsData | null>;
 }
 
@@ -524,6 +526,7 @@ export async function searchLyricsCandidates(
     extra.push({
       key: 'youlyplus',
       source: 'youlyplus',
+      probe: true,
       title: q.title,
       artist: q.artist,
       durationSec: q.durationSec,
@@ -542,6 +545,7 @@ export async function searchLyricsCandidates(
     extra.push({
       key: 'lyricsovh',
       source: 'lyricsovh',
+      probe: true,
       title: q.title,
       artist: q.artist,
       synced: false,
@@ -557,5 +561,11 @@ export async function searchLyricsCandidates(
       seen.add(k);
       return true;
     })
-    .sort((a, b) => (free ? 0 : b.score - a.score) || Number(b.synced) - Number(a.synced));
+    .sort(
+      (a, b) =>
+        // real search hits first (best match on top), then the sources that are only asked
+        Number(!!a.probe) - Number(!!b.probe) ||
+        (free ? 0 : b.score - a.score) ||
+        Number(b.synced) - Number(a.synced)
+    );
 }

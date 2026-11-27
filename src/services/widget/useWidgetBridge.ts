@@ -131,6 +131,7 @@ export function useWidgetBridge() {
     lyricsOffsetSec,
     setIsPlayerOpen,
     isBuffering,
+    prefsReady,
   } = useHolySic();
   // what the widget calls "playing": sound is actually coming out. A stream that has stalled for
   // more than a moment counts as paused, so the widget's lyrics don't run ahead of silence.
@@ -261,6 +262,7 @@ export function useWidgetBridge() {
   ]);
 
   // widget buttons
+  const runRef = useRef<(a: WidgetAction | null) => void>(() => undefined);
   const actions = useRef({
     togglePlay,
     playNext,
@@ -291,14 +293,22 @@ export function useWidgetBridge() {
       else if (a === 'prev') x.playPrevious();
       else if (a === 'like' && x.currentTrack) x.toggleLike(x.currentTrack);
     };
-    // cold start from a widget button: wait for the restored queue
-    Linking.getInitialURL()
-      .then((u) => {
-        const a = parseWidgetUrl(u);
-        if (a) setTimeout(() => run(a), 1200);
-      })
-      .catch(() => undefined);
+    runRef.current = run;
     const sub = Linking.addEventListener('url', (e) => run(parseWidgetUrl(e.url)));
     return () => sub.remove();
   }, []);
+  // cold start from a widget button: act once the restored queue / likes are loaded
+  const initialDone = useRef(false);
+  useEffect(() => {
+    if (Platform.OS === 'web' || !prefsReady || initialDone.current) return;
+    initialDone.current = true;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    Linking.getInitialURL()
+      .then((u) => {
+        const a = parseWidgetUrl(u);
+        if (a) t = setTimeout(() => runRef.current(a), 250);
+      })
+      .catch(() => undefined);
+    return () => clearTimeout(t);
+  }, [prefsReady]);
 }

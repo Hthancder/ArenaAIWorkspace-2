@@ -283,7 +283,12 @@ const EditorBody: React.FC<{ track: Track; startTab?: Tab }> = ({ track, startTa
         style={s.wrap}
         pointerEvents="box-none"
       >
-        <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View
+          style={[
+            s.sheet,
+            { marginTop: insets.top + 36, paddingBottom: Math.max(insets.bottom, 12) },
+          ]}
+        >
           <View style={s.handle} />
           <View style={s.topBar}>
             <Tap feedback="opacity" onPress={close} hitSlop={10}>
@@ -484,8 +489,9 @@ const EditorBody: React.FC<{ track: Track; startTab?: Tab }> = ({ track, startTa
                   results.map((cand) => {
                     const open = openKey === cand.key;
                     const pv = preview[cand.key];
-                    const match =
-                      cand.score >= 0.8
+                    const match = cand.probe
+                      ? { label: vi ? 'Thử tải' : 'Try', color: c.text3 }
+                      : cand.score >= 0.8
                         ? { label: vi ? 'Khớp' : 'Match', color: '#34D399' }
                         : cand.score >= 0.62
                           ? { label: vi ? 'Có thể đúng' : 'Likely', color: '#FBBF24' }
@@ -666,7 +672,8 @@ const makeStyles = (c: UiColors) => ({
     borderTopRightRadius: 26,
     paddingHorizontal: 18,
     paddingTop: 8,
-    height: '88%' as const,
+    // fills what is left above the keyboard (a fixed height would push it off the top)
+    flex: 1,
     borderWidth: c.scheme === 'light' ? 0 : 1,
     borderColor: c.border,
   },
