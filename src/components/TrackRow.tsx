@@ -1,7 +1,7 @@
 // Song Row Component with active equalizer bars, Offline/FLAC badges, Like & Menu
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Animated,
   PanResponder,
@@ -19,6 +19,8 @@ import { Track } from '../types/music';
 import { formatTimeSec } from './HolySicIcons';
 import { T as UI, themedSheet } from '../theme/ui';
 import { Tap } from './ui/Tap';
+import { NativeMenu, nativeMenuAvailable } from './ui/NativeMenu';
+import { useTrackMenu } from './menu/useTrackMenu';
 
 interface TrackRowProps {
   track: Track;
@@ -109,6 +111,15 @@ export const TrackRow: React.FC<TrackRowProps> = ({
     })
   ).current;
 
+  // native song menu (iOS): touch and hold lifts the row out, "…" opens the pull-down
+  const trackMenu = useTrackMenu();
+  const menuItems = useMemo(
+    () => (nativeMenuAvailable ? trackMenu.itemsFor(track) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [trackMenu.itemsFor, track]
+  );
+  const onMenu = (id: string) => trackMenu.select(track, id);
+
   const { width: winW } = useWindowDimensions();
   // 4" phones: drop the secondary bits (quality pill, duration in grids) so the title gets room
   const narrow = winW < 360;
@@ -146,6 +157,8 @@ export const TrackRow: React.FC<TrackRowProps> = ({
       onPress={handlePress}
       // touch and hold → the song menu, with a haptic tap (like Music's context menu)
       onLongPress={() => {
+        // the native context menu takes the hold (and keeps the release from counting as a tap)
+        if (nativeMenuAvailable) return;
         if (Date.now() - swipedAt.current < 400) return;
         haptic('medium');
         setActionTrack(track);
@@ -277,6 +290,16 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         >
           <Ionicons name="close-circle-outline" size={19} color={UI.text3} />
         </Tap>
+      ) : nativeMenuAvailable ? (
+        <NativeMenu
+          items={menuItems}
+          onSelect={onMenu}
+          title={`${track.title} · ${track.artist}`}
+          label={(prefs.language === 'vi' ? 'Tuỳ chọn ' : 'Options for ') + track.title}
+          style={styles.iconBtn}
+        >
+          <Ionicons name="ellipsis-horizontal" size={18} color={UI.text2} />
+        </NativeMenu>
       ) : (
         <Tap
           feedback="opacity"
@@ -297,7 +320,21 @@ export const TrackRow: React.FC<TrackRowProps> = ({
     </Pressable>
   );
 
-  if (!swipeable) return row;
+  const lifted = nativeMenuAvailable ? (
+    <NativeMenu
+      trigger="longPress"
+      items={menuItems}
+      onSelect={onMenu}
+      previewRadius={14}
+      previewBackground={UI.surface('#14141B')}
+    >
+      {row}
+    </NativeMenu>
+  ) : (
+    row
+  );
+
+  if (!swipeable) return lifted;
   const vi = prefs.language === 'vi';
   const likeOpacity = dragX.interpolate({
     inputRange: [0, 24, SWIPE_AT],
@@ -373,7 +410,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
           <Ionicons name="return-down-forward" size={20} color={UI.inv} />
         </Animated.View>
       </Animated.View>
-      <Animated.View style={{ transform: [{ translateX: dragX }] }}>{row}</Animated.View>
+      <Animated.View style={{ transform: [{ translateX: dragX }] }}>{lifted}</Animated.View>
     </View>
   );
 };

@@ -2,8 +2,16 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
 import { t } from '../../constants/i18n';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
@@ -17,6 +25,8 @@ import { LocalLibrary } from '../../services/local/localLibrary';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
+import { Rise } from '../ui/Rise';
+import { ScrollEdgeHairline } from '../ui/ScrollEdgeBar';
 
 const SOURCE_FILTERS: { id: 'all' | MusicSourceId; vi: string; en: string }[] = [
   { id: 'all', vi: 'Tất cả', en: 'All' },
@@ -155,6 +165,7 @@ export const SearchScreen: React.FC = () => {
   };
 
   const scrollRef = useTabScrollToTop('search');
+  const scrollY = useRef(new Animated.Value(0)).current;
   return (
     <View style={styles.container}>
       {/* Sticky Search Input */}
@@ -285,13 +296,20 @@ export const SearchScreen: React.FC = () => {
         </ScrollView>
       </View>
 
-      <ScrollView
-        ref={scrollRef}
+      <View style={{ zIndex: 2 }}>
+        <ScrollEdgeHairline scrollY={scrollY} />
+      </View>
+      <Animated.ScrollView
+        ref={scrollRef as any}
         style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        scrollEventThrottle={16}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+        })}
       >
         {query.trim().length > 0 ? (
           <>
@@ -360,8 +378,10 @@ export const SearchScreen: React.FC = () => {
               {vi ? `Kết quả bài hát (${results.length})` : `Songs (${results.length})`}
             </Text>
 
-            {results.map((song) => (
-              <TrackRow key={song.id} track={song} queueContext={results} />
+            {results.map((song, i) => (
+              <Rise key={song.id} index={i}>
+                <TrackRow track={song} queueContext={results} />
+              </Rise>
             ))}
 
             {!loading && results.length === 0 && localTracks.length === 0 && (
@@ -531,7 +551,7 @@ export const SearchScreen: React.FC = () => {
             )}
           </>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
     </View>
   );
 };

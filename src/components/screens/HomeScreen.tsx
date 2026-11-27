@@ -2,9 +2,10 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Image,
   RefreshControl,
   ScrollView,
@@ -14,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { ArtworkImage } from '../ArtworkImage';
+import { ScrollEdgeBar } from '../ui/ScrollEdgeBar';
 import { t } from '../../constants/i18n';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
@@ -178,6 +180,7 @@ export const HomeScreen: React.FC = () => {
   // a quick-pick column fills the screen minus a peek of the next one, so rows never overflow
   const pickColW = Math.min(360, Math.max(250, winW - 52));
   const scrollRef = useTabScrollToTop('home');
+  const scrollY = useRef(new Animated.Value(0)).current;
   const pickColumns: Track[][] = [];
   for (let i = 0; i < Math.min(activePicks.length, 12); i += 3) {
     pickColumns.push(activePicks.slice(i, i + 3));
@@ -194,585 +197,602 @@ export const HomeScreen: React.FC = () => {
   };
 
   return (
-    <ScrollView
-      ref={scrollRef}
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      // native UIRefreshControl: pull the page down to fetch fresh picks & charts
-      refreshControl={
-        <RefreshControl
-          refreshing={pulling}
-          onRefresh={pullRefresh}
-          tintColor={palette.accent}
-          colors={[palette.accent]}
-          progressBackgroundColor="#1A1A24"
-        />
-      }
-    >
-      {currentTrack && ambient.spill && !prefs.pureBlack && (
-        <AmbientSpill
-          variant="wash"
-          colors={ambientColors}
-          level={ambient.level * 0.85}
-          style={styles.homeWash}
-        />
-      )}
-      <HaloGlow color={palette.accent} height={320} intensity={currentTrack ? 0.6 : 1} />
-      {/* Top Header */}
-      <View style={styles.headerRow}>
-        <View style={styles.brandLeft}>
-          <Image
-            source={require('../../../assets/icon.png')}
-            style={styles.logoBadge}
-            accessibilityIgnoresInvertColors
+    <View style={{ flex: 1 }}>
+      <Animated.ScrollView
+        ref={scrollRef as any}
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+        })}
+        // native UIRefreshControl: pull the page down to fetch fresh picks & charts
+        refreshControl={
+          <RefreshControl
+            refreshing={pulling}
+            onRefresh={pullRefresh}
+            tintColor={palette.accent}
+            colors={[palette.accent]}
+            progressBackgroundColor="#1A1A24"
           />
-          <View style={{ flexShrink: 1 }}>
-            <Text numberOfLines={1} style={[styles.greetingSub, { fontFamily }]}>
-              {greeting}
-            </Text>
-            <Text numberOfLines={1} style={[styles.brandTitle, { fontFamily }]}>
-              Holy<Text style={{ color: palette.accent }}>Sic</Text>
-            </Text>
+        }
+      >
+        {currentTrack && ambient.spill && !prefs.pureBlack && (
+          <AmbientSpill
+            variant="wash"
+            colors={ambientColors}
+            level={ambient.level * 0.85}
+            style={styles.homeWash}
+          />
+        )}
+        <HaloGlow color={palette.accent} height={320} intensity={currentTrack ? 0.6 : 1} />
+        {/* Top Header */}
+        <View style={styles.headerRow}>
+          <View style={styles.brandLeft}>
+            <Image
+              source={require('../../../assets/icon.png')}
+              style={styles.logoBadge}
+              accessibilityIgnoresInvertColors
+            />
+            <View style={{ flexShrink: 1 }}>
+              <Text numberOfLines={1} style={[styles.greetingSub, { fontFamily }]}>
+                {greeting}
+              </Text>
+              <Text numberOfLines={1} style={[styles.brandTitle, { fontFamily }]}>
+                Holy<Text style={{ color: palette.accent }}>Sic</Text>
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.headerActions}>
+            <Tap
+              onPress={() => setIsAudioLabOpen(true)}
+              style={styles.headerIconBtn}
+              accessibilityLabel={vi ? 'Âm thanh (Audio Lab)' : 'Audio Lab'}
+            >
+              <Ionicons name="options-outline" size={20} color={UI.text} />
+            </Tap>
+            <Tap
+              onPress={() => setIsRecapOpen(true)}
+              style={styles.headerIconBtn}
+              accessibilityLabel={vi ? 'Thống kê nghe nhạc' : 'Listening stats'}
+            >
+              <Ionicons name="stats-chart" size={19} color={palette.accent} />
+            </Tap>
+            <Tap
+              onPress={pullRefresh}
+              disabled={isLoadingHome}
+              style={styles.headerIconBtn}
+              accessibilityLabel={vi ? 'Làm mới' : 'Refresh'}
+            >
+              {isLoadingHome ? (
+                <ActivityIndicator size="small" color={UI.text} />
+              ) : (
+                <Ionicons name="refresh" size={19} color={UI.text} />
+              )}
+            </Tap>
           </View>
         </View>
 
-        <View style={styles.headerActions}>
-          <Tap
-            onPress={() => setIsAudioLabOpen(true)}
-            style={styles.headerIconBtn}
-            accessibilityLabel={vi ? 'Âm thanh (Audio Lab)' : 'Audio Lab'}
-          >
-            <Ionicons name="options-outline" size={20} color={UI.text} />
-          </Tap>
-          <Tap
-            onPress={() => setIsRecapOpen(true)}
-            style={styles.headerIconBtn}
-            accessibilityLabel={vi ? 'Thống kê nghe nhạc' : 'Listening stats'}
-          >
-            <Ionicons name="stats-chart" size={19} color={palette.accent} />
-          </Tap>
-          <Tap
-            onPress={pullRefresh}
-            disabled={isLoadingHome}
-            style={styles.headerIconBtn}
-            accessibilityLabel={vi ? 'Làm mới' : 'Refresh'}
-          >
-            {isLoadingHome ? (
-              <ActivityIndicator size="small" color={UI.text} />
-            ) : (
-              <Ionicons name="refresh" size={19} color={UI.text} />
-            )}
-          </Tap>
-        </View>
-      </View>
-
-      {/* Mood Filter Pills */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.moodRow}
-      >
-        {MOOD_CATEGORIES.map((m) => {
-          const active = selectedMood === m.id;
-          return (
-            <Tap
-              key={m.id}
-              onPress={() => handleMoodSelect(m.id, m.query)}
-              style={[
-                styles.moodChip,
-                active && {
-                  backgroundColor: palette.accent,
-                  borderColor: palette.accent,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.moodChipText,
-                  { color: active ? palette.onAccent : UI.fg(1), fontFamily },
-                ]}
-              >
-                {vi ? m.labelVi : m.labelEn}
-              </Text>
-            </Tap>
-          );
-        })}
-      </ScrollView>
-
-      {/* Quick Actions (OpenSpot Music) */}
-      {shown('quickActions') && (
+        {/* Mood Filter Pills */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.quickActions}
+          contentContainerStyle={styles.moodRow}
         >
-          {[
-            {
-              icon: 'heart',
-              tint: HOLYSIC_COLORS.roseLike,
-              label: vi ? 'Đã thích' : 'Liked',
-              sub: String(likedTracks.length),
-              onPress: () => openCollection({ kind: 'liked' }),
-            },
-            {
-              icon: 'arrow-down-circle',
-              tint: HOLYSIC_COLORS.flacEmerald,
-              label: vi ? 'Tải xuống' : 'Downloads',
-              sub: String(Object.keys(downloads).length),
-              onPress: () => openCollection({ kind: 'offline' }),
-            },
-            {
-              icon: 'link',
-              tint: '#60A5FA',
-              label: vi ? 'Dán link' : 'Paste link',
-              sub: 'YT · Spotify',
-              onPress: () => openImport('link'),
-            },
-            {
-              icon: 'list',
-              tint: '#FBBF24',
-              label: vi ? 'Tìm danh sách' : 'Search a list',
-              sub: vi ? 'Nhiều bài' : 'Batch',
-              onPress: () => openImport('list'),
-            },
-            {
-              icon: 'globe-outline',
-              tint: '#A78BFA',
-              label: vi ? 'Xếp hạng' : 'Charts',
-              sub: country.flag,
-              onPress: () => openCharts(null),
-            },
-            {
-              icon: 'radio',
-              tint: '#F87171',
-              label: 'Radio',
-              sub: 'LIVE',
-              onPress: () => openRadio(),
-            },
-            {
-              icon: 'folder-open-outline',
-              tint: '#F472B6',
-              label: vi ? 'Trên máy' : 'Local',
-              sub: 'MP3 · FLAC',
-              onPress: () => LocalLibrary.open(),
-            },
-          ].map((qa) => (
-            <Tap key={qa.label} onPress={qa.onPress} style={styles.qaCard}>
-              <View style={[styles.qaIcon, { backgroundColor: qa.tint + '22' }]}>
-                <Ionicons name={qa.icon as any} size={18} color={qa.tint} />
-              </View>
-              <View>
-                <Text numberOfLines={1} style={[styles.qaLabel, { fontFamily }]}>
-                  {qa.label}
-                </Text>
-                <Text numberOfLines={1} style={styles.qaSub}>
-                  {qa.sub}
-                </Text>
-              </View>
-            </Tap>
-          ))}
-        </ScrollView>
-      )}
-
-      {/* Quick Picks Horizontal Multi-Row Grid */}
-      {shown('quickPicks') && (
-        <>
-          <View style={styles.sectionHeader}>
-            <SectionTitle fontFamily={fontFamily}>{t(prefs.language, 'quickPicks')}</SectionTitle>
-            {(isLoadingHome || loadingMood) && (
-              <ActivityIndicator size="small" color={palette.accent} />
-            )}
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.quickGridScroll}
-            snapToInterval={pickColW + 10}
-            snapToAlignment="start"
-            decelerationRate="fast"
-          >
-            {pickColumns.map((col, colIdx) => (
-              <View key={colIdx} style={[styles.quickColumn, { width: pickColW }]}>
-                {col.map((song) => (
-                  <TrackRow
-                    key={song.id}
-                    track={song}
-                    queueContext={activePicks}
-                    compact
-                    swipeable={false}
-                  />
-                ))}
-              </View>
-            ))}
-          </ScrollView>
-        </>
-      )}
-
-      {/* Mix It Instant DJ Flow + Recap Dual Feature Cards */}
-      <View style={styles.dualCardsRow}>
-        <Tap onPress={() => startInstantMix()} style={{ flex: 1 }}>
-          <LinearGradient
-            colors={[darkPalette.gradient[0], '#1A1630']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.promoCard}
-          >
-            <View style={styles.promoTopRow}>
-              <Ionicons name="sparkles" size={20} color={darkPalette.accent} />
-              <Text style={[styles.promoTag, { color: darkPalette.accent }]}>MIX IT</Text>
-            </View>
-            <Text style={[styles.promoTitle, { fontFamily }]}>
-              {t(prefs.language, 'mixItTitle')}
-            </Text>
-            <Text numberOfLines={2} style={styles.promoDesc}>
-              {t(prefs.language, 'mixItDesc')}
-            </Text>
-          </LinearGradient>
-        </Tap>
-
-        <Tap onPress={() => setIsRecapOpen(true)} style={{ flex: 1 }}>
-          <LinearGradient
-            colors={['#1E293B', '#0F172A']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.promoCard}
-          >
-            <View style={styles.promoTopRow}>
-              <Ionicons name="id-card-outline" size={20} color="#34D399" />
-              <Text style={[styles.promoTag, { color: '#34D399' }]}>ID CARD</Text>
-            </View>
-            <Text style={[styles.promoTitle, { fontFamily }]}>
-              {t(prefs.language, 'recapBannerTitle')}
-            </Text>
-            <Text numberOfLines={2} style={styles.promoDesc}>
-              {t(prefs.language, 'recapBannerDesc')}
-            </Text>
-          </LinearGradient>
-        </Tap>
-      </View>
-
-      {/* Keep Listening (if history exists) */}
-      {shown('recent') && history.length > 0 && (
-        <>
-          <View style={styles.sectionHeader}>
-            <SectionTitle fontFamily={fontFamily}>
-              {t(prefs.language, 'keepListening')}
-            </SectionTitle>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalCards}
-          >
-            {recentUnique.map((ev) => (
+          {MOOD_CATEGORIES.map((m) => {
+            const active = selectedMood === m.id;
+            return (
               <Tap
-                key={ev.id}
-                onPress={() =>
-                  playTrack(
-                    ev.track,
-                    recentUnique.map((h) => h.track)
-                  )
-                }
-                style={styles.squareCard}
+                key={m.id}
+                onPress={() => handleMoodSelect(m.id, m.query)}
+                style={[
+                  styles.moodChip,
+                  active && {
+                    backgroundColor: palette.accent,
+                    borderColor: palette.accent,
+                  },
+                ]}
               >
-                <ArtworkImage
-                  source={{ uri: ev.track.artworkUrl }}
-                  fallbackSeed={ev.track.title + ev.track.artist}
-                  style={styles.squareArt}
-                />
-                <Text numberOfLines={1} style={[styles.squareTitle, { fontFamily }]}>
-                  {ev.track.title}
-                </Text>
-                <Text numberOfLines={1} style={styles.squareSub}>
-                  {ev.track.artist}
-                </Text>
-              </Tap>
-            ))}
-          </ScrollView>
-        </>
-      )}
-
-      {/* Smart shelves: computed from your own listening, on the device */}
-      {shown('smartNew') && (
-        <SmartShelf
-          title={vi ? 'Mới thêm' : 'Recently added'}
-          items={shelfNew}
-          fontFamily={fontFamily}
-          accent={palette.accent}
-          onAccent={palette.onAccent}
-          onPlay={(i) =>
-            playTrack(
-              shelfNew[i].track,
-              shelfNew.map((x) => x.track)
-            )
-          }
-        />
-      )}
-      {shown('smartTop') && (
-        <SmartShelf
-          title={vi ? 'Nghe nhiều' : 'Most played'}
-          hint={vi ? '30 ngày qua' : 'Last 30 days'}
-          items={shelfTop}
-          fontFamily={fontFamily}
-          accent={palette.accent}
-          onAccent={palette.onAccent}
-          rank
-          onPlay={(i) =>
-            playTrack(
-              shelfTop[i].track,
-              shelfTop.map((x) => x.track)
-            )
-          }
-        />
-      )}
-      {shown('smartForgotten') && (
-        <SmartShelf
-          title={vi ? 'Lâu chưa nghe' : 'Not played in a while'}
-          hint={vi ? 'Bài bạn từng mê' : 'Old favourites'}
-          items={shelfOld}
-          fontFamily={fontFamily}
-          accent={palette.accent}
-          onAccent={palette.onAccent}
-          onPlay={(i) =>
-            playTrack(
-              shelfOld[i].track,
-              shelfOld.map((x) => x.track)
-            )
-          }
-        />
-      )}
-
-      {/* Featured Albums Shelf */}
-      {shown('albums') && featuredAlbums.length > 0 && (
-        <>
-          <View style={styles.sectionHeader}>
-            <SectionTitle fontFamily={fontFamily}>
-              {t(prefs.language, 'featuredAlbums')}
-            </SectionTitle>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalCards}
-          >
-            {featuredAlbums.map((alb) => (
-              <Tap
-                key={alb.id}
-                onPress={() => openCollection({ kind: 'album', id: alb.id, summary: alb })}
-                style={styles.squareCard}
-              >
-                <ArtworkImage source={{ uri: alb.artworkUrl }} style={styles.squareArt} />
-                <Text numberOfLines={1} style={[styles.squareTitle, { fontFamily }]}>
-                  {alb.title}
-                </Text>
-                <Text numberOfLines={1} style={styles.squareSub}>
-                  {alb.artist}
-                </Text>
-              </Tap>
-            ))}
-          </ScrollView>
-        </>
-      )}
-
-      {/* Charts by country (OpenSpot trending, real Apple Music charts) */}
-      {shown('charts') && (
-        <>
-          <View style={styles.sectionHeader}>
-            <Tap
-              onPress={() => openCharts(null)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
-            >
-              <SectionTitle fontFamily={fontFamily}>
-                {vi
-                  ? `Thịnh hành ${country.flag} ${country.vi}`
-                  : `Trending ${country.flag} ${country.en}`}
-              </SectionTitle>
-              <Ionicons name="chevron-down" size={15} color={UI.text3} />
-            </Tap>
-            <Tap onPress={() => chartLocal[0] && playTrack(chartLocal[0], chartLocal)}>
-              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
-                {t(prefs.language, 'playAll')}
-              </Text>
-            </Tap>
-          </View>
-          <View style={styles.listCard}>
-            {chartLocal.slice(0, 6).map((song, idx) => (
-              <TrackRow key={song.id} track={song} queueContext={chartLocal} indexBadge={idx + 1} />
-            ))}
-            <Tap onPress={() => openCharts(null)} style={styles.seeAll}>
-              <Text style={{ color: palette.accent, fontWeight: '700' }}>
-                {vi ? 'Xem top 50 & đổi quốc gia' : 'See top 50 & change country'}
-              </Text>
-            </Tap>
-          </View>
-        </>
-      )}
-
-      {/* Genres & moods (Musike genre browse) */}
-      {shown('genres') && (
-        <>
-          <View style={styles.sectionHeader}>
-            <SectionTitle fontFamily={fontFamily}>{vi ? 'Thể loại' : 'Genres'}</SectionTitle>
-          </View>
-          <View style={styles.genreGrid}>
-            {CHART_GENRES.filter((g) => g.id !== null)
-              .slice(0, 12)
-              .map((g) => (
-                <Tap
-                  key={String(g.id)}
-                  onPress={() => openCharts(g.id)}
+                <Text
                   style={[
-                    styles.genreTile,
-                    { backgroundColor: g.tint + '26', borderColor: g.tint + '55' },
+                    styles.moodChipText,
+                    { color: active ? palette.onAccent : UI.fg(1), fontFamily },
                   ]}
                 >
-                  <Ionicons name={g.icon as any} size={18} color={g.tint} />
-                  <Text
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.8}
-                    style={[styles.genreText, { fontFamily }]}
-                  >
-                    {vi ? g.vi : g.en}
+                  {vi ? m.labelVi : m.labelEn}
+                </Text>
+              </Tap>
+            );
+          })}
+        </ScrollView>
+
+        {/* Quick Actions (OpenSpot Music) */}
+        {shown('quickActions') && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickActions}
+          >
+            {[
+              {
+                icon: 'heart',
+                tint: HOLYSIC_COLORS.roseLike,
+                label: vi ? 'Đã thích' : 'Liked',
+                sub: String(likedTracks.length),
+                onPress: () => openCollection({ kind: 'liked' }),
+              },
+              {
+                icon: 'arrow-down-circle',
+                tint: HOLYSIC_COLORS.flacEmerald,
+                label: vi ? 'Tải xuống' : 'Downloads',
+                sub: String(Object.keys(downloads).length),
+                onPress: () => openCollection({ kind: 'offline' }),
+              },
+              {
+                icon: 'link',
+                tint: '#60A5FA',
+                label: vi ? 'Dán link' : 'Paste link',
+                sub: 'YT · Spotify',
+                onPress: () => openImport('link'),
+              },
+              {
+                icon: 'list',
+                tint: '#FBBF24',
+                label: vi ? 'Tìm danh sách' : 'Search a list',
+                sub: vi ? 'Nhiều bài' : 'Batch',
+                onPress: () => openImport('list'),
+              },
+              {
+                icon: 'globe-outline',
+                tint: '#A78BFA',
+                label: vi ? 'Xếp hạng' : 'Charts',
+                sub: country.flag,
+                onPress: () => openCharts(null),
+              },
+              {
+                icon: 'radio',
+                tint: '#F87171',
+                label: 'Radio',
+                sub: 'LIVE',
+                onPress: () => openRadio(),
+              },
+              {
+                icon: 'folder-open-outline',
+                tint: '#F472B6',
+                label: vi ? 'Trên máy' : 'Local',
+                sub: 'MP3 · FLAC',
+                onPress: () => LocalLibrary.open(),
+              },
+            ].map((qa) => (
+              <Tap key={qa.label} onPress={qa.onPress} style={styles.qaCard}>
+                <View style={[styles.qaIcon, { backgroundColor: qa.tint + '22' }]}>
+                  <Ionicons name={qa.icon as any} size={18} color={qa.tint} />
+                </View>
+                <View>
+                  <Text numberOfLines={1} style={[styles.qaLabel, { fontFamily }]}>
+                    {qa.label}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.qaSub}>
+                    {qa.sub}
+                  </Text>
+                </View>
+              </Tap>
+            ))}
+          </ScrollView>
+        )}
+
+        {/* Quick Picks Horizontal Multi-Row Grid */}
+        {shown('quickPicks') && (
+          <>
+            <View style={styles.sectionHeader}>
+              <SectionTitle fontFamily={fontFamily}>{t(prefs.language, 'quickPicks')}</SectionTitle>
+              {(isLoadingHome || loadingMood) && (
+                <ActivityIndicator size="small" color={palette.accent} />
+              )}
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.quickGridScroll}
+              snapToInterval={pickColW + 10}
+              snapToAlignment="start"
+              decelerationRate="fast"
+            >
+              {pickColumns.map((col, colIdx) => (
+                <View key={colIdx} style={[styles.quickColumn, { width: pickColW }]}>
+                  {col.map((song) => (
+                    <TrackRow
+                      key={song.id}
+                      track={song}
+                      queueContext={activePicks}
+                      compact
+                      swipeable={false}
+                    />
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        {/* Mix It Instant DJ Flow + Recap Dual Feature Cards */}
+        <View style={styles.dualCardsRow}>
+          <Tap onPress={() => startInstantMix()} style={{ flex: 1 }}>
+            <LinearGradient
+              colors={[darkPalette.gradient[0], '#1A1630']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.promoCard}
+            >
+              <View style={styles.promoTopRow}>
+                <Ionicons name="sparkles" size={20} color={darkPalette.accent} />
+                <Text style={[styles.promoTag, { color: darkPalette.accent }]}>MIX IT</Text>
+              </View>
+              <Text style={[styles.promoTitle, { fontFamily }]}>
+                {t(prefs.language, 'mixItTitle')}
+              </Text>
+              <Text numberOfLines={2} style={styles.promoDesc}>
+                {t(prefs.language, 'mixItDesc')}
+              </Text>
+            </LinearGradient>
+          </Tap>
+
+          <Tap onPress={() => setIsRecapOpen(true)} style={{ flex: 1 }}>
+            <LinearGradient
+              colors={['#1E293B', '#0F172A']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.promoCard}
+            >
+              <View style={styles.promoTopRow}>
+                <Ionicons name="id-card-outline" size={20} color="#34D399" />
+                <Text style={[styles.promoTag, { color: '#34D399' }]}>ID CARD</Text>
+              </View>
+              <Text style={[styles.promoTitle, { fontFamily }]}>
+                {t(prefs.language, 'recapBannerTitle')}
+              </Text>
+              <Text numberOfLines={2} style={styles.promoDesc}>
+                {t(prefs.language, 'recapBannerDesc')}
+              </Text>
+            </LinearGradient>
+          </Tap>
+        </View>
+
+        {/* Keep Listening (if history exists) */}
+        {shown('recent') && history.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <SectionTitle fontFamily={fontFamily}>
+                {t(prefs.language, 'keepListening')}
+              </SectionTitle>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalCards}
+            >
+              {recentUnique.map((ev) => (
+                <Tap
+                  key={ev.id}
+                  onPress={() =>
+                    playTrack(
+                      ev.track,
+                      recentUnique.map((h) => h.track)
+                    )
+                  }
+                  style={styles.squareCard}
+                >
+                  <ArtworkImage
+                    source={{ uri: ev.track.artworkUrl }}
+                    fallbackSeed={ev.track.title + ev.track.artist}
+                    style={styles.squareArt}
+                  />
+                  <Text numberOfLines={1} style={[styles.squareTitle, { fontFamily }]}>
+                    {ev.track.title}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.squareSub}>
+                    {ev.track.artist}
                   </Text>
                 </Tap>
               ))}
-          </View>
-        </>
-      )}
+            </ScrollView>
+          </>
+        )}
 
-      {/* Live radio (Radio Browser) */}
-      {shown('radio') && radioShelf.length > 0 && (
-        <>
-          <View style={styles.sectionHeader}>
-            <SectionTitle fontFamily={fontFamily}>
-              {vi ? 'Radio trực tuyến' : 'Live radio'}
-            </SectionTitle>
-            <Tap onPress={openRadio}>
-              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
-                {vi ? 'Tất cả đài' : 'All stations'}
-              </Text>
-            </Tap>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalCards}
-          >
-            {radioShelf.map((st) => {
-              const on = currentTrack?.id === st.id;
-              return (
+        {/* Smart shelves: computed from your own listening, on the device */}
+        {shown('smartNew') && (
+          <SmartShelf
+            title={vi ? 'Mới thêm' : 'Recently added'}
+            items={shelfNew}
+            fontFamily={fontFamily}
+            accent={palette.accent}
+            onAccent={palette.onAccent}
+            onPlay={(i) =>
+              playTrack(
+                shelfNew[i].track,
+                shelfNew.map((x) => x.track)
+              )
+            }
+          />
+        )}
+        {shown('smartTop') && (
+          <SmartShelf
+            title={vi ? 'Nghe nhiều' : 'Most played'}
+            hint={vi ? '30 ngày qua' : 'Last 30 days'}
+            items={shelfTop}
+            fontFamily={fontFamily}
+            accent={palette.accent}
+            onAccent={palette.onAccent}
+            rank
+            onPlay={(i) =>
+              playTrack(
+                shelfTop[i].track,
+                shelfTop.map((x) => x.track)
+              )
+            }
+          />
+        )}
+        {shown('smartForgotten') && (
+          <SmartShelf
+            title={vi ? 'Lâu chưa nghe' : 'Not played in a while'}
+            hint={vi ? 'Bài bạn từng mê' : 'Old favourites'}
+            items={shelfOld}
+            fontFamily={fontFamily}
+            accent={palette.accent}
+            onAccent={palette.onAccent}
+            onPlay={(i) =>
+              playTrack(
+                shelfOld[i].track,
+                shelfOld.map((x) => x.track)
+              )
+            }
+          />
+        )}
+
+        {/* Featured Albums Shelf */}
+        {shown('albums') && featuredAlbums.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <SectionTitle fontFamily={fontFamily}>
+                {t(prefs.language, 'featuredAlbums')}
+              </SectionTitle>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalCards}
+            >
+              {featuredAlbums.map((alb) => (
                 <Tap
-                  key={st.id}
-                  onPress={() => playTrack(st, radioShelf)}
-                  onLongPress={() => toggleFavoriteStation(st)}
-                  style={styles.radioCard}
+                  key={alb.id}
+                  onPress={() => openCollection({ kind: 'album', id: alb.id, summary: alb })}
+                  style={styles.squareCard}
                 >
-                  <View>
-                    <ArtworkImage
-                      source={{ uri: st.artworkUrl }}
-                      fallbackSeed={st.title}
-                      style={[styles.radioArt, on && { borderColor: palette.accent }]}
-                    />
-                    <View style={styles.liveTag}>
-                      <View style={styles.liveDot} />
-                      <Text style={styles.liveTagText}>LIVE</Text>
-                    </View>
-                  </View>
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.squareTitle, { fontFamily }, on && { color: palette.accent }]}
-                  >
-                    {st.title}
+                  <ArtworkImage source={{ uri: alb.artworkUrl }} style={styles.squareArt} />
+                  <Text numberOfLines={1} style={[styles.squareTitle, { fontFamily }]}>
+                    {alb.title}
                   </Text>
                   <Text numberOfLines={1} style={styles.squareSub}>
-                    {st.genre || st.artist}
+                    {alb.artist}
                   </Text>
                 </Tap>
-              );
-            })}
-          </ScrollView>
-        </>
-      )}
+              ))}
+            </ScrollView>
+          </>
+        )}
 
-      {/* Indie trending from Audius */}
-      {shown('audius') && (audius.length > 0 || audiusLoading) && (
-        <>
-          <View style={styles.sectionHeader}>
-            <SectionTitle fontFamily={fontFamily}>
-              {vi ? 'Indie thịnh hành · Audius' : 'Indie trending · Audius'}
-            </SectionTitle>
-            <Tap onPress={() => audius[0] && playTrack(audius[0], audius)}>
-              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
-                {t(prefs.language, 'playAll')}
-              </Text>
-            </Tap>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={[styles.horizontalCards, { gap: 8, paddingBottom: 10 }]}
-          >
-            {AUDIUS_GENRES.map((g) => {
-              const active = audiusGenre === g.id;
-              return (
-                <Tap
-                  key={g.id || 'all'}
-                  onPress={() => setAudiusGenre(g.id)}
-                  style={[
-                    styles.audiusChip,
-                    active && { backgroundColor: palette.accent, borderColor: palette.accent },
-                  ]}
-                >
-                  <Text style={[styles.audiusChipText, active && { color: palette.onAccent }]}>
-                    {vi ? g.vi : g.en}
-                  </Text>
-                </Tap>
-              );
-            })}
-          </ScrollView>
-          <View style={styles.listCard}>
-            {audiusLoading && audius.length === 0 ? (
-              <ActivityIndicator style={{ marginVertical: 18 }} color={palette.accent} />
-            ) : (
-              audius
-                .slice(0, 6)
-                .map((song, idx) => (
-                  <TrackRow key={song.id} track={song} queueContext={audius} indexBadge={idx + 1} />
-                ))
-            )}
-          </View>
-        </>
-      )}
+        {/* Charts by country (OpenSpot trending, real Apple Music charts) */}
+        {shown('charts') && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Tap
+                onPress={() => openCharts(null)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              >
+                <SectionTitle fontFamily={fontFamily}>
+                  {vi
+                    ? `Thịnh hành ${country.flag} ${country.vi}`
+                    : `Trending ${country.flag} ${country.en}`}
+                </SectionTitle>
+                <Ionicons name="chevron-down" size={15} color={UI.text3} />
+              </Tap>
+              <Tap onPress={() => chartLocal[0] && playTrack(chartLocal[0], chartLocal)}>
+                <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
+                  {t(prefs.language, 'playAll')}
+                </Text>
+              </Tap>
+            </View>
+            <View style={styles.listCard}>
+              {chartLocal.slice(0, 6).map((song, idx) => (
+                <TrackRow
+                  key={song.id}
+                  track={song}
+                  queueContext={chartLocal}
+                  indexBadge={idx + 1}
+                />
+              ))}
+              <Tap onPress={() => openCharts(null)} style={styles.seeAll}>
+                <Text style={{ color: palette.accent, fontWeight: '700' }}>
+                  {vi ? 'Xem top 50 & đổi quốc gia' : 'See top 50 & change country'}
+                </Text>
+              </Tap>
+            </View>
+          </>
+        )}
 
-      {/* Global chart */}
-      {shown('global') && (
-        <>
-          <View style={styles.sectionHeader}>
-            <SectionTitle fontFamily={fontFamily}>
-              {t(prefs.language, 'globalCharts')} {globalCountry.flag}
-            </SectionTitle>
-            <Tap onPress={() => chartGlobal[0] && playTrack(chartGlobal[0], chartGlobal)}>
-              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
-                {t(prefs.language, 'playAll')}
-              </Text>
-            </Tap>
-          </View>
-          <View style={styles.listCard}>
-            {chartGlobal.slice(0, 6).map((song, idx) => (
-              <TrackRow
-                key={song.id}
-                track={song}
-                queueContext={chartGlobal}
-                indexBadge={idx + 1}
-              />
-            ))}
-          </View>
-        </>
-      )}
-    </ScrollView>
+        {/* Genres & moods (Musike genre browse) */}
+        {shown('genres') && (
+          <>
+            <View style={styles.sectionHeader}>
+              <SectionTitle fontFamily={fontFamily}>{vi ? 'Thể loại' : 'Genres'}</SectionTitle>
+            </View>
+            <View style={styles.genreGrid}>
+              {CHART_GENRES.filter((g) => g.id !== null)
+                .slice(0, 12)
+                .map((g) => (
+                  <Tap
+                    key={String(g.id)}
+                    onPress={() => openCharts(g.id)}
+                    style={[
+                      styles.genreTile,
+                      { backgroundColor: g.tint + '26', borderColor: g.tint + '55' },
+                    ]}
+                  >
+                    <Ionicons name={g.icon as any} size={18} color={g.tint} />
+                    <Text
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                      style={[styles.genreText, { fontFamily }]}
+                    >
+                      {vi ? g.vi : g.en}
+                    </Text>
+                  </Tap>
+                ))}
+            </View>
+          </>
+        )}
+
+        {/* Live radio (Radio Browser) */}
+        {shown('radio') && radioShelf.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <SectionTitle fontFamily={fontFamily}>
+                {vi ? 'Radio trực tuyến' : 'Live radio'}
+              </SectionTitle>
+              <Tap onPress={openRadio}>
+                <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
+                  {vi ? 'Tất cả đài' : 'All stations'}
+                </Text>
+              </Tap>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalCards}
+            >
+              {radioShelf.map((st) => {
+                const on = currentTrack?.id === st.id;
+                return (
+                  <Tap
+                    key={st.id}
+                    onPress={() => playTrack(st, radioShelf)}
+                    onLongPress={() => toggleFavoriteStation(st)}
+                    style={styles.radioCard}
+                  >
+                    <View>
+                      <ArtworkImage
+                        source={{ uri: st.artworkUrl }}
+                        fallbackSeed={st.title}
+                        style={[styles.radioArt, on && { borderColor: palette.accent }]}
+                      />
+                      <View style={styles.liveTag}>
+                        <View style={styles.liveDot} />
+                        <Text style={styles.liveTagText}>LIVE</Text>
+                      </View>
+                    </View>
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.squareTitle, { fontFamily }, on && { color: palette.accent }]}
+                    >
+                      {st.title}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.squareSub}>
+                      {st.genre || st.artist}
+                    </Text>
+                  </Tap>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
+
+        {/* Indie trending from Audius */}
+        {shown('audius') && (audius.length > 0 || audiusLoading) && (
+          <>
+            <View style={styles.sectionHeader}>
+              <SectionTitle fontFamily={fontFamily}>
+                {vi ? 'Indie thịnh hành · Audius' : 'Indie trending · Audius'}
+              </SectionTitle>
+              <Tap onPress={() => audius[0] && playTrack(audius[0], audius)}>
+                <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
+                  {t(prefs.language, 'playAll')}
+                </Text>
+              </Tap>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={[styles.horizontalCards, { gap: 8, paddingBottom: 10 }]}
+            >
+              {AUDIUS_GENRES.map((g) => {
+                const active = audiusGenre === g.id;
+                return (
+                  <Tap
+                    key={g.id || 'all'}
+                    onPress={() => setAudiusGenre(g.id)}
+                    style={[
+                      styles.audiusChip,
+                      active && { backgroundColor: palette.accent, borderColor: palette.accent },
+                    ]}
+                  >
+                    <Text style={[styles.audiusChipText, active && { color: palette.onAccent }]}>
+                      {vi ? g.vi : g.en}
+                    </Text>
+                  </Tap>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.listCard}>
+              {audiusLoading && audius.length === 0 ? (
+                <ActivityIndicator style={{ marginVertical: 18 }} color={palette.accent} />
+              ) : (
+                audius
+                  .slice(0, 6)
+                  .map((song, idx) => (
+                    <TrackRow
+                      key={song.id}
+                      track={song}
+                      queueContext={audius}
+                      indexBadge={idx + 1}
+                    />
+                  ))
+              )}
+            </View>
+          </>
+        )}
+
+        {/* Global chart */}
+        {shown('global') && (
+          <>
+            <View style={styles.sectionHeader}>
+              <SectionTitle fontFamily={fontFamily}>
+                {t(prefs.language, 'globalCharts')} {globalCountry.flag}
+              </SectionTitle>
+              <Tap onPress={() => chartGlobal[0] && playTrack(chartGlobal[0], chartGlobal)}>
+                <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
+                  {t(prefs.language, 'playAll')}
+                </Text>
+              </Tap>
+            </View>
+            <View style={styles.listCard}>
+              {chartGlobal.slice(0, 6).map((song, idx) => (
+                <TrackRow
+                  key={song.id}
+                  track={song}
+                  queueContext={chartGlobal}
+                  indexBadge={idx + 1}
+                />
+              ))}
+            </View>
+          </>
+        )}
+      </Animated.ScrollView>
+      <ScrollEdgeBar scrollY={scrollY} title="HolySic" from={30} to={66} fontFamily={fontFamily} />
+    </View>
   );
 };
 

@@ -44,6 +44,10 @@ import { TurntableVinylStage } from './TurntablePlayer';
 import { SheetSlot, useModalLayer, usePresentGate } from '../overlay/ModalLayers';
 import { LikeHeart } from '../ui/LikeHeart';
 import { Tap } from '../ui/Tap';
+import { NativeMenu, nativeMenuAvailable, MenuItem } from '../ui/NativeMenu';
+import { useTrackMenu } from '../menu/useTrackMenu';
+import { MorphIcon, NudgeIcon } from '../ui/MorphIcon';
+import { PlayerStack } from '../../services/ui/playerStack';
 
 type SubPane = 'artwork' | 'lyrics' | 'queue' | 'sleep' | 'diagnostics' | 'styles';
 
@@ -93,6 +97,8 @@ export const FullPlayerModal: React.FC = () => {
   const energy = useAmbientEnergy(isPlayerOpen && ambientOn, ambient.breathing, isPlaying);
   const ff = useHoldSeek(seekBy, 1);
   const rw = useHoldSeek(seekBy, -1);
+  const trackMenu = useTrackMenu();
+  const [nudge, setNudge] = useState({ back: 0, fwd: 0 });
 
   const [pane, setPane] = useState<SubPane>('artwork');
   const { width: winW, height: winH } = useWindowDimensions();
@@ -118,7 +124,8 @@ export const FullPlayerModal: React.FC = () => {
 
   // ── swipe down to close (the player follows the finger, the app shows through behind it) ──
   const { height: screenH } = useWindowDimensions();
-  const dragY = useRef(new Animated.Value(0)).current;
+  // shared with App.tsx: the app behind recedes / returns as the sheet is dragged (card stack)
+  const dragY = PlayerStack.drag;
   // the sheet only becomes a moving (transformed, rounded) layer while it's being dragged
   const [dragging, setDragging] = useState(false);
   const swipeRef = useRef({
@@ -139,6 +146,7 @@ export const FullPlayerModal: React.FC = () => {
   };
   useEffect(() => {
     if (isPlayerOpen) dragY.setValue(0);
+    PlayerStack.setOpen(isPlayerOpen);
   }, [isPlayerOpen, dragY]);
   const dismissPan = useRef(
     PanResponder.create({
@@ -211,6 +219,77 @@ export const FullPlayerModal: React.FC = () => {
 
   if (!currentTrack) return null;
   const vi = prefs.language === 'vi';
+  const playerMenuItems = (): MenuItem[] => {
+    const sleepOn = sleepRemainingSec !== null || sleepEndOfTrack;
+    return [
+      ...trackMenu.itemsFor(currentTrack).filter((it) => it.id !== 'more'),
+      {
+        id: 'p:lyrics',
+        title: vi ? 'Lời bài hát' : 'Lyrics',
+        icon: 'quote.bubble',
+        checked: pane === 'lyrics',
+        section: 3,
+      },
+      {
+        id: 'p:queue',
+        title: vi ? 'Danh sách chờ' : 'Playing Next',
+        icon: 'list.bullet',
+        checked: pane === 'queue',
+        section: 3,
+      },
+      {
+        id: 'p:sleep',
+        title: vi ? 'Hẹn giờ ngủ' : 'Sleep Timer',
+        subtitle: sleepEndOfTrack
+          ? vi
+            ? 'Hết bài này'
+            : 'End of song'
+          : sleepRemainingSec !== null
+            ? formatTimeSec(sleepRemainingSec)
+            : undefined,
+        icon: 'moon.zzz',
+        section: 3,
+        children: [
+          ...[5, 15, 30, 45, 60].map((m) => ({
+            id: `sleep:${m}`,
+            title: vi ? `${m} phút` : `${m} minutes`,
+          })),
+          {
+            id: 'sleep:end',
+            title: vi ? 'Hết bài này' : 'End of Song',
+            checked: sleepEndOfTrack,
+          },
+          ...(sleepOn
+            ? [
+                {
+                  id: 'sleep:off',
+                  title: vi ? 'Tắt hẹn giờ' : 'Turn Off',
+                  icon: 'xmark',
+                  destructive: true,
+                },
+              ]
+            : []),
+        ],
+      },
+      {
+        id: 'more',
+        title: vi ? 'Tuỳ chọn khác…' : 'More Options…',
+        icon: 'ellipsis.circle',
+        section: 4,
+      },
+    ];
+  };
+  const onPlayerMenu = (id: string) => {
+    if (id === 'p:lyrics') return setPane((p) => (p === 'lyrics' ? 'artwork' : 'lyrics'));
+    if (id === 'p:queue') return setPane((p) => (p === 'queue' ? 'artwork' : 'queue'));
+    if (id.startsWith('sleep:')) {
+      const v = id.slice(6);
+      haptic('light');
+      setSleepTimer(v === 'off' ? null : v === 'end' ? 'end_of_track' : Number(v));
+      return;
+    }
+    trackMenu.select(currentTrack, id);
+  };
   const liked = isLiked(currentTrack.id);
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
@@ -337,14 +416,28 @@ export const FullPlayerModal: React.FC = () => {
                 />
               </Tap>
 
-              <Tap
-                hitSlop={8}
-                onPress={() => setActionTrack(currentTrack)}
-                style={styles.topIconBtn}
-                accessibilityLabel={vi ? 'Tuỳ chọn bài hát' : 'Song options'}
-              >
-                <Ionicons name="ellipsis-horizontal" size={21} color="#FFFFFF" />
-              </Tap>
+              {nativeMenuAvailable ? (
+                // native pull-down: the song menu + the player's own options (lyrics, queue,
+                // sleep timer submenu with the running one ticked)
+                <NativeMenu
+                  items={playerMenuItems()}
+                  onSelect={onPlayerMenu}
+                  title={`${currentTrack.title} · ${currentTrack.artist}`}
+                  label={vi ? 'Tuỳ chọn bài hát' : 'Song options'}
+                  style={styles.topIconBtn}
+                >
+                  <Ionicons name="ellipsis-horizontal" size={21} color="#FFFFFF" />
+                </NativeMenu>
+              ) : (
+                <Tap
+                  hitSlop={8}
+                  onPress={() => setActionTrack(currentTrack)}
+                  style={styles.topIconBtn}
+                  accessibilityLabel={vi ? 'Tuỳ chọn bài hát' : 'Song options'}
+                >
+                  <Ionicons name="ellipsis-horizontal" size={21} color="#FFFFFF" />
+                </Tap>
+              )}
             </View>
           </View>
 
@@ -683,13 +776,23 @@ export const FullPlayerModal: React.FC = () => {
 
                 <Tap
                   hitSlop={10}
-                  onPress={rw.guard(playPrevious)}
+                  onPress={rw.guard(() => {
+                    setNudge((n) => ({ ...n, back: n.back + 1 }));
+                    playPrevious();
+                  })}
                   onLongPress={rw.onLongPress}
                   onPressOut={rw.onPressOut}
                   delayLongPress={rw.delayLongPress}
                   style={styles.skipBtn}
+                  accessibilityLabel={vi ? 'Bài trước' : 'Previous'}
                 >
-                  <Ionicons name="play-skip-back" size={30} color="#FFFFFF" />
+                  <NudgeIcon
+                    name="play-skip-back"
+                    size={30}
+                    color="#FFFFFF"
+                    dir={-1}
+                    pulse={nudge.back}
+                  />
                 </Tap>
 
                 <Tap
@@ -699,24 +802,36 @@ export const FullPlayerModal: React.FC = () => {
                   {isBuffering ? (
                     <ActivityIndicator size="small" color={palette.onAccent} />
                   ) : (
-                    <Ionicons
-                      name={isPlaying ? 'pause' : 'play'}
+                    <MorphIcon
+                      on={isPlaying}
+                      onIcon="pause"
+                      offIcon="play"
                       size={32}
                       color={palette.onAccent}
-                      style={!isPlaying ? { marginLeft: 3 } : undefined}
+                      offShiftX={3}
                     />
                   )}
                 </Tap>
 
                 <Tap
                   hitSlop={10}
-                  onPress={ff.guard(playNext)}
+                  onPress={ff.guard(() => {
+                    setNudge((n) => ({ ...n, fwd: n.fwd + 1 }));
+                    playNext();
+                  })}
                   onLongPress={ff.onLongPress}
                   onPressOut={ff.onPressOut}
                   delayLongPress={ff.delayLongPress}
                   style={styles.skipBtn}
+                  accessibilityLabel={vi ? 'Bài tiếp' : 'Next'}
                 >
-                  <Ionicons name="play-skip-forward" size={30} color="#FFFFFF" />
+                  <NudgeIcon
+                    name="play-skip-forward"
+                    size={30}
+                    color="#FFFFFF"
+                    dir={1}
+                    pulse={nudge.fwd}
+                  />
                 </Tap>
 
                 <Tap hitSlop={10} onPress={cycleRepeat} style={styles.sideCtrl}>

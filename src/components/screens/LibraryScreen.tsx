@@ -1,9 +1,11 @@
 // HolySic Library Hub — Playlists, Liked Songs, Offline Downloads, History & Playlist Importer
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Animated,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -26,6 +28,8 @@ import { useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
 import { EmptyState } from '../ui/EmptyState';
 import { PopIn } from '../ui/PopIn';
+import { ScrollEdgeHairline } from '../ui/ScrollEdgeBar';
+import { NativeMenu, nativeMenuAvailable } from '../ui/NativeMenu';
 
 type LibFilter = 'playlists' | 'liked' | 'offline' | 'history';
 
@@ -42,6 +46,9 @@ export const LibraryScreen: React.FC = () => {
     openCollection,
     setIsRecapOpen,
     setActiveTab,
+    playTrack,
+    setIsPlayerOpen,
+    deletePlaylist,
   } = useHolySic();
 
   const [tab, setTab] = useState<LibFilter>('playlists');
@@ -57,6 +64,7 @@ export const LibraryScreen: React.FC = () => {
   const narrow = useWindowDimensions().width < 360;
 
   const scrollRef = useTabScrollToTop('library');
+  const scrollY = useRef(new Animated.Value(0)).current;
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -224,11 +232,19 @@ export const LibraryScreen: React.FC = () => {
         })}
       </ScrollView>
 
-      <ScrollView
-        ref={scrollRef}
+      {/* scroll-edge hairline under the pinned header */}
+      <View style={{ zIndex: 2 }}>
+        <ScrollEdgeHairline scrollY={scrollY} />
+      </View>
+      <Animated.ScrollView
+        ref={scrollRef as any}
         style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+        })}
       >
         {tab === 'playlists' && playlists.length === 0 && (
           <EmptyState
@@ -248,38 +264,108 @@ export const LibraryScreen: React.FC = () => {
         {tab === 'playlists' && (
           <View style={styles.playlistList}>
             {playlists.map((pl) => (
-              <Tap
+              <NativeMenu
                 key={pl.id}
-                onPress={() => openCollection({ kind: 'playlist', playlistId: pl.id })}
-                style={styles.playlistCard}
+                trigger="longPress"
+                previewRadius={16}
+                previewBackground={UI.surface('#14141B')}
+                items={[
+                  {
+                    id: 'play',
+                    title: vi ? 'Phát' : 'Play',
+                    icon: 'play.fill',
+                    disabled: pl.tracks.length === 0,
+                    section: 0,
+                  },
+                  {
+                    id: 'shuffle',
+                    title: vi ? 'Trộn bài' : 'Shuffle',
+                    icon: 'shuffle',
+                    disabled: pl.tracks.length === 0,
+                    section: 0,
+                  },
+                  {
+                    id: 'open',
+                    title: vi ? 'Mở playlist' : 'Open Playlist',
+                    icon: 'music.note.list',
+                    section: 1,
+                  },
+                  ...(pl.isSystem
+                    ? []
+                    : [
+                        {
+                          id: 'delete',
+                          title: vi ? 'Xoá playlist' : 'Delete Playlist',
+                          icon: 'trash',
+                          destructive: true,
+                          section: 2,
+                        },
+                      ]),
+                ]}
+                onSelect={(id) => {
+                  if (id === 'play' && pl.tracks.length) {
+                    playTrack(pl.tracks[0], pl.tracks);
+                    setIsPlayerOpen(true);
+                  } else if (id === 'shuffle' && pl.tracks.length) {
+                    const list = [...pl.tracks].sort(() => Math.random() - 0.5);
+                    playTrack(list[0], list);
+                    setIsPlayerOpen(true);
+                  } else if (id === 'open') {
+                    openCollection({ kind: 'playlist', playlistId: pl.id });
+                  } else if (id === 'delete') {
+                    setTimeout(
+                      () =>
+                        Alert.alert(
+                          vi ? `Xoá playlist “${pl.name}”?` : `Delete “${pl.name}”?`,
+                          vi ? 'Không thể hoàn tác.' : 'This can’t be undone.',
+                          [
+                            { text: vi ? 'Huỷ' : 'Cancel', style: 'cancel' },
+                            {
+                              text: vi ? 'Xoá' : 'Delete',
+                              style: 'destructive',
+                              onPress: () => deletePlaylist(pl.id),
+                            },
+                          ]
+                        ),
+                      350
+                    );
+                  }
+                }}
               >
-                {pl.coverUrl || pl.tracks[0]?.artworkUrl ? (
-                  <ArtworkImage
-                    source={{ uri: pl.coverUrl || pl.tracks[0]?.artworkUrl }}
-                    style={styles.plCover}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.plCover,
-                      styles.plCoverFallback,
-                      { backgroundColor: pl.coverTint || palette.container },
-                    ]}
-                  >
-                    <Ionicons name="musical-notes" size={26} color={UI.text} />
+                <Tap
+                  onPress={() => openCollection({ kind: 'playlist', playlistId: pl.id })}
+                  // a hold belongs to the native context menu (and must not open the page on release)
+                  onLongPress={nativeMenuAvailable ? () => {} : undefined}
+                  style={styles.playlistCard}
+                >
+                  {pl.coverUrl || pl.tracks[0]?.artworkUrl ? (
+                    <ArtworkImage
+                      source={{ uri: pl.coverUrl || pl.tracks[0]?.artworkUrl }}
+                      style={styles.plCover}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.plCover,
+                        styles.plCoverFallback,
+                        { backgroundColor: pl.coverTint || palette.container },
+                      ]}
+                    >
+                      <Ionicons name="musical-notes" size={26} color={UI.text} />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={1} style={[styles.plName, { fontFamily }]}>
+                      {pl.name}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.plSub}>
+                      {pl.tracks.length} {vi ? 'bài hát' : 'songs'}
+                      {pl.description ? ` · ${pl.description}` : ''}
+                    </Text>
                   </View>
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text numberOfLines={1} style={[styles.plName, { fontFamily }]}>
-                    {pl.name}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.plSub}>
-                    {pl.tracks.length} {vi ? 'bài hát' : 'songs'}
-                    {pl.description ? ` · ${pl.description}` : ''}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={UI.text3} />
-              </Tap>
+                  <Ionicons name="chevron-forward" size={18} color={UI.text3} />
+                </Tap>
+              </NativeMenu>
             ))}
           </View>
         )}
@@ -356,7 +442,7 @@ export const LibraryScreen: React.FC = () => {
             )}
           </>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Create Playlist Modal */}
       <Modal

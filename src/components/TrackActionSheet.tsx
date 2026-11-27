@@ -24,6 +24,9 @@ import { openSongEditor } from './local/SongInfoEditor';
 import { T as UI, themedSheet } from '../theme/ui';
 import { Tap } from './ui/Tap';
 
+/** set before opening the sheet to land straight on the playlist picker (native menu → "New…") */
+export const sheetIntent = { pickPlaylist: false };
+
 export const TrackActionSheet: React.FC = () => {
   const {
     actionTrack,
@@ -102,6 +105,10 @@ export const TrackActionSheet: React.FC = () => {
   ).current;
   useEffect(() => {
     if (!open) return;
+    if (sheetIntent.pickPlaylist) {
+      sheetIntent.pickPlaylist = false;
+      setPickingPlaylist(true);
+    }
     dragY.setValue(0);
     listTopRef.current = true;
     rise.setValue(1);

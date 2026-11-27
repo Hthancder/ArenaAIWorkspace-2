@@ -80,6 +80,30 @@ export function useQuickActions() {
     }
   }, [vi, currentTrack?.id, currentTrack, likedTracks.length]);
 
+  // Siri Suggestions: the song playing is the app's current activity, so the lock screen /
+  // Spotlight can offer to pick it back up later
+  useEffect(() => {
+    const m = mod();
+    if (!m?.donateListening) return;
+    const t = setTimeout(() => {
+      try {
+        m.donateListening!(
+          currentTrack
+            ? {
+                id: currentTrack.id,
+                title: `${vi ? 'Phát tiếp' : 'Resume'} “${currentTrack.title}”`,
+                subtitle: `${currentTrack.artist} · HolySic`,
+              }
+            : {}
+        );
+      } catch {
+        // ignore
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrack?.id, vi]);
+
   // Spotlight index — rebuilt (debounced) when the liked songs or playlists change
   const spotlightKey =
     likedTracks.map((t) => t.id).join('|') +

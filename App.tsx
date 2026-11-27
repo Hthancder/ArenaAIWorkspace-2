@@ -15,6 +15,7 @@ import {
   StyleSheet,
   Text,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -46,6 +47,7 @@ const WidgetBridge: React.FC = () => {
   return null;
 };
 import { useQuickActions } from './src/services/shortcuts/useQuickActions';
+import { PlayerStack } from './src/services/ui/playerStack';
 import {
   applyUiSchemeSilently,
   notifyUiScheme,
@@ -65,6 +67,7 @@ const HolySicShell: React.FC = () => {
     closeImport,
     chartsSheet,
     closeCharts,
+    isPlayerOpen,
   } = useHolySic();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   useQuickActions();
@@ -89,6 +92,29 @@ const HolySicShell: React.FC = () => {
   useEffect(() => LocalLibrary.init(), []);
 
   const bg = prefs.pureBlack ? UI.surface('#000000') : UI.surface('#0A0A0E');
+
+  // card stack: while the full player is up the app recedes behind it (scaled back, rounded),
+  // following the player's drag. The transform only exists while the player is open / closing.
+  const { height: winH } = useWindowDimensions();
+  const [stacked, setStacked] = useState(false);
+  useEffect(() => {
+    if (isPlayerOpen) {
+      setStacked(true);
+      return;
+    }
+    const t = setTimeout(() => setStacked(false), 380);
+    return () => clearTimeout(t);
+  }, [isPlayerOpen]);
+  const stackProgress = useRef(
+    Animated.multiply(
+      PlayerStack.open,
+      PlayerStack.drag.interpolate({
+        inputRange: [0, 900],
+        outputRange: [1, 0],
+        extrapolate: 'clamp',
+      })
+    )
+  ).current;
 
   // tabs are mounted on first visit and then kept alive
   const [visited, setVisited] = useState<MainTab[]>([activeTab]);
@@ -126,15 +152,27 @@ const HolySicShell: React.FC = () => {
 
   return (
     // keyed by scheme: the UI re-mounts with the new colours (playback & app state live above it)
-    <View key={scheme} style={[styles.outerFrame, { backgroundColor: bg }]}>
+    <View key={scheme} style={[styles.outerFrame, { backgroundColor: stacked ? '#000000' : bg }]}>
       <StatusBar style={scheme === 'light' ? 'dark' : 'light'} />
       {/* Centered responsive container on wide iPad/desktop web while full-bleed on iPhone */}
-      <View
+      <Animated.View
         style={[
           styles.appViewport,
           {
             backgroundColor: bg,
             paddingTop: Math.max(insets.top, Platform.OS === 'web' ? 10 : 0),
+          },
+          stacked && {
+            borderRadius: 14,
+            overflow: 'hidden',
+            transform: [
+              {
+                scale: stackProgress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, winH > 700 ? 0.93 : 0.95],
+                }),
+              },
+            ],
           },
         ]}
       >
@@ -207,7 +245,7 @@ const HolySicShell: React.FC = () => {
         <WelcomeModal />
         {/* Shared sheets + toast for the root layer (see overlay/ModalLayers) */}
         <SheetSlot layer="root" />
-      </View>
+      </Animated.View>
     </View>
   );
 };

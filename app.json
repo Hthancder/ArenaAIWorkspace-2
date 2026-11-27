@@ -31,6 +31,7 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
+        "NSUserActivityTypes": ["com.holysic.music.listen"],
         "NSMicrophoneUsageDescription": "HolySic only requests audio access when optional visualizer sampling is enabled."
       },
       "entitlements": {

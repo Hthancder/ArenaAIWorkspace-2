@@ -2,7 +2,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { t } from '../../constants/i18n';
 import { LyricsPosition } from '../../constants/preferences';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
@@ -31,11 +31,20 @@ export const LyricsView: React.FC = () => {
   const scrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
+  // Follow the singer: the active line glides to ~⅓ from the top, measured from the real line
+  // positions (wrapped lines included). Scrolling by hand pauses the follow for a few seconds,
+  // like Music, so you can read ahead without being yanked back.
+  const lineYs = useRef<number[]>([]);
+  const viewH = useRef(0);
+  const handUntil = useRef(0);
   useEffect(() => {
-    if (activeLyricIndex >= 0 && scrollRef.current) {
-      const estimatedY = Math.max(0, activeLyricIndex * 62 - 120);
-      scrollRef.current.scrollTo({ y: estimatedY, animated: true });
-    }
+    lineYs.current = [];
+  }, [lyrics]);
+  useEffect(() => {
+    if (activeLyricIndex < 0 || !scrollRef.current) return;
+    if (Date.now() < handUntil.current) return;
+    const y = lineYs.current[activeLyricIndex] ?? activeLyricIndex * 62;
+    scrollRef.current.scrollTo({ y: Math.max(0, y - viewH.current * 0.3), animated: true });
   }, [activeLyricIndex]);
 
   const cycleAlign = () => {
@@ -182,6 +191,12 @@ export const LyricsView: React.FC = () => {
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        onLayout={(e) => (viewH.current = e.nativeEvent.layout.height)}
+        onScrollBeginDrag={() => (handUntil.current = Date.now() + 60_000)}
+        onScrollEndDrag={() => (handUntil.current = Date.now() + 3500)}
+        onMomentumScrollEnd={() => {
+          if (handUntil.current > Date.now() + 3500) handUntil.current = Date.now() + 3500;
+        }}
       >
         {lyrics.lines.map((line, idx) => {
           const isActive = idx === activeLyricIndex;
@@ -193,6 +208,7 @@ export const LyricsView: React.FC = () => {
             <Tap
               feedback="opacity"
               key={line.id}
+              onLayout={(e) => (lineYs.current[idx] = e.nativeEvent.layout.y)}
               onPress={() => {
                 haptic('selection');
                 seekTo(Math.max(0, line.startSec + lyricsOffsetSec));
@@ -205,44 +221,51 @@ export const LyricsView: React.FC = () => {
                 },
               ]}
             >
-              {line.words && line.words.length > 0 && isActive ? (
-                <Text style={[styles.lineTextActive, { textAlign, fontFamily }]}>
-                  {line.words.map((w, wIdx) => {
-                    const lit = positionSec - lyricsOffsetSec + 0.08 >= w.startSec;
-                    return (
-                      <Text
-                        key={`${line.id}-w-${wIdx}`}
-                        style={{
-                          color: lit ? '#FFFFFF' : 'rgba(255,255,255,0.38)',
-                          textShadowColor: lit ? palette.accent : 'transparent',
-                          textShadowRadius: lit ? 12 : 0,
-                        }}
-                      >
-                        {w.text}
-                        {wIdx < line.words!.length - 1 ? ' ' : ''}
-                      </Text>
-                    );
-                  })}
-                </Text>
-              ) : (
-                <Text
-                  style={[
-                    line.isBackground ? styles.bgLineText : styles.lineText,
-                    isActive && styles.lineTextActive,
-                    isActive && {
-                      color: '#FFFFFF',
-                      textShadowColor: palette.accent + '88',
-                      textShadowRadius: 14,
-                    },
-                    !isActive && {
-                      color: isPast ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.52)',
-                    },
-                    { textAlign, fontFamily },
-                  ]}
-                >
-                  {line.text}
-                </Text>
-              )}
+              <LineScale
+                active={isActive}
+                origin={
+                  textAlign === 'center' ? 'center' : textAlign === 'right' ? 'right' : 'left'
+                }
+              >
+                {line.words && line.words.length > 0 && isActive ? (
+                  <Text style={[styles.lineTextActive, { textAlign, fontFamily }]}>
+                    {line.words.map((w, wIdx) => {
+                      const lit = positionSec - lyricsOffsetSec + 0.08 >= w.startSec;
+                      return (
+                        <Text
+                          key={`${line.id}-w-${wIdx}`}
+                          style={{
+                            color: lit ? '#FFFFFF' : 'rgba(255,255,255,0.38)',
+                            textShadowColor: lit ? palette.accent : 'transparent',
+                            textShadowRadius: lit ? 12 : 0,
+                          }}
+                        >
+                          {w.text}
+                          {wIdx < line.words!.length - 1 ? ' ' : ''}
+                        </Text>
+                      );
+                    })}
+                  </Text>
+                ) : (
+                  <Text
+                    style={[
+                      line.isBackground ? styles.bgLineText : styles.lineText,
+                      isActive && styles.lineTextActive,
+                      isActive && {
+                        color: '#FFFFFF',
+                        textShadowColor: palette.accent + '88',
+                        textShadowRadius: 14,
+                      },
+                      !isActive && {
+                        color: isPast ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.52)',
+                      },
+                      { textAlign, fontFamily },
+                    ]}
+                  >
+                    {line.text}
+                  </Text>
+                )}
+              </LineScale>
             </Tap>
           );
         })}
@@ -254,6 +277,34 @@ export const LyricsView: React.FC = () => {
         </Text>
       </ScrollView>
     </View>
+  );
+};
+
+/** The active line zooms up to full size and the others settle back (no font-size jump, so the
+ *  page never reflows), anchored on the side the text is aligned to. */
+const LineScale: React.FC<{
+  active: boolean;
+  origin: 'left' | 'center' | 'right';
+  children: React.ReactNode;
+}> = ({ active, origin, children }) => {
+  const v = useRef(new Animated.Value(active ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.spring(v, {
+      toValue: active ? 1 : 0,
+      useNativeDriver: true,
+      speed: 12,
+      bounciness: 4,
+    }).start();
+  }, [active, v]);
+  return (
+    <Animated.View
+      style={{
+        transformOrigin: origin,
+        transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
+      }}
+    >
+      {children}
+    </Animated.View>
   );
 };
 
@@ -343,10 +394,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginVertical: 2,
   },
+  // one size for every line — the active one is scaled, not re-laid-out
   lineText: {
-    fontSize: 21,
-    fontWeight: '700',
-    lineHeight: 30,
+    fontSize: 25,
+    fontWeight: '800',
+    lineHeight: 35,
   },
   lineTextActive: {
     fontSize: 25,

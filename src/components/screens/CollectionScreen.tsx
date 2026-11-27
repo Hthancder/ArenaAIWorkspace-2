@@ -31,7 +31,9 @@ import { exportPlaylistM3U } from '../../services/import/playlistFiles';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { EmptyState } from '../ui/EmptyState';
 import { Tap } from '../ui/Tap';
+import { Rise } from '../ui/Rise';
 import { GlassSurface } from '../GlassSurface';
+import { NativeMenu, nativeMenuAvailable, MenuItem } from '../ui/NativeMenu';
 
 export const CollectionModal: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -276,6 +278,113 @@ export const CollectionModal: React.FC = () => {
     setLoadingMore(false);
   };
 
+  // ── page actions (chips on web; one native "…" pull-down on iOS) ──
+  const saveAsPlaylist = () => {
+    const pl = savePlaylistFromTracks(title, tracks, subtitle, artworkUrl);
+    showToast(vi ? `Đã lưu thành playlist "${pl.name}"` : `Saved as playlist "${pl.name}"`);
+  };
+  const downloadAll = () => {
+    tracks.slice(0, 50).forEach((x) => downloadTrack(x));
+    showToast(
+      vi
+        ? `Đang tải ${Math.min(50, tracks.length)} bài…`
+        : `Downloading ${Math.min(50, tracks.length)} songs…`
+    );
+  };
+  const exportM3U = async () => {
+    const rel = await exportPlaylistM3U(title, allTracks);
+    if (!rel) return;
+    const fname = rel.split('/').pop();
+    showToast(
+      Platform.OS === 'web'
+        ? vi
+          ? `Đã tải ${fname} · bản sao trong Nhạc trên máy › Playlists`
+          : `Downloaded ${fname} · a copy is in Local Files › Playlists`
+        : vi
+          ? `Đã lưu ${fname} vào Tệp › HolySic › Playlists`
+          : `Saved ${fname} to Files › HolySic › Playlists`
+    );
+  };
+  const toggleSelecting = () => {
+    setSelecting((v) => !v);
+    setSelected({});
+    setPickPlaylist(false);
+  };
+  const confirmDelete = () => {
+    if (!removablePlaylistId) return;
+    const id = removablePlaylistId;
+    const doDelete = () => {
+      deletePlaylist(id);
+      goBack();
+    };
+    const q = vi ? `Xoá playlist “${title}”?` : `Delete “${title}”?`;
+    if (Platform.OS === 'web') {
+      // eslint-disable-next-line no-alert
+      if (typeof window !== 'undefined' && window.confirm(q)) doDelete();
+      return;
+    }
+    Alert.alert(q, vi ? 'Không thể hoàn tác.' : 'This can’t be undone.', [
+      { text: vi ? 'Huỷ' : 'Cancel', style: 'cancel' },
+      { text: vi ? 'Xoá' : 'Delete', style: 'destructive', onPress: doDelete },
+    ]);
+  };
+  const downloadingCount = Object.keys(downloadingIds).length;
+  const pageMenu: MenuItem[] = [];
+  if (tracks.length > 0) {
+    pageMenu.push({
+      id: 'select',
+      title: vi ? 'Chọn bài…' : 'Select Songs…',
+      icon: 'checkmark.circle',
+      section: 0,
+    });
+    if (canSaveAsPlaylist) {
+      pageMenu.push({
+        id: 'save',
+        title: vi ? 'Lưu thành playlist' : 'Save as Playlist',
+        icon: 'bookmark',
+        section: 1,
+      });
+    }
+    if (collectionTarget.kind !== 'offline') {
+      pageMenu.push({
+        id: 'download',
+        title: vi ? 'Tải tất cả' : 'Download All',
+        subtitle:
+          downloadingCount > 0
+            ? vi
+              ? `Đang tải ${downloadingCount} bài`
+              : `${downloadingCount} downloading`
+            : undefined,
+        icon: 'arrow.down.circle',
+        section: 1,
+      });
+    }
+    pageMenu.push({
+      id: 'm3u',
+      title: vi ? 'Xuất M3U vào Tệp' : 'Export M3U to Files',
+      icon: 'square.and.arrow.up',
+      section: 1,
+    });
+  }
+  if (removablePlaylistId) {
+    pageMenu.push({
+      id: 'delete',
+      title: vi ? 'Xoá playlist' : 'Delete Playlist',
+      icon: 'trash',
+      destructive: true,
+      section: 2,
+    });
+  }
+  const onPageMenu = (id: string) => {
+    if (id === 'select') toggleSelecting();
+    else if (id === 'save') saveAsPlaylist();
+    else if (id === 'download') downloadAll();
+    else if (id === 'm3u') exportM3U();
+    // the alert waits for the menu to finish closing
+    else if (id === 'delete') setTimeout(confirmDelete, 350);
+  };
+  const nativePage = nativeMenuAvailable && pageMenu.length > 0;
+
   return (
     <Modal
       visible={Boolean(collectionTarget)}
@@ -327,46 +436,46 @@ export const CollectionModal: React.FC = () => {
               <View style={{ width: 38, height: 38 }} />
 
               <View style={{ flex: 1 }} />
-              {tracks.length > 0 && (
-                <Tap
-                  onPress={() => {
-                    setSelecting((v) => !v);
-                    setSelected({});
-                    setPickPlaylist(false);
-                  }}
-                  style={[styles.backBtn, { marginRight: removablePlaylistId ? 8 : 0 }]}
-                >
-                  <Ionicons
-                    name={selecting ? 'close' : 'checkmark-done-outline'}
-                    size={19}
-                    color={UI.text}
-                  />
-                </Tap>
-              )}
-              {removablePlaylistId && (
-                <Tap
-                  onPress={() => {
-                    const id = removablePlaylistId!;
-                    const doDelete = () => {
-                      deletePlaylist(id);
-                      goBack();
-                    };
-                    const q = vi ? `Xoá playlist “${title}”?` : `Delete “${title}”?`;
-                    if (Platform.OS === 'web') {
-                      // eslint-disable-next-line no-alert
-                      if (typeof window !== 'undefined' && window.confirm(q)) doDelete();
-                      return;
-                    }
-                    Alert.alert(q, vi ? 'Không thể hoàn tác.' : 'This can’t be undone.', [
-                      { text: vi ? 'Huỷ' : 'Cancel', style: 'cancel' },
-                      { text: vi ? 'Xoá' : 'Delete', style: 'destructive', onPress: doDelete },
-                    ]);
-                  }}
+              {nativePage && !selecting ? (
+                <NativeMenu
+                  items={pageMenu}
+                  onSelect={onPageMenu}
+                  title={title}
+                  label={vi ? 'Tuỳ chọn' : 'More'}
                   style={styles.backBtn}
-                  accessibilityLabel={vi ? 'Xoá playlist' : 'Delete playlist'}
                 >
-                  <Ionicons name="trash-outline" size={19} color="#F87171" />
-                </Tap>
+                  <Ionicons name="ellipsis-horizontal" size={19} color={UI.text} />
+                </NativeMenu>
+              ) : (
+                <>
+                  {tracks.length > 0 && (
+                    <Tap
+                      onPress={toggleSelecting}
+                      style={[
+                        styles.backBtn,
+                        { marginRight: removablePlaylistId && !selecting ? 8 : 0 },
+                      ]}
+                      accessibilityLabel={
+                        selecting ? (vi ? 'Xong' : 'Done') : vi ? 'Chọn bài' : 'Select'
+                      }
+                    >
+                      <Ionicons
+                        name={selecting ? 'close' : 'checkmark-done-outline'}
+                        size={19}
+                        color={UI.text}
+                      />
+                    </Tap>
+                  )}
+                  {removablePlaylistId && !selecting && (
+                    <Tap
+                      onPress={confirmDelete}
+                      style={styles.backBtn}
+                      accessibilityLabel={vi ? 'Xoá playlist' : 'Delete playlist'}
+                    >
+                      <Ionicons name="trash-outline" size={19} color="#F87171" />
+                    </Tap>
+                  )}
+                </>
               )}
             </View>
 
@@ -418,20 +527,15 @@ export const CollectionModal: React.FC = () => {
                   </Tap>
                 </View>
               )}
-              {tracks.length > 0 && (
-                <View style={[styles.heroBtns, { marginTop: 10 }]}>
+              {tracks.length > 0 && !nativePage && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginTop: 10, marginHorizontal: -18, alignSelf: 'stretch' }}
+                  contentContainerStyle={styles.chipRow}
+                >
                   {canSaveAsPlaylist && (
-                    <Tap
-                      onPress={() => {
-                        const pl = savePlaylistFromTracks(title, tracks, subtitle, artworkUrl);
-                        showToast(
-                          vi
-                            ? `Đã lưu thành playlist "${pl.name}"`
-                            : `Saved as playlist "${pl.name}"`
-                        );
-                      }}
-                      style={styles.chipBtn}
-                    >
+                    <Tap onPress={saveAsPlaylist} style={styles.chipBtn}>
                       <Ionicons name="bookmark-outline" size={15} color={UI.text} />
                       <Text style={styles.chipText}>
                         {vi ? 'Lưu playlist' : 'Save as playlist'}
@@ -481,7 +585,7 @@ export const CollectionModal: React.FC = () => {
                     <Ionicons name="share-outline" size={15} color={UI.text} />
                     <Text style={styles.chipText}>{vi ? 'Xuất M3U' : 'Export M3U'}</Text>
                   </Tap>
-                </View>
+                </ScrollView>
               )}
             </View>
           </LinearGradient>
@@ -756,17 +860,18 @@ export const CollectionModal: React.FC = () => {
               ))}
             {!selecting &&
               tracks.map((song, idx) => (
-                <TrackRow
-                  key={`${song.id}-${idx}`}
-                  track={song}
-                  queueContext={tracks}
-                  indexBadge={idx + 1}
-                  onRemove={
-                    removablePlaylistId
-                      ? () => removeTrackFromPlaylist(removablePlaylistId!, song.id)
-                      : undefined
-                  }
-                />
+                <Rise key={`${song.id}-${idx}`} index={idx}>
+                  <TrackRow
+                    track={song}
+                    queueContext={tracks}
+                    indexBadge={idx + 1}
+                    onRemove={
+                      removablePlaylistId
+                        ? () => removeTrackFromPlaylist(removablePlaylistId!, song.id)
+                        : undefined
+                    }
+                  />
+                </Rise>
               ))}
             {!selecting && collectionTarget.kind === 'artist' && tracks.length > 0 && (
               <Tap onPress={loadMoreArtist} disabled={loadingMore} style={styles.loadMore}>
@@ -1006,6 +1111,14 @@ const styles = themedSheet(() => ({
     marginTop: 4,
     textAlign: 'center',
   },
+  // secondary actions on one line (scrolls sideways on narrow screens instead of wrapping)
+  chipRow: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 18,
+  },
   heroBtns: {
     flexDirection: 'row',
     gap: 12,
@@ -1033,7 +1146,7 @@ const styles = themedSheet(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: 99,
     backgroundColor: UI.fg(0.12),

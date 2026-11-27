@@ -23,6 +23,8 @@ export interface HolySicShortcutsNative {
   setItems(items: NativeShortcutItem[]): void;
   /** replace the Spotlight index (liked songs, playlists); a tapped result → `spotlight:<id>` */
   indexSpotlight?(items: NativeSpotlightItem[]): void;
+  /** the song now playing → current NSUserActivity (Siri Suggestions "Resume …"); {} clears */
+  donateListening?(d: { id?: string; title?: string; subtitle?: string }): void;
   addListener(event: 'onShortcut', cb: (e: { type: string }) => void): { remove(): void };
 }
 

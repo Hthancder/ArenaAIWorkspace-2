@@ -2,7 +2,7 @@
 
 import { usePositionSec } from '../services/audio/playbackClock';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -21,6 +21,7 @@ import { AmbientSpill, useAmbientColors } from './ambient/AmbientLight';
 import { T as UI, themedSheet } from '../theme/ui';
 import { LikeHeart } from './ui/LikeHeart';
 import { Tap } from './ui/Tap';
+import { MorphIcon, NudgeIcon } from './ui/MorphIcon';
 
 export const MiniPlayer: React.FC = () => {
   const {
@@ -47,6 +48,7 @@ export const MiniPlayer: React.FC = () => {
   const ambientColors = useAmbientColors();
 
   // Swipe gestures, like the iOS Music mini player: ← next song · → previous · ↑ open the player
+  const [nudge, setNudge] = useState(0);
   const dragX = useRef(new Animated.Value(0)).current;
   const dragY = useRef(new Animated.Value(0)).current;
   // a swipe must never also count as a tap (web still delivers the click after a drag)
@@ -231,11 +233,13 @@ export const MiniPlayer: React.FC = () => {
               {isBuffering ? (
                 <ActivityIndicator size="small" color={palette.onAccent} />
               ) : (
-                <Ionicons
-                  name={isPlaying ? 'pause' : 'play'}
+                <MorphIcon
+                  on={isPlaying}
+                  onIcon="pause"
+                  offIcon="play"
                   size={19}
                   color={palette.onAccent}
-                  style={!isPlaying ? { marginLeft: 2 } : undefined}
+                  offShiftX={2}
                 />
               )}
             </Tap>
@@ -244,14 +248,18 @@ export const MiniPlayer: React.FC = () => {
               hitSlop={8}
               onPress={(e) => {
                 e.stopPropagation?.();
-                if (tapOk()) ff.guard(playNext)();
+                if (tapOk())
+                  ff.guard(() => {
+                    setNudge((n) => n + 1);
+                    playNext();
+                  })();
               }}
               onLongPress={ff.onLongPress}
               onPressOut={ff.onPressOut}
               delayLongPress={ff.delayLongPress}
               style={styles.ctrlBtn}
             >
-              <Ionicons name="play-skip-forward" size={20} color={UI.text} />
+              <NudgeIcon name="play-skip-forward" size={20} color={UI.text} dir={1} pulse={nudge} />
             </Tap>
           </View>
 

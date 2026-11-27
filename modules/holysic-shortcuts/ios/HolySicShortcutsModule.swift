@@ -13,6 +13,11 @@ import UIKit
 import UniformTypeIdentifiers
 
 let holySicSpotlightDomain = "holysic.library"
+/// "listening" activity: Siri Suggestions / Spotlight offer "Resume <song>" (Info.plist
+/// NSUserActivityTypes lists it); tapping it arrives as the "resume" shortcut
+let holySicListenActivity = "com.holysic.music.listen"
+/// the donated activity must stay alive while it is current
+var holySicCurrentActivity: NSUserActivity?
 
 let holySicShortcutNotification = Notification.Name("HolySicShortcutSelected")
 /// shortcut that launched the app (cold start), until JS consumes it
@@ -48,6 +53,12 @@ public class HolySicShortcutsAppDelegate: ExpoAppDelegateSubscriber {
   ) -> Bool {
     // the subscriber manager waits for every subscriber to answer
     defer { restorationHandler(nil) }
+    if userActivity.activityType == holySicListenActivity {
+      holySicInitialShortcut = "resume"
+      NotificationCenter.default.post(
+        name: holySicShortcutNotification, object: nil, userInfo: ["type": "resume"])
+      return true
+    }
     guard userActivity.activityType == CSSearchableItemActionType,
       let id = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String
     else { return false }
@@ -112,6 +123,34 @@ public class HolySicShortcutsModule: Module {
       let index = CSSearchableIndex.default()
       index.deleteSearchableItems(withDomainIdentifiers: [holySicSpotlightDomain]) { _ in
         if !built.isEmpty { index.indexSearchableItems(built, completionHandler: nil) }
+      }
+    }
+
+    /// { id, title, subtitle } — the song now playing becomes the current user activity (nil/empty
+    /// title clears it), so iOS can suggest picking it back up
+    Function("donateListening") { (d: [String: String]) in
+      DispatchQueue.main.async {
+        guard let title = d["title"], !title.isEmpty else {
+          holySicCurrentActivity?.invalidate()
+          holySicCurrentActivity = nil
+          return
+        }
+        let act = holySicCurrentActivity ?? NSUserActivity(activityType: holySicListenActivity)
+        act.title = title
+        act.isEligibleForSearch = true
+        act.isEligibleForPrediction = true
+        act.isEligibleForHandoff = false
+        if let id = d["id"], !id.isEmpty {
+          act.persistentIdentifier = NSUserActivityPersistentIdentifier("track:" + id)
+        }
+        act.userInfo = ["id": d["id"] ?? ""]
+        let attrs = CSSearchableItemAttributeSet(contentType: UTType.audio)
+        attrs.title = title
+        if let sub = d["subtitle"], !sub.isEmpty { attrs.contentDescription = sub }
+        act.contentAttributeSet = attrs
+        act.needsSave = true
+        holySicCurrentActivity = act
+        act.becomeCurrent()
       }
     }
 
