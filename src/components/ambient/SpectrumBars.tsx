@@ -9,12 +9,16 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { audioEngine } from '../../services/audio/audioEngine';
+import { perfCount } from '../../services/perfProbe';
+import { useAppActive } from '../../services/appActivity';
 import { withAlpha } from '../../theme/colorMath';
 
 const REST = 0.05;
 
 /** N native-driven 0..1 levels following the real spectrum. */
-export function useSpectrumBars(count: number, active: boolean, isPlaying: boolean, fps = 30) {
+export function useSpectrumBars(count: number, activeIn: boolean, isPlaying: boolean, fps = 30) {
+  // nothing to draw off screen
+  const active = useAppActive() && activeIn;
   const vals = useRef<Animated.Value[]>([]).current;
   if (vals.length !== count) {
     vals.length = 0;
@@ -100,7 +104,10 @@ export function useSpectrumBars(count: number, active: boolean, isPlaying: boole
         const prev = level[i];
         const next = target > prev ? prev + (target - prev) * 0.75 : prev + (target - prev) * 0.22;
         const v = Math.max(REST, next);
-        if (Math.abs(v - prev) > 0.006) vals[i].setValue(v);
+        if (Math.abs(v - prev) > 0.012) {
+          vals[i].setValue(v);
+          perfCount('setValue:bars');
+        }
         level[i] = v;
       }
     });

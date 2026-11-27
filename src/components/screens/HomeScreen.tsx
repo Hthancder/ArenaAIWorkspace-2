@@ -40,8 +40,10 @@ import {
 import { T as UI, themedSheet } from '../../theme/ui';
 import { useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
+import { perfCount } from '../../services/perfProbe';
 
 export const HomeScreen: React.FC = () => {
+  perfCount('render:Home');
   const {
     prefs,
     palette,

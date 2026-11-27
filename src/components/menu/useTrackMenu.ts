@@ -41,23 +41,27 @@ export function useTrackMenu() {
       const local = isLocalTrack(track);
       const userLists = playlists.filter((p) => !p.isSystem).slice(0, 15);
       const items: MenuItem[] = [
+        // the everyday three as one row of icon buttons on top (like Music) — short labels
         {
           id: 'next',
-          title: vi ? 'Phát kế tiếp' : 'Play Next',
+          title: vi ? 'Kế tiếp' : 'Play Next',
           icon: 'text.insert',
           section: 0,
+          row: true,
         },
         {
           id: 'queue',
-          title: vi ? 'Thêm vào cuối hàng chờ' : 'Play Last',
+          title: vi ? 'Cuối hàng' : 'Play Last',
           icon: 'text.append',
           section: 0,
+          row: true,
         },
         {
           id: 'like',
           title: liked ? (vi ? 'Bỏ thích' : 'Unlike') : vi ? 'Thích' : 'Love',
-          icon: liked ? 'heart.slash' : 'heart',
-          section: 1,
+          icon: liked ? 'heart.fill' : 'heart',
+          section: 0,
+          row: true,
         },
         {
           id: 'playlist',

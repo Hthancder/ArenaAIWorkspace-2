@@ -2,6 +2,8 @@
 // - Native iOS/Android: expo-audio (AVPlayer background session, silent switch override, native Lock Screen & Dynamic Island controls!)
 // - Web: HTML5 Audio + WebAudio 10-Band Parametric EQ, Bass Boost, Reverb & 8D Spatial Panning + MediaSession Lock Screen API
 
+import { AppActivity } from '../appActivity';
+import { perfCount } from '../perfProbe';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { HolySicDSP } from '../../../modules/holysic-dsp';
 import { autoPreampDb, bassDbOf, EQ_FREQS, EQ_Q } from './eqCurve';
@@ -363,6 +365,8 @@ class HolySicAudioEngine {
 
   private emitSpectrum(bands: number[]): void {
     this.setSpectrumStatus({ state: 'live' });
+    perfCount('spectrumEmit');
+    perfCount('spectrumCallbacks', this.spectrumListeners.size);
     this.spectrumListeners.forEach((l) => l(bands));
   }
 
@@ -380,8 +384,14 @@ class HolySicAudioEngine {
     }
   }
 
+  private appActiveHooked = false;
   private updateSampling(): void {
-    const want = this.spectrumListeners.size > 0;
+    if (!this.appActiveHooked) {
+      this.appActiveHooked = true;
+      // off screen nobody sees the visualizer: stop the FFT and the 30–60 events/s to JS
+      AppActivity.subscribe(() => this.updateSampling());
+    }
+    const want = this.spectrumListeners.size > 0 && AppActivity.isActive();
     if (Platform.OS !== 'web' && HolySicDSP) {
       // native FFT on the processed audio — only 32 numbers per frame reach JS
       this.ensureNativeDsp();

@@ -55,6 +55,8 @@ import { MorphIcon, NudgeIcon } from '../ui/MorphIcon';
 import { PlayerStack } from '../../services/ui/playerStack';
 import { MusicVideoStage, VideoAmbient } from '../video/VideoSurfaces';
 import { useVideoState, videoWanted } from '../../services/video/videoStore';
+import { perfCount } from '../../services/perfProbe';
+import { openLyricsEditor } from './LyricsEditor';
 
 // "show the cover instead" survives closing / re-opening the player (this app session)
 let videoHiddenMemo = false;
@@ -62,6 +64,7 @@ let videoHiddenMemo = false;
 type SubPane = 'artwork' | 'lyrics' | 'queue' | 'sleep' | 'diagnostics' | 'styles';
 
 export const FullPlayerModal: React.FC = () => {
+  perfCount('render:FullPlayer');
   const insets = useSafeAreaInsets();
   const {
     isPlayerOpen,
@@ -109,8 +112,6 @@ export const FullPlayerModal: React.FC = () => {
   const ff = useHoldSeek(seekBy, 1);
   const rw = useHoldSeek(seekBy, -1);
   const trackMenu = useTrackMenu();
-  // minute-granular: the menu subtitle re-renders once a minute, not every second
-  const sleepMinutes = useSleepRemaining(60);
   const [nudge, setNudge] = useState({ back: 0, fwd: 0 });
 
   const [pane, setPane] = useState<SubPane>('artwork');
@@ -162,9 +163,13 @@ export const FullPlayerModal: React.FC = () => {
   useEffect(() => {
     if (isPlayerOpen) dragY.setValue(0);
     PlayerStack.setOpen(isPlayerOpen);
-    // full-size bars get every frame; the mini player / ambient glow are fine at half the rate
-    audioEngine.setSpectrumFps(isPlayerOpen ? prefs.visualizerFps || 60 : 30);
-  }, [isPlayerOpen, dragY, prefs.visualizerFps]);
+  }, [isPlayerOpen, dragY]);
+  // only the full-size bars (Poster style, cover pane) get every frame; the ambient glow, tab bar
+  // and backdrop look the same at half the rate — half the events crossing to JS
+  const bigBars = isPlayerOpen && prefs.playerStyle === 'POSTER' && pane === 'artwork';
+  useEffect(() => {
+    audioEngine.setSpectrumFps(bigBars ? prefs.visualizerFps || 60 : 30);
+  }, [bigBars, prefs.visualizerFps]);
   // Settings › keep the screen on while reading lyrics
   const keepAwake = isPlayerOpen && pane === 'lyrics' && !!prefs.keepAwakeLyrics;
   useEffect(() => {
@@ -270,77 +275,37 @@ export const FullPlayerModal: React.FC = () => {
     if (Platform.OS !== 'web')
       LayoutAnimation.configureNext(LayoutAnimation.create(320, 'easeInEaseOut', 'opacity'));
   }
-  const playerMenuItems = (): MenuItem[] => {
-    const sleepOn = sleepActive || sleepEndOfTrack;
-    return [
-      ...trackMenu.itemsFor(currentTrack).filter((it) => it.id !== 'more'),
-      {
-        id: 'p:lyrics',
-        title: vi ? 'Lời bài hát' : 'Lyrics',
-        icon: 'quote.bubble',
-        checked: pane === 'lyrics',
-        section: 3,
-      },
-      {
-        id: 'p:queue',
-        title: vi ? 'Danh sách chờ' : 'Playing Next',
-        icon: 'list.bullet',
-        checked: pane === 'queue',
-        section: 3,
-      },
-      {
-        id: 'p:sleep',
-        title: vi ? 'Hẹn giờ ngủ' : 'Sleep Timer',
-        subtitle: sleepEndOfTrack
-          ? vi
-            ? 'Hết bài này'
-            : 'End of song'
-          : sleepMinutes !== null
-            ? vi
-              ? `Còn ${Math.round(sleepMinutes / 60)} phút`
-              : `${Math.round(sleepMinutes / 60)} min left`
-            : undefined,
-        icon: 'moon.zzz',
-        section: 3,
-        children: [
-          ...[5, 15, 30, 45, 60].map((m) => ({
-            id: `sleep:${m}`,
-            title: vi ? `${m} phút` : `${m} minutes`,
-          })),
-          {
-            id: 'sleep:end',
-            title: vi ? 'Hết bài này' : 'End of Song',
-            checked: sleepEndOfTrack,
-          },
-          ...(sleepOn
-            ? [
-                {
-                  id: 'sleep:off',
-                  title: vi ? 'Tắt hẹn giờ' : 'Turn Off',
-                  icon: 'xmark',
-                  destructive: true,
-                },
-              ]
-            : []),
-        ],
-      },
-      {
-        id: 'more',
-        title: vi ? 'Tuỳ chọn khác…' : 'More Options…',
-        icon: 'ellipsis.circle',
-        section: 4,
-      },
-    ];
-  };
+  // Short on purpose: the song's own actions, then two doors to dedicated pages (lyrics editor,
+  // player look). Lyrics / queue / sleep timer already have their buttons under the controls.
+  const playerMenuItems = (): MenuItem[] => [
+    ...trackMenu.itemsFor(currentTrack).filter((it) => it.id !== 'more'),
+    {
+      id: 'p:lyricsEdit',
+      title: vi ? 'Lời bài hát…' : 'Lyrics…',
+      subtitle: vi ? 'Chọn bản khác, sửa, gắn giờ' : 'Pick another, edit, time',
+      icon: 'quote.bubble',
+      section: 3,
+    },
+    {
+      id: 'p:look',
+      title: vi ? 'Kiểu trình phát…' : 'Player Style…',
+      subtitle: vi ? 'Flagship, vinyl, iPod, Poster…' : 'Flagship, vinyl, iPod, Poster…',
+      icon: 'paintpalette',
+      section: 3,
+    },
+    {
+      id: 'more',
+      title: vi ? 'Tuỳ chọn khác…' : 'More Options…',
+      icon: 'ellipsis.circle',
+      section: 4,
+    },
+  ];
   const onPlayerMenu = (id: string) => {
-    if (id === 'p:lyrics') return setPane((p) => (p === 'lyrics' ? 'artwork' : 'lyrics'));
-    if (id === 'p:queue') return setPane((p) => (p === 'queue' ? 'artwork' : 'queue'));
-    if (id.startsWith('sleep:')) {
-      const v = id.slice(6);
-      haptic('light');
-      setSleepTimer(v === 'off' ? null : v === 'end' ? 'end_of_track' : Number(v));
+    if (id === 'p:lyricsEdit') {
+      setTimeout(() => openLyricsEditor(currentTrack), 380); // after the menu's close animation
       return;
     }
+    if (id === 'p:look') return setPane('styles');
     trackMenu.select(currentTrack, id);
   };
   const liked = isLiked(currentTrack.id);

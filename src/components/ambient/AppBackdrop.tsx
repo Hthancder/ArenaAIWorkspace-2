@@ -10,8 +10,8 @@
 // native driver; nothing re-renders per audio frame. While the full player is open, the app is
 // in the background, Low Power Mode is on or "react to music" is off, everything is still.
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Animated, AppState, Image, Platform, StyleSheet, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { Animated, Image, Platform, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BACKDROP_COLORS } from '../../constants/preferences';
 import { useHolySic } from '../../context/HolySicContext';
@@ -27,6 +27,8 @@ import {
   useCrossfade,
 } from './AmbientLight';
 import { SpectrumBars, useSpectrumBars } from './SpectrumBars';
+import { perfCount } from '../../services/perfProbe';
+import { useAppActive } from '../../services/appActivity';
 
 const STRENGTH = { low: 0.55, medium: 0.8, high: 1 } as const;
 
@@ -38,17 +40,11 @@ export function resolveBackdropColor(value: string, scheme: UiScheme): string | 
   return isHex(value) ? backgroundTone(value, scheme) : null;
 }
 
-/** App in the foreground (no animation work in the background / app switcher) */
-export function useAppActive(): boolean {
-  const [on, setOn] = useState(AppState.currentState !== 'background');
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => setOn(s === 'active'));
-    return () => sub.remove();
-  }, []);
-  return on;
-}
+/** App in the foreground (no animation work in the background) — shared store */
+export { useAppActive };
 
 export const AppBackdrop: React.FC = () => {
+  perfCount('render:Backdrop');
   const { prefs, currentTrack, isPlaying, isPlayerOpen, ambient } = useHolySic();
   const ui = useUi();
   const colors = useAmbientColors();

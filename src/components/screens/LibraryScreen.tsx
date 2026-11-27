@@ -33,10 +33,12 @@ import { EmptyState } from '../ui/EmptyState';
 import { PopIn } from '../ui/PopIn';
 import { ScrollEdgeHairline } from '../ui/ScrollEdgeBar';
 import { NativeMenu, nativeMenuAvailable } from '../ui/NativeMenu';
+import { perfCount } from '../../services/perfProbe';
 
 type LibFilter = 'playlists' | 'liked' | 'offline' | 'history';
 
 export const LibraryScreen: React.FC = () => {
+  perfCount('render:Library');
   const {
     prefs,
     palette,

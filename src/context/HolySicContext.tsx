@@ -87,7 +87,7 @@ import { resolvePlayableStream } from '../services/providers/streamResolver';
 import { createStreamCandidateQueue } from '../services/providers/streamResolver';
 import { AudioOutput, sourceFacts } from '../services/audio/audioOutput';
 import { DEFAULT_AUDIO_LAB, StorageService } from '../services/storage/storageService';
-import { PlaybackClock, usePositionStep } from '../services/audio/playbackClock';
+import { PlaybackClock } from '../services/audio/playbackClock';
 import { SleepClock } from '../services/audio/sleepClock';
 import { peekMusicVideo, videoHitToTrack } from '../services/video/videoService';
 import { searchYouTubeVideos } from '../services/providers/innertubeProvider';
@@ -106,6 +106,8 @@ import {
   Track,
 } from '../types/music';
 import { isLocalTrack, LocalLibrary, taggedAlbumOf } from '../services/local/localLibrary';
+import { perfCount } from '../services/perfProbe';
+import { runLyricClock } from '../services/lyrics/lyricClock';
 
 export type CollectionTarget =
   | { kind: 'album'; id: string; summary?: AlbumSummary }
@@ -297,7 +299,6 @@ interface HolySicContextValue extends HolySicExtras {
   isLoadingLyrics: boolean;
   /** Search the lyrics providers again for the current song (after a miss / offline) */
   reloadLyrics: () => void;
-  activeLyricIndex: number;
   /** Lyrics delay for the current song, seconds */
   lyricsOffsetSec: number;
   nudgeLyricsOffset: (deltaMs: number | 'reset') => void;
@@ -367,6 +368,7 @@ function continuesAlbum(cur: Track, next: Track | undefined): boolean {
 }
 
 export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  perfCount('render:Provider');
   const [activeTab, setActiveTab] = useState<MainTab>('home');
   const [collectionTarget, setCollectionTarget] = useState<CollectionTarget | null>(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
@@ -846,26 +848,19 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [isOnline]);
 
   const lyricsOffsetSec = currentTrack ? (prefs.lyricsOffsets?.[currentTrack.id] ?? 0) / 1000 : 0;
-  // the active line only changes a few times a minute: follow the clock, re-render on change
-  const [activeLyricIndex, setActiveLyricIndex] = useState(-1);
-  useEffect(() => {
-    const compute = () => {
+  // the active line lives in LyricClock (not here): a line change re-renders only the lyrics
+  const isPlayingLyricRef = useRef(isPlaying);
+  isPlayingLyricRef.current = isPlaying;
+  const lyricStarts = useMemo(
+    () =>
       // untimed lyrics have no current line (their spread-out times are only a layout aid)
-      if (!lyrics || lyrics.lines.length === 0 || !lyrics.synced) return -1;
-      const pos = PlaybackClock.get() - lyricsOffsetSec;
-      let active = -1;
-      for (let i = 0; i < lyrics.lines.length; i++) {
-        if (pos + 0.15 >= lyrics.lines[i].startSec) active = i;
-        else break;
-      }
-      return active;
-    };
-    setActiveLyricIndex(compute());
-    return PlaybackClock.subscribe(() => {
-      const next = compute();
-      setActiveLyricIndex((prev) => (prev === next ? prev : next));
-    });
-  }, [lyrics, lyricsOffsetSec]);
+      lyrics && lyrics.synced && lyrics.lines.length ? lyrics.lines.map((l) => l.startSec) : null,
+    [lyrics]
+  );
+  useEffect(
+    () => runLyricClock(lyricStarts, lyricsOffsetSec, () => isPlayingLyricRef.current),
+    [lyricStarts, lyricsOffsetSec, isPlaying]
+  );
 
   // Spotube's "skip non-music segments": only when the audio is the YouTube video itself
   useEffect(() => {
@@ -1554,22 +1549,31 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Persist the playback session for "resume queue" (throttled)
   const lastSessionSaveRef = useRef(0);
-  const sessionBucket = usePositionStep(10);
+  const saveSessionNow = () => {
+    lastSessionSaveRef.current = Date.now();
+    StorageService.saveSession({
+      queue: queueRef.current,
+      index: queueIndexRef.current,
+      positionSec: PlaybackClock.get(),
+      shuffle: shuffleRef.current,
+      repeat: repeatRef.current,
+      savedAt: lastSessionSaveRef.current,
+    });
+  };
   useEffect(() => {
     if (!hydratedRef.current || !prefs.resumeQueue) return;
-    const now = Date.now();
-    if (isPlaying && now - lastSessionSaveRef.current < 10000) return;
-    lastSessionSaveRef.current = now;
-    StorageService.saveSession({
-      queue,
-      index: queueIndex,
-      positionSec: PlaybackClock.get(),
-      shuffle,
-      repeat: repeatMode,
-      savedAt: now,
+    if (isPlaying && Date.now() - lastSessionSaveRef.current < 10000) return;
+    saveSessionNow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, queueIndex, isPlaying, shuffle, repeatMode, prefs.resumeQueue]);
+  // while playing, the position is saved every ~10 s straight from the clock (no re-render)
+  useEffect(() => {
+    if (!isPlaying || !prefs.resumeQueue) return;
+    return PlaybackClock.subscribe(() => {
+      if (hydratedRef.current && Date.now() - lastSessionSaveRef.current >= 10000) saveSessionNow();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, queueIndex, isPlaying, sessionBucket, shuffle, repeatMode, prefs.resumeQueue]);
+  }, [isPlaying, prefs.resumeQueue]);
 
   // Sleep Timer — counts against the wall clock (a throttled background timer can't drift it),
   // and the final 20 s fade the music out gently instead of cutting it mid-phrase
@@ -3011,7 +3015,6 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       lyrics,
       isLoadingLyrics,
       reloadLyrics,
-      activeLyricIndex,
       lyricsOffsetSec,
       nudgeLyricsOffset,
       sleepActive,
@@ -3097,7 +3100,6 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       lyrics,
       isLoadingLyrics,
       reloadLyrics,
-      activeLyricIndex,
       lyricsOffsetSec,
       nudgeLyricsOffset,
       sleepActive,

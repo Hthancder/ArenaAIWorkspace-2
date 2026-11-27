@@ -27,6 +27,7 @@ import { useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
 import { Rise } from '../ui/Rise';
 import { ScrollEdgeHairline } from '../ui/ScrollEdgeBar';
+import { perfCount } from '../../services/perfProbe';
 
 const SOURCE_FILTERS: { id: SearchFilter; vi: string; en: string }[] = [
   { id: 'all', vi: 'Tất cả', en: 'All' },
@@ -51,6 +52,7 @@ const FEATURED_ARTISTS = [
 ];
 
 export const SearchScreen: React.FC = () => {
+  perfCount('render:Search');
   const {
     prefs,
     palette,

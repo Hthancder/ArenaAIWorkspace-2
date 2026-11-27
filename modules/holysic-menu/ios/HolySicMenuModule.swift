@@ -34,6 +34,8 @@ struct HolySicMenuItem: Record {
   @Field var checked: Bool = false
   /// items with the same section number are grouped (separated from the next group by a divider)
   @Field var section: Int = 0
+  /// the group is drawn as one row of small icon buttons (iOS 16+, like Music's top row)
+  @Field var row: Bool = false
   /// a submenu (one level deep)
   @Field var children: [HolySicMenuChild]? = nil
 }
@@ -220,7 +222,7 @@ public final class HolySicMenuView: ExpoView, UIContextMenuInteractionDelegate {
     }
     for it in items {
       add(it.id, it.title, it.subtitle, it.icon, [it.destructive, it.disabled, it.checked])
-      out += "#\(it.section)"
+      out += "#\(it.section)\(it.row ? "r" : "")"
       for k in it.children ?? [] {
         add(k.id, k.title, k.subtitle, k.icon, [k.destructive, k.disabled, k.checked])
       }
@@ -284,18 +286,22 @@ public final class HolySicMenuView: ExpoView, UIContextMenuInteractionDelegate {
   func buildMenu() -> UIMenu {
     var order: [Int] = []
     var groups: [Int: [UIMenuElement]] = [:]
+    var rows: Set<Int> = []
     for it in items {
       if groups[it.section] == nil {
         order.append(it.section)
         groups[it.section] = []
       }
       groups[it.section]?.append(element(it))
+      if it.row { rows.insert(it.section) }
     }
     if order.count <= 1 {
       return UIMenu(title: menuTitle, children: order.first.flatMap { groups[$0] } ?? [])
     }
     let sections: [UIMenuElement] = order.map { key in
-      UIMenu(title: "", options: .displayInline, children: groups[key] ?? [])
+      let m = UIMenu(title: "", options: .displayInline, children: groups[key] ?? [])
+      if rows.contains(key), #available(iOS 16.0, *) { m.preferredElementSize = .small }
+      return m
     }
     return UIMenu(title: menuTitle, children: sections)
   }

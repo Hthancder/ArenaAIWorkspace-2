@@ -26,6 +26,7 @@ import { TabBar, TabDef } from './src/components/TabBar';
 import { FullPlayerModal } from './src/components/player/FullPlayerModal';
 import { MusicVideoHost } from './src/components/video/MusicVideoHost';
 import { AppVideoAmbient } from './src/components/video/VideoSurfaces';
+import { perfOn, perfOnRender } from './src/services/perfProbe';
 import { HomeScreen } from './src/components/screens/HomeScreen';
 import { LibraryScreen } from './src/components/screens/LibraryScreen';
 import { RecapModal } from './src/components/screens/RecapModal';
@@ -186,7 +187,9 @@ const HolySicShell: React.FC = () => {
         ]}
       >
         {/* Settings › Background & effects: one layer under every tab */}
-        <AppBackdrop />
+        <Perf id="backdrop">
+          <AppBackdrop />
+        </Perf>
         {prefs.musicVideo && prefs.videoAmbientApp && (
           <AppVideoAmbient
             hidden={isPlayerOpen}
@@ -194,40 +197,46 @@ const HolySicShell: React.FC = () => {
             light={scheme === 'light'}
           />
         )}
-        <View style={{ flex: 1 }}>
-          {/* tabs stay alive once visited (scroll position, search text, open filters survive a
+        <Perf id="tabs">
+          <View style={{ flex: 1 }}>
+            {/* tabs stay alive once visited (scroll position, search text, open filters survive a
               tab switch, like a native UITabBarController); the shown one fades in */}
-          {TAB_IDS.map((id) =>
-            visited.includes(id) ? (
-              <TabPane key={id} active={activeTab === id}>
-                {id === 'home' ? (
-                  <HomeScreen />
-                ) : id === 'search' ? (
-                  <SearchScreen />
-                ) : id === 'library' ? (
-                  <LibraryScreen />
-                ) : (
-                  <SettingsScreen />
-                )}
-              </TabPane>
-            ) : null
-          )}
-          {localOpen && <LocalLibraryScreen />}
-        </View>
+            {TAB_IDS.map((id) =>
+              visited.includes(id) ? (
+                <TabPane key={id} active={activeTab === id}>
+                  {id === 'home' ? (
+                    <HomeScreen />
+                  ) : id === 'search' ? (
+                    <SearchScreen />
+                  ) : id === 'library' ? (
+                    <LibraryScreen />
+                  ) : (
+                    <SettingsScreen />
+                  )}
+                </TabPane>
+              ) : null
+            )}
+            {localOpen && <LocalLibraryScreen />}
+          </View>
+        </Perf>
 
         {/* Floating Dock: MiniPlayer + iOS Translucent Bottom Tab Bar */}
         <View style={[styles.bottomDock, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-          <MiniPlayer />
+          <Perf id="mini">
+            <MiniPlayer />
+          </Perf>
 
-          <TabBar
-            tabs={tabs}
-            active={activeTab}
-            fontFamily={fontFamily}
-            onSelect={(id) => {
-              if (localOpen) LocalLibrary.close();
-              setActiveTab(id);
-            }}
-          />
+          <Perf id="tabbar">
+            <TabBar
+              tabs={tabs}
+              active={activeTab}
+              fontFamily={fontFamily}
+              onSelect={(id) => {
+                if (localOpen) LocalLibrary.close();
+                setActiveTab(id);
+              }}
+            />
+          </Perf>
         </View>
 
         {/* Connection pill (10 s when the network drops, 5 s on launch while offline) */}
@@ -243,7 +252,9 @@ const HolySicShell: React.FC = () => {
         {/* one muted music-video player for the whole app (follows the audio) */}
         <MusicVideoHost />
         {/* Modals & Sheets */}
-        <FullPlayerModal />
+        <Perf id="player">
+          <FullPlayerModal />
+        </Perf>
         <RecapModal />
         <ImportModal
           visible={!!importSheet}
@@ -265,6 +276,17 @@ const HolySicShell: React.FC = () => {
   );
 };
 
+/** Benchmark only (see services/perfProbe): React.Profiler around a part of the tree */
+const PERF = perfOn();
+const Perf: React.FC<{ id: string; children: React.ReactNode }> = ({ id, children }) =>
+  PERF ? (
+    <React.Profiler id={id} onRender={perfOnRender}>
+      {children}
+    </React.Profiler>
+  ) : (
+    <>{children}</>
+  );
+
 /** Same picture as the native splash, so launch is one seamless screen */
 const LaunchScreen: React.FC = () => (
   <View style={styles.launch}>
@@ -280,7 +302,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <HolySicProvider>
-        <HolySicShell />
+        <Perf id="all">
+          <HolySicShell />
+        </Perf>
         <WidgetBridge />
       </HolySicProvider>
     </SafeAreaProvider>

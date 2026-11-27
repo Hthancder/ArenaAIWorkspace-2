@@ -22,7 +22,11 @@ import { Tap } from '../ui/Tap';
 
 type Opt<T> = readonly (readonly [T, string])[];
 
-export const EffectsSettings: React.FC<{ fontFamily?: string }> = ({ fontFamily }) => {
+export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' | 'controls' }> = ({
+  fontFamily,
+  part,
+}) => {
+  const show = (k: string) => !part || part === k;
   const { prefs, updatePrefs, palette, haptic, showToast, ambient } = useHolySic();
   const ui = useUi();
   const art = useAmbientColors();
@@ -135,342 +139,362 @@ export const EffectsSettings: React.FC<{ fontFamily?: string }> = ({ fontFamily 
 
   return (
     <>
-      {/* ───────── Background & effects ───────── */}
-      <Text style={[styles.sectionTitle, { fontFamily }]}>
-        {vi ? 'Nền & hiệu ứng' : 'Background & effects'}
-      </Text>
-      <View style={styles.card}>
-        <Text style={styles.rowTitle}>{vi ? 'Nền ứng dụng' : 'App background'}</Text>
-        <Text style={styles.rowDesc}>
-          {vi
-            ? 'Nằm phía sau mọi tab. Chữ luôn dễ đọc, hiệu ứng đứng yên khi mở trình phát.'
-            : 'Sits behind every tab. Text stays readable; effects hold still while the player is open.'}
-        </Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ marginHorizontal: -4, marginTop: 10 }}
-        >
-          <View style={styles.tileRow} accessibilityRole="radiogroup">
-            {tiles.map((t) => {
-              const on = mode === t.id;
-              return (
-                <Tap
-                  key={t.id}
-                  onPress={() => set({ appBackdrop: t.id })}
-                  style={styles.tileWrap}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: on }}
-                  accessibilityLabel={vi ? t.vi : t.en}
-                >
-                  <View
-                    style={[
-                      styles.tile,
-                      { borderColor: on ? palette.accent : UI.fg(0.1) },
-                      on && { borderWidth: 2 },
-                    ]}
-                  >
-                    <LinearGradient
-                      colors={t.colors as [string, string, ...string[]]}
-                      style={StyleSheet.absoluteFill}
-                    />
-                    {t.glow && (
-                      <View
-                        style={[styles.tileGlow, { backgroundColor: art.primary, opacity: 0.45 }]}
-                      />
-                    )}
-                    {t.bars && (
-                      <View style={styles.tileBars}>
-                        {[0.35, 0.7, 0.5, 0.9, 0.6, 0.4, 0.75, 0.3].map((h, i) => (
-                          <View
-                            key={i}
-                            style={[
-                              styles.tileBar,
-                              {
-                                height: `${h * 100}%`,
-                                backgroundColor: art.corners[i % 4],
-                              },
-                            ]}
-                          />
-                        ))}
-                      </View>
-                    )}
-                    {/* a fake list so the preview reads as "a screen" */}
-                    <View style={styles.tileLines}>
-                      <View style={[styles.tileLine, { width: '70%' }]} />
-                      <View style={[styles.tileLine, { width: '50%' }]} />
-                      <View style={[styles.tileLine, { width: '60%' }]} />
-                    </View>
-                    {on && (
-                      <View style={[styles.tileCheck, { backgroundColor: palette.accent }]}>
-                        <Ionicons name="checkmark" size={11} color={palette.onAccent} />
-                      </View>
-                    )}
-                  </View>
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.tileLabel, on && { color: palette.accent, fontWeight: '800' }]}
-                  >
-                    {vi ? t.vi : t.en}
-                  </Text>
-                </Tap>
-              );
-            })}
-          </View>
-        </ScrollView>
-
-        {off && mode !== 'plain' && (
-          <Text style={styles.note}>
-            {vi
-              ? '“Đen tuyệt đối (OLED)” đang bật nên nền luôn đen. Tắt nó để dùng nền này.'
-              : '“Pure black (OLED)” is on, so the background stays black. Turn it off to use this.'}
+      {show('backdrop') && (
+        <>
+          {/* ───────── Background & effects ───────── */}
+          <Text style={[styles.sectionTitle, { fontFamily }]}>
+            {vi ? 'Nền & hiệu ứng' : 'Background & effects'}
           </Text>
-        )}
-
-        {mode === 'color' && (
-          <View style={{ marginTop: 14 }}>
-            <Text style={styles.subLabel}>{vi ? 'Màu nền' : 'Background colour'}</Text>
-            <View style={styles.swatches}>
-              {BACKDROP_COLORS.map((c) => {
-                const on = prefs.appBgColor === c.id;
-                const tone = ui.scheme === 'light' ? c.light : c.dark;
-                return (
-                  <Tap
-                    key={c.id}
-                    onPress={() => {
-                      setHex1('');
-                      set({ appBgColor: c.id });
-                    }}
-                    style={styles.swatchWrap}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: on }}
-                    accessibilityLabel={vi ? c.vi : c.en}
-                  >
-                    <View
-                      style={[
-                        styles.swatch,
-                        { backgroundColor: tone, borderColor: on ? palette.accent : UI.fg(0.14) },
-                        on && { borderWidth: 2.5 },
-                      ]}
-                    />
-                    <Text
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.75}
-                      style={styles.swatchLabel}
-                    >
-                      {vi ? c.vi : c.en}
-                    </Text>
-                  </Tap>
-                );
-              })}
-            </View>
-            <View style={styles.inline}>
-              <View style={[styles.hexDot, { backgroundColor: customTop }]} />
-              <TextInput
-                value={hex1}
-                onChangeText={setHex1}
-                onSubmitEditing={() => applyHex(1)}
-                placeholder={vi ? 'Màu riêng: #2B1055' : 'Custom: #2B1055'}
-                placeholderTextColor={UI.text3}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={[styles.input, { flex: 1 }]}
-              />
-              <Tap
-                onPress={() => applyHex(1)}
-                style={[styles.btn, { backgroundColor: palette.accent }]}
-              >
-                <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
-                  {vi ? 'Dùng' : 'Apply'}
-                </Text>
-              </Tap>
-            </View>
-            <View style={styles.inline}>
-              <View
-                style={[
-                  styles.hexDot,
-                  customBottom
-                    ? { backgroundColor: customBottom }
-                    : { borderWidth: 1, borderColor: UI.fg(0.2), borderStyle: 'dashed' },
-                ]}
-              />
-              <TextInput
-                value={hex2}
-                onChangeText={setHex2}
-                onSubmitEditing={() => applyHex(2)}
-                placeholder={vi ? 'Màu 2 để chuyển sắc' : '2nd colour (gradient)'}
-                placeholderTextColor={UI.text3}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={[styles.input, { flex: 1 }]}
-              />
-              <Tap onPress={() => applyHex(2)} style={styles.btnGhost}>
-                <Text style={{ color: UI.text, fontWeight: '700' }}>
-                  {hex2.trim() ? (vi ? 'Dùng' : 'Apply') : vi ? 'Bỏ' : 'Clear'}
-                </Text>
-              </Tap>
-            </View>
+          <View style={styles.card}>
+            <Text style={styles.rowTitle}>{vi ? 'Nền ứng dụng' : 'App background'}</Text>
             <Text style={styles.rowDesc}>
               {vi
-                ? 'Màu tự chọn được giữ sắc độ nhưng tự chỉnh độ sáng cho hợp giao diện Sáng/Tối.'
-                : 'Custom colours keep their hue; brightness adapts to Light / Dark so text stays readable.'}
+                ? 'Nằm phía sau mọi tab. Chữ luôn dễ đọc, hiệu ứng đứng yên khi mở trình phát.'
+                : 'Sits behind every tab. Text stays readable; effects hold still while the player is open.'}
             </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginHorizontal: -4, marginTop: 10 }}
+            >
+              <View style={styles.tileRow} accessibilityRole="radiogroup">
+                {tiles.map((t) => {
+                  const on = mode === t.id;
+                  return (
+                    <Tap
+                      key={t.id}
+                      onPress={() => set({ appBackdrop: t.id })}
+                      style={styles.tileWrap}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: on }}
+                      accessibilityLabel={vi ? t.vi : t.en}
+                    >
+                      <View
+                        style={[
+                          styles.tile,
+                          { borderColor: on ? palette.accent : UI.fg(0.1) },
+                          on && { borderWidth: 2 },
+                        ]}
+                      >
+                        <LinearGradient
+                          colors={t.colors as [string, string, ...string[]]}
+                          style={StyleSheet.absoluteFill}
+                        />
+                        {t.glow && (
+                          <View
+                            style={[
+                              styles.tileGlow,
+                              { backgroundColor: art.primary, opacity: 0.45 },
+                            ]}
+                          />
+                        )}
+                        {t.bars && (
+                          <View style={styles.tileBars}>
+                            {[0.35, 0.7, 0.5, 0.9, 0.6, 0.4, 0.75, 0.3].map((h, i) => (
+                              <View
+                                key={i}
+                                style={[
+                                  styles.tileBar,
+                                  {
+                                    height: `${h * 100}%`,
+                                    backgroundColor: art.corners[i % 4],
+                                  },
+                                ]}
+                              />
+                            ))}
+                          </View>
+                        )}
+                        {/* a fake list so the preview reads as "a screen" */}
+                        <View style={styles.tileLines}>
+                          <View style={[styles.tileLine, { width: '70%' }]} />
+                          <View style={[styles.tileLine, { width: '50%' }]} />
+                          <View style={[styles.tileLine, { width: '60%' }]} />
+                        </View>
+                        {on && (
+                          <View style={[styles.tileCheck, { backgroundColor: palette.accent }]}>
+                            <Ionicons name="checkmark" size={11} color={palette.onAccent} />
+                          </View>
+                        )}
+                      </View>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.tileLabel,
+                          on && { color: palette.accent, fontWeight: '800' },
+                        ]}
+                      >
+                        {vi ? t.vi : t.en}
+                      </Text>
+                    </Tap>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            {off && mode !== 'plain' && (
+              <Text style={styles.note}>
+                {vi
+                  ? '“Đen tuyệt đối (OLED)” đang bật nên nền luôn đen. Tắt nó để dùng nền này.'
+                  : '“Pure black (OLED)” is on, so the background stays black. Turn it off to use this.'}
+              </Text>
+            )}
+
+            {mode === 'color' && (
+              <View style={{ marginTop: 14 }}>
+                <Text style={styles.subLabel}>{vi ? 'Màu nền' : 'Background colour'}</Text>
+                <View style={styles.swatches}>
+                  {BACKDROP_COLORS.map((c) => {
+                    const on = prefs.appBgColor === c.id;
+                    const tone = ui.scheme === 'light' ? c.light : c.dark;
+                    return (
+                      <Tap
+                        key={c.id}
+                        onPress={() => {
+                          setHex1('');
+                          set({ appBgColor: c.id });
+                        }}
+                        style={styles.swatchWrap}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: on }}
+                        accessibilityLabel={vi ? c.vi : c.en}
+                      >
+                        <View
+                          style={[
+                            styles.swatch,
+                            {
+                              backgroundColor: tone,
+                              borderColor: on ? palette.accent : UI.fg(0.14),
+                            },
+                            on && { borderWidth: 2.5 },
+                          ]}
+                        />
+                        <Text
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.75}
+                          style={styles.swatchLabel}
+                        >
+                          {vi ? c.vi : c.en}
+                        </Text>
+                      </Tap>
+                    );
+                  })}
+                </View>
+                <View style={styles.inline}>
+                  <View style={[styles.hexDot, { backgroundColor: customTop }]} />
+                  <TextInput
+                    value={hex1}
+                    onChangeText={setHex1}
+                    onSubmitEditing={() => applyHex(1)}
+                    placeholder={vi ? 'Màu riêng: #2B1055' : 'Custom: #2B1055'}
+                    placeholderTextColor={UI.text3}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={[styles.input, { flex: 1 }]}
+                  />
+                  <Tap
+                    onPress={() => applyHex(1)}
+                    style={[styles.btn, { backgroundColor: palette.accent }]}
+                  >
+                    <Text style={{ color: palette.onAccent, fontWeight: '800' }}>
+                      {vi ? 'Dùng' : 'Apply'}
+                    </Text>
+                  </Tap>
+                </View>
+                <View style={styles.inline}>
+                  <View
+                    style={[
+                      styles.hexDot,
+                      customBottom
+                        ? { backgroundColor: customBottom }
+                        : { borderWidth: 1, borderColor: UI.fg(0.2), borderStyle: 'dashed' },
+                    ]}
+                  />
+                  <TextInput
+                    value={hex2}
+                    onChangeText={setHex2}
+                    onSubmitEditing={() => applyHex(2)}
+                    placeholder={vi ? 'Màu 2 để chuyển sắc' : '2nd colour (gradient)'}
+                    placeholderTextColor={UI.text3}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={[styles.input, { flex: 1 }]}
+                  />
+                  <Tap onPress={() => applyHex(2)} style={styles.btnGhost}>
+                    <Text style={{ color: UI.text, fontWeight: '700' }}>
+                      {hex2.trim() ? (vi ? 'Dùng' : 'Apply') : vi ? 'Bỏ' : 'Clear'}
+                    </Text>
+                  </Tap>
+                </View>
+                <Text style={styles.rowDesc}>
+                  {vi
+                    ? 'Màu tự chọn được giữ sắc độ nhưng tự chỉnh độ sáng cho hợp giao diện Sáng/Tối.'
+                    : 'Custom colours keep their hue; brightness adapts to Light / Dark so text stays readable.'}
+                </Text>
+              </View>
+            )}
+
+            {mode !== 'plain' && (
+              <>
+                <Text style={[styles.subLabel, { marginTop: 14 }]}>
+                  {vi ? 'Độ đậm' : 'Strength'}
+                </Text>
+                {segments(
+                  prefs.appBgStrength || 'medium',
+                  [
+                    ['low', vi ? 'Nhẹ' : 'Subtle'],
+                    ['medium', vi ? 'Vừa' : 'Medium'],
+                    ['high', vi ? 'Đậm' : 'Rich'],
+                  ] as const,
+                  (v) => set({ appBgStrength: v }),
+                  vi ? 'Độ đậm' : 'Strength'
+                )}
+              </>
+            )}
+
+            {mode === 'visualizer' && (
+              <>
+                <Text style={[styles.subLabel, { marginTop: 14 }]}>
+                  {vi ? 'Kiểu visualizer' : 'Visualizer style'}
+                </Text>
+                {segments<BackdropVisualizer>(
+                  prefs.appBgVisualizer || 'mirror',
+                  [
+                    ['mirror', vi ? 'Phản chiếu' : 'Mirror'],
+                    ['bars', vi ? 'Cột' : 'Bars'],
+                    ['wave', vi ? 'Sóng mềm' : 'Soft wave'],
+                  ] as const,
+                  (v) => set({ appBgVisualizer: v }),
+                  vi ? 'Kiểu visualizer' : 'Visualizer style'
+                )}
+              </>
+            )}
+
+            {(mode === 'artwork' || mode === 'ambient' || mode === 'visualizer') &&
+              row(
+                vi ? 'Chuyển động theo nhạc' : 'Moves with the music',
+                vi
+                  ? 'Tắt để nền đứng yên (vẫn đổi màu theo bài). Tự đứng yên khi bật Nguồn điện thấp.'
+                  : 'Off = a still background that still follows the song. Always still in Low Power Mode.',
+                sw(prefs.appBgReactive !== false, (v) => set({ appBgReactive: v })),
+                true
+              )}
+            {ambient.lowPower && mode !== 'plain' && mode !== 'color' && (
+              <Text style={styles.note}>
+                {vi
+                  ? '⚡ Đang bật Nguồn điện thấp: nền đứng yên để tiết kiệm pin.'
+                  : '⚡ Low Power Mode: the background holds still to save battery.'}
+              </Text>
+            )}
+
+            <View style={styles.divider} />
+            <Text style={styles.rowTitle}>
+              {vi ? 'Visualizer trên thanh tab' : 'Tab bar visualizer'}
+            </Text>
+            <Text style={styles.rowDesc}>
+              {vi
+                ? 'Hiệu ứng nhỏ, nhẹ nhàng trong thanh tab khi đang phát nhạc.'
+                : 'A small, quiet effect inside the tab bar while music plays.'}
+            </Text>
+            {segments<DockVisualizer>(
+              prefs.dockVisualizer || 'off',
+              [
+                ['off', vi ? 'Tắt' : 'Off'],
+                ['bars', vi ? 'Cột sóng' : 'Bars'],
+                ['glow', vi ? 'Viền sáng' : 'Glow'],
+              ] as const,
+              (v) => set({ dockVisualizer: v }),
+              vi ? 'Visualizer trên thanh tab' : 'Tab bar visualizer'
+            )}
           </View>
-        )}
-
-        {mode !== 'plain' && (
-          <>
-            <Text style={[styles.subLabel, { marginTop: 14 }]}>{vi ? 'Độ đậm' : 'Strength'}</Text>
-            {segments(
-              prefs.appBgStrength || 'medium',
-              [
-                ['low', vi ? 'Nhẹ' : 'Subtle'],
-                ['medium', vi ? 'Vừa' : 'Medium'],
-                ['high', vi ? 'Đậm' : 'Rich'],
-              ] as const,
-              (v) => set({ appBgStrength: v }),
-              vi ? 'Độ đậm' : 'Strength'
-            )}
-          </>
-        )}
-
-        {mode === 'visualizer' && (
-          <>
-            <Text style={[styles.subLabel, { marginTop: 14 }]}>
-              {vi ? 'Kiểu visualizer' : 'Visualizer style'}
-            </Text>
-            {segments<BackdropVisualizer>(
-              prefs.appBgVisualizer || 'mirror',
-              [
-                ['mirror', vi ? 'Phản chiếu' : 'Mirror'],
-                ['bars', vi ? 'Cột' : 'Bars'],
-                ['wave', vi ? 'Sóng mềm' : 'Soft wave'],
-              ] as const,
-              (v) => set({ appBgVisualizer: v }),
-              vi ? 'Kiểu visualizer' : 'Visualizer style'
-            )}
-          </>
-        )}
-
-        {(mode === 'artwork' || mode === 'ambient' || mode === 'visualizer') &&
-          row(
-            vi ? 'Chuyển động theo nhạc' : 'Moves with the music',
-            vi
-              ? 'Tắt để nền đứng yên (vẫn đổi màu theo bài). Tự đứng yên khi bật Nguồn điện thấp.'
-              : 'Off = a still background that still follows the song. Always still in Low Power Mode.',
-            sw(prefs.appBgReactive !== false, (v) => set({ appBgReactive: v })),
-            true
-          )}
-        {ambient.lowPower && mode !== 'plain' && mode !== 'color' && (
-          <Text style={styles.note}>
-            {vi
-              ? '⚡ Đang bật Nguồn điện thấp: nền đứng yên để tiết kiệm pin.'
-              : '⚡ Low Power Mode: the background holds still to save battery.'}
+        </>
+      )}
+      {show('controls') && (
+        <>
+          {/* ───────── Controls ───────── */}
+          <Text style={[styles.sectionTitle, { fontFamily }]}>
+            {vi ? 'Điều khiển & tiện ích' : 'Controls'}
           </Text>
-        )}
-
-        <View style={styles.divider} />
-        <Text style={styles.rowTitle}>
-          {vi ? 'Visualizer trên thanh tab' : 'Tab bar visualizer'}
-        </Text>
-        <Text style={styles.rowDesc}>
-          {vi
-            ? 'Hiệu ứng nhỏ, nhẹ nhàng trong thanh tab khi đang phát nhạc.'
-            : 'A small, quiet effect inside the tab bar while music plays.'}
-        </Text>
-        {segments<DockVisualizer>(
-          prefs.dockVisualizer || 'off',
-          [
-            ['off', vi ? 'Tắt' : 'Off'],
-            ['bars', vi ? 'Cột sóng' : 'Bars'],
-            ['glow', vi ? 'Viền sáng' : 'Glow'],
-          ] as const,
-          (v) => set({ dockVisualizer: v }),
-          vi ? 'Visualizer trên thanh tab' : 'Tab bar visualizer'
-        )}
-      </View>
-
-      {/* ───────── Controls ───────── */}
-      <Text style={[styles.sectionTitle, { fontFamily }]}>
-        {vi ? 'Điều khiển & tiện ích' : 'Controls'}
-      </Text>
-      <View style={styles.card}>
-        <Text style={styles.rowTitle}>{vi ? 'Rung phản hồi' : 'Haptics'}</Text>
-        {segments(
-          prefs.haptics || 'full',
-          [
-            ['off', vi ? 'Tắt' : 'Off'],
-            ['subtle', vi ? 'Nhẹ' : 'Subtle'],
-            ['full', vi ? 'Đầy đủ' : 'Full'],
-          ] as const,
-          (v) => {
-            updatePrefs({ haptics: v });
-            if (v !== 'off') setTimeout(() => haptic('medium'), 30);
-          },
-          vi ? 'Rung phản hồi' : 'Haptics'
-        )}
-        <View style={{ height: 8 }} />
-        {row(
-          vi ? 'Vuốt để chuyển bài' : 'Swipe to change songs',
-          vi
-            ? 'Vuốt ngang MiniPlayer hoặc ảnh bìa (cả bài offline)'
-            : 'Swipe the mini player or the cover sideways (offline songs too)',
-          sw(prefs.swipeToSkip !== false, (v) => set({ swipeToSkip: v }))
-        )}
-        {row(
-          vi ? 'Mở trình phát khi chọn bài' : 'Open the player when a song starts',
-          vi
-            ? 'Chạm một bài là mở luôn màn hình đang phát'
-            : 'Tapping a song also opens Now Playing',
-          sw(!!prefs.openPlayerOnPlay, (v) => set({ openPlayerOnPlay: v }))
-        )}
-        {row(
-          vi ? 'Giữ màn hình sáng khi xem lời' : 'Keep the screen on for lyrics',
-          vi ? 'Không tự khoá máy khi đang mở lời bài hát' : 'No auto-lock while lyrics are open',
-          sw(!!prefs.keepAwakeLyrics, (v) => set({ keepAwakeLyrics: v }))
-        )}
-        {row(
-          vi ? 'Tên tab' : 'Tab labels',
-          vi
-            ? 'Tắt để thanh tab gọn hơn, chỉ còn biểu tượng'
-            : 'Off = a slimmer, icons-only tab bar',
-          sw(prefs.tabLabels !== false, (v) => set({ tabLabels: v }))
-        )}
-        {row(
-          vi ? 'Thông báo ngoại tuyến' : 'Offline notice',
-          vi
-            ? 'Viên “Ngoại tuyến” nhỏ khi mất mạng'
-            : 'The small “Offline” pill when the network drops',
-          sw(prefs.offlinePill !== false, (v) => set({ offlinePill: v }))
-        )}
-        <Text style={[styles.subLabel, { marginTop: 12 }]}>
-          {vi ? 'Hẹn giờ ngủ: nhỏ dần trước khi dừng' : 'Sleep timer fade-out'}
-        </Text>
-        {segments<number>(
-          prefs.sleepFadeSec ?? 20,
-          [
-            [0, vi ? 'Không' : 'None'],
-            [10, '10 s'],
-            [20, '20 s'],
-            [45, '45 s'],
-          ] as const,
-          (v) => set({ sleepFadeSec: v }),
-          vi ? 'Nhỏ dần trước khi dừng' : 'Fade-out'
-        )}
-        <Text style={[styles.subLabel, { marginTop: 12 }]}>
-          {vi ? 'Visualizer trong trình phát' : 'Player visualizer'}
-        </Text>
-        {segments<number>(
-          prefs.visualizerFps || 60,
-          [
-            [30, vi ? 'Tiết kiệm · 30' : 'Battery · 30'],
-            [60, vi ? 'Mượt · 60' : 'Smooth · 60'],
-          ] as const,
-          (v) => set({ visualizerFps: v as 30 | 60 }),
-          vi ? 'Tốc độ khung visualizer' : 'Visualizer frame rate'
-        )}
-      </View>
+          <View style={styles.card}>
+            <Text style={styles.rowTitle}>{vi ? 'Rung phản hồi' : 'Haptics'}</Text>
+            {segments(
+              prefs.haptics || 'full',
+              [
+                ['off', vi ? 'Tắt' : 'Off'],
+                ['subtle', vi ? 'Nhẹ' : 'Subtle'],
+                ['full', vi ? 'Đầy đủ' : 'Full'],
+              ] as const,
+              (v) => {
+                updatePrefs({ haptics: v });
+                if (v !== 'off') setTimeout(() => haptic('medium'), 30);
+              },
+              vi ? 'Rung phản hồi' : 'Haptics'
+            )}
+            <View style={{ height: 8 }} />
+            {row(
+              vi ? 'Vuốt để chuyển bài' : 'Swipe to change songs',
+              vi
+                ? 'Vuốt ngang MiniPlayer hoặc ảnh bìa (cả bài offline)'
+                : 'Swipe the mini player or the cover sideways (offline songs too)',
+              sw(prefs.swipeToSkip !== false, (v) => set({ swipeToSkip: v }))
+            )}
+            {row(
+              vi ? 'Mở trình phát khi chọn bài' : 'Open the player when a song starts',
+              vi
+                ? 'Chạm một bài là mở luôn màn hình đang phát'
+                : 'Tapping a song also opens Now Playing',
+              sw(!!prefs.openPlayerOnPlay, (v) => set({ openPlayerOnPlay: v }))
+            )}
+            {row(
+              vi ? 'Giữ màn hình sáng khi xem lời' : 'Keep the screen on for lyrics',
+              vi
+                ? 'Không tự khoá máy khi đang mở lời bài hát'
+                : 'No auto-lock while lyrics are open',
+              sw(!!prefs.keepAwakeLyrics, (v) => set({ keepAwakeLyrics: v }))
+            )}
+            {row(
+              vi ? 'Tên tab' : 'Tab labels',
+              vi
+                ? 'Tắt để thanh tab gọn hơn, chỉ còn biểu tượng'
+                : 'Off = a slimmer, icons-only tab bar',
+              sw(prefs.tabLabels !== false, (v) => set({ tabLabels: v }))
+            )}
+            {row(
+              vi ? 'Thông báo ngoại tuyến' : 'Offline notice',
+              vi
+                ? 'Viên “Ngoại tuyến” nhỏ khi mất mạng'
+                : 'The small “Offline” pill when the network drops',
+              sw(prefs.offlinePill !== false, (v) => set({ offlinePill: v }))
+            )}
+            <Text style={[styles.subLabel, { marginTop: 12 }]}>
+              {vi ? 'Hẹn giờ ngủ: nhỏ dần trước khi dừng' : 'Sleep timer fade-out'}
+            </Text>
+            {segments<number>(
+              prefs.sleepFadeSec ?? 20,
+              [
+                [0, vi ? 'Không' : 'None'],
+                [10, '10 s'],
+                [20, '20 s'],
+                [45, '45 s'],
+              ] as const,
+              (v) => set({ sleepFadeSec: v }),
+              vi ? 'Nhỏ dần trước khi dừng' : 'Fade-out'
+            )}
+            <Text style={[styles.subLabel, { marginTop: 12 }]}>
+              {vi ? 'Visualizer trong trình phát' : 'Player visualizer'}
+            </Text>
+            {segments<number>(
+              prefs.visualizerFps || 60,
+              [
+                [30, vi ? 'Tiết kiệm · 30' : 'Battery · 30'],
+                [60, vi ? 'Mượt · 60' : 'Smooth · 60'],
+              ] as const,
+              (v) => set({ visualizerFps: v as 30 | 60 }),
+              vi ? 'Tốc độ khung visualizer' : 'Visualizer frame rate'
+            )}
+          </View>
+        </>
+      )}
     </>
   );
 };

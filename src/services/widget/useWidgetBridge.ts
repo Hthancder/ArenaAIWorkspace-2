@@ -1,6 +1,6 @@
 // Keeps the iOS widget in sync with playback and handles its buttons (holysic://widget/…).
 
-import { usePositionStep } from '../audio/playbackClock';
+import { PlaybackClock, usePositionStep } from '../audio/playbackClock';
 import { useEffect, useRef, useState } from 'react';
 import { AppState, Linking, Platform } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
@@ -139,8 +139,10 @@ export function useWidgetBridge() {
   const playingNow = isPlaying && !stalled;
   // lease: renewed every 20 s while playing (and when the app comes back to the front)
   const leaseTick = useLeaseTick(playingNow);
-  // coarse on purpose: the widget extrapolates the time itself, only drift > 3 s matters
-  const positionSec = usePositionStep(2);
+  // coarse trigger on purpose (the widget extrapolates the time itself, only drift matters) —
+  // but what's published is the exact position: a floored one started the widget's lyrics up
+  // to 2 s late
+  const positionStep = usePositionStep(2);
 
   const enabled = Platform.OS === 'ios' && widgetSupported();
   const last = useRef<{ key: string; pos: number; at: number; playing: boolean } | null>(null);
@@ -216,10 +218,11 @@ export function useWidgetBridge() {
       lyricsId,
       lyricsState,
     ].join('·');
+    const positionSec = PlaybackClock.now(playingNow);
     const prev = last.current;
     if (prev && prev.key === key) {
       const expected = prev.playing ? prev.pos + (now - prev.at) : prev.pos;
-      if (Math.abs(expected - positionSec) < 3) return; // the widget is extrapolating fine
+      if (Math.abs(expected - positionSec) < 1.5) return; // the widget is extrapolating fine
     }
     last.current = { key, pos: positionSec, at: now, playing: playingNow };
     const top = artColors ? shade(artColors.primary, 0.55) : undefined;
@@ -250,7 +253,7 @@ export function useWidgetBridge() {
     currentTrack,
     playingNow,
     leaseTick,
-    positionSec,
+    positionStep,
     durationSec,
     liked,
     upKey,

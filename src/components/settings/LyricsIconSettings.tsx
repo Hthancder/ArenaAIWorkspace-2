@@ -77,7 +77,11 @@ const EffectSample: React.FC<{ id: LyricsEffect; accent: string }> = ({ id, acce
   }
 };
 
-export const LyricsIconSettings: React.FC<{ fontFamily?: string }> = ({ fontFamily }) => {
+export const LyricsIconSettings: React.FC<{ fontFamily?: string; part?: 'lyrics' | 'icon' }> = ({
+  fontFamily,
+  part,
+}) => {
+  const show = (k: string) => !part || part === k;
   const { prefs, updatePrefs, palette, haptic, showToast } = useHolySic();
   const vi = prefs.language === 'vi';
   const effect = prefs.lyricsEffect || 'glow';
@@ -147,117 +151,130 @@ export const LyricsIconSettings: React.FC<{ fontFamily?: string }> = ({ fontFami
 
   return (
     <>
-      {/* ───────── Lyrics ───────── */}
-      <Text style={[styles.sectionTitle, { fontFamily }]}>{vi ? 'Lời bài hát' : 'Lyrics'}</Text>
-      <View style={styles.card}>
-        <Text style={styles.rowTitle}>{vi ? 'Hiệu ứng lời' : 'Lyrics effect'}</Text>
-        <Text style={styles.rowDesc}>
-          {vi
-            ? 'Cũng đổi nhanh được bằng nút đũa phép trong màn hình Lời.'
-            : 'Also switchable with the wand button on the Lyrics screen.'}
-        </Text>
-        <View style={styles.effectGrid}>
-          {LYRICS_EFFECTS.map((e) => {
-            const sel = effect === e.id;
-            return (
-              <Tap
-                key={e.id}
-                onPress={() => {
-                  haptic('selection');
-                  updatePrefs({ lyricsEffect: e.id });
-                }}
-                style={[
-                  styles.effectCard,
-                  { borderColor: sel ? palette.accent : UI.fg(0.1) },
-                  sel && { borderWidth: 2 },
-                ]}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: sel }}
-                accessibilityLabel={vi ? e.vi : e.en}
-              >
-                <View style={styles.effectStage}>
-                  <EffectSample id={e.id} accent={palette.accent} />
-                </View>
-                <View style={styles.effectMeta}>
-                  <Text
-                    style={[styles.effectName, sel && { color: palette.accent }]}
-                    numberOfLines={1}
+      {show('lyrics') && (
+        <>
+          {/* ───────── Lyrics ───────── */}
+          <Text style={[styles.sectionTitle, { fontFamily }]}>{vi ? 'Lời bài hát' : 'Lyrics'}</Text>
+          <View style={styles.card}>
+            <Text style={styles.rowTitle}>{vi ? 'Hiệu ứng lời' : 'Lyrics effect'}</Text>
+            <Text style={styles.rowDesc}>
+              {vi
+                ? 'Cũng đổi nhanh được bằng nút đũa phép trong màn hình Lời.'
+                : 'Also switchable with the wand button on the Lyrics screen.'}
+            </Text>
+            <View style={styles.effectGrid}>
+              {LYRICS_EFFECTS.map((e) => {
+                const sel = effect === e.id;
+                return (
+                  <Tap
+                    key={e.id}
+                    onPress={() => {
+                      haptic('selection');
+                      updatePrefs({ lyricsEffect: e.id });
+                    }}
+                    style={[
+                      styles.effectCard,
+                      { borderColor: sel ? palette.accent : UI.fg(0.1) },
+                      sel && { borderWidth: 2 },
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: sel }}
+                    accessibilityLabel={vi ? e.vi : e.en}
                   >
-                    {vi ? e.vi : e.en}
-                  </Text>
-                  {sel && <Ionicons name="checkmark-circle" size={16} color={palette.accent} />}
-                </View>
-                <Text style={styles.effectDesc} numberOfLines={2}>
-                  {vi ? e.descVi : e.descEn}
-                </Text>
-              </Tap>
-            );
-          })}
-        </View>
-        <Text style={[styles.subLabel, { marginTop: 14 }]}>{vi ? 'Cỡ chữ' : 'Text size'}</Text>
-        {segments<LyricsSize>(
-          prefs.lyricsSize || 'M',
-          [
-            ['S', vi ? 'Nhỏ' : 'Small'],
-            ['M', vi ? 'Vừa' : 'Medium'],
-            ['L', vi ? 'Lớn' : 'Large'],
-          ] as const,
-          (v) => updatePrefs({ lyricsSize: v })
-        )}
-        <Text style={[styles.subLabel, { marginTop: 14 }]}>{vi ? 'Căn lề' : 'Alignment'}</Text>
-        {segments<LyricsPosition>(
-          prefs.lyricsPosition || 'LEFT',
-          [
-            ['LEFT', vi ? 'Trái' : 'Left'],
-            ['CENTER', vi ? 'Giữa' : 'Centre'],
-            ['RIGHT', vi ? 'Phải' : 'Right'],
-          ] as const,
-          (v) => updatePrefs({ lyricsPosition: v })
-        )}
-      </View>
+                    <View style={styles.effectStage}>
+                      <EffectSample id={e.id} accent={palette.accent} />
+                    </View>
+                    <View style={styles.effectMeta}>
+                      <Text
+                        style={[styles.effectName, sel && { color: palette.accent }]}
+                        numberOfLines={1}
+                      >
+                        {vi ? e.vi : e.en}
+                      </Text>
+                      {sel && <Ionicons name="checkmark-circle" size={16} color={palette.accent} />}
+                    </View>
+                    <Text style={styles.effectDesc} numberOfLines={2}>
+                      {vi ? e.descVi : e.descEn}
+                    </Text>
+                  </Tap>
+                );
+              })}
+            </View>
+            <Text style={[styles.subLabel, { marginTop: 14 }]}>{vi ? 'Cỡ chữ' : 'Text size'}</Text>
+            {segments<LyricsSize>(
+              prefs.lyricsSize || 'M',
+              [
+                ['S', vi ? 'Nhỏ' : 'Small'],
+                ['M', vi ? 'Vừa' : 'Medium'],
+                ['L', vi ? 'Lớn' : 'Large'],
+              ] as const,
+              (v) => updatePrefs({ lyricsSize: v })
+            )}
+            <Text style={[styles.subLabel, { marginTop: 14 }]}>{vi ? 'Căn lề' : 'Alignment'}</Text>
+            {segments<LyricsPosition>(
+              prefs.lyricsPosition || 'LEFT',
+              [
+                ['LEFT', vi ? 'Trái' : 'Left'],
+                ['CENTER', vi ? 'Giữa' : 'Centre'],
+                ['RIGHT', vi ? 'Phải' : 'Right'],
+              ] as const,
+              (v) => updatePrefs({ lyricsPosition: v })
+            )}
+          </View>
 
-      <LyricsSourcesCard fontFamily={fontFamily} />
-
-      {/* ───────── App icon ───────── */}
-      <Text style={[styles.sectionTitle, { fontFamily }]}>
-        {vi ? 'Biểu tượng ứng dụng' : 'App icon'}
-      </Text>
-      <View style={styles.card}>
-        <Text style={styles.rowDesc}>
-          {vi
-            ? 'Cùng một biểu tượng HolySic, khác chất liệu. iOS sẽ báo đã đổi biểu tượng.'
-            : 'The same HolySic icon in different materials. iOS confirms the change.'}
-        </Text>
-        <View style={styles.iconGrid}>
-          {APP_ICON_SKINS.map((s) => {
-            const sel = (prefs.appIcon || 'default') === s.id;
-            return (
-              <Tap
-                key={s.id}
-                onPress={() => pickIcon(s.id)}
-                style={styles.iconCell}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: sel }}
-                accessibilityLabel={vi ? s.vi : s.en}
-              >
-                <View
-                  style={[styles.iconRing, { borderColor: sel ? palette.accent : 'transparent' }]}
-                >
-                  <Image source={s.preview} style={styles.iconImg} />
-                </View>
-                <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.8}
-                  style={[styles.iconLabel, sel && { color: palette.accent, fontWeight: '800' }]}
-                >
-                  {vi ? s.vi : s.en}
-                </Text>
-              </Tap>
-            );
-          })}
-        </View>
-      </View>
+          <LyricsSourcesCard fontFamily={fontFamily} />
+        </>
+      )}
+      {show('icon') && (
+        <>
+          {/* ───────── App icon ───────── */}
+          <Text style={[styles.sectionTitle, { fontFamily }]}>
+            {vi ? 'Biểu tượng ứng dụng' : 'App icon'}
+          </Text>
+          <View style={styles.card}>
+            <Text style={styles.rowDesc}>
+              {vi
+                ? 'Cùng một biểu tượng HolySic, khác chất liệu. iOS sẽ báo đã đổi biểu tượng.'
+                : 'The same HolySic icon in different materials. iOS confirms the change.'}
+            </Text>
+            <View style={styles.iconGrid}>
+              {APP_ICON_SKINS.map((s) => {
+                const sel = (prefs.appIcon || 'default') === s.id;
+                return (
+                  <Tap
+                    key={s.id}
+                    onPress={() => pickIcon(s.id)}
+                    style={styles.iconCell}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: sel }}
+                    accessibilityLabel={vi ? s.vi : s.en}
+                  >
+                    <View
+                      style={[
+                        styles.iconRing,
+                        { borderColor: sel ? palette.accent : 'transparent' },
+                      ]}
+                    >
+                      <Image source={s.preview} style={styles.iconImg} />
+                    </View>
+                    <Text
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                      style={[
+                        styles.iconLabel,
+                        sel && { color: palette.accent, fontWeight: '800' },
+                      ]}
+                    >
+                      {vi ? s.vi : s.en}
+                    </Text>
+                  </Tap>
+                );
+              })}
+            </View>
+          </View>
+        </>
+      )}
     </>
   );
 };

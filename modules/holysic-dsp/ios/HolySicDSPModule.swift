@@ -26,7 +26,7 @@ public class HolySicDSPModule: Module {
   private var nextTag: Int64 = 1
   private var primaryTag: Int64 = 0
   private var timer: DispatchSourceTimer?
-  private let spectrumQueue = DispatchQueue(label: "holysic.dsp.spectrum", qos: .userInteractive)
+  private let spectrumQueue = DispatchQueue(label: "holysic.dsp.spectrum", qos: .userInitiated)
   private var bands = [Float](repeating: 0, count: 32)
   private var idleTicks = 0
   /// spectrum events per second: 60 while the full player shows bars, 30 for the mini player /
@@ -173,7 +173,7 @@ public class HolySicDSPModule: Module {
       guard timer == nil else { return }
       let t = DispatchSource.makeTimerSource(queue: spectrumQueue)
       let ms = max(16, 1000 / max(1, fps))
-      t.schedule(deadline: .now(), repeating: .milliseconds(ms), leeway: .milliseconds(2))
+      t.schedule(deadline: .now(), repeating: .milliseconds(ms), leeway: .milliseconds(4))
       t.setEventHandler { [weak self] in self?.tick() }
       timer = t
       t.resume()

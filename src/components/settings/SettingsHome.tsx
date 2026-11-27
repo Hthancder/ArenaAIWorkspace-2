@@ -1,0 +1,255 @@
+// Settings › the front page: a short, grouped list of doors (iOS Settings style). Each row opens
+// its own page; the everyday, personal things come first, the technical ones sit lower down.
+
+import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { Text, View } from 'react-native';
+import { PLAYER_STYLE_META } from '../../constants/preferences';
+import { useHolySic } from '../../context/HolySicContext';
+import { T as UI, themedSheet } from '../../theme/ui';
+import { LYRICS_EFFECTS } from '../player/LyricsView';
+import { Tap } from '../ui/Tap';
+
+export type SettingsPageId =
+  | 'player'
+  | 'look'
+  | 'backdrop'
+  | 'lyrics'
+  | 'video'
+  | 'icon'
+  | 'playback'
+  | 'controls'
+  | 'sources'
+  | 'scrobble'
+  | 'library'
+  | 'language'
+  | 'credits';
+
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const PAGES: Record<SettingsPageId, { vi: string; en: string; icon: IconName; tint: string }> = {
+  player: { vi: 'Trình phát', en: 'Player', icon: 'disc', tint: '#F472B6' },
+  look: { vi: 'Giao diện & màu sắc', en: 'Look & Colours', icon: 'color-palette', tint: '#A78BFA' },
+  backdrop: { vi: 'Nền & hiệu ứng', en: 'Background & Effects', icon: 'sparkles', tint: '#60A5FA' },
+  lyrics: { vi: 'Lời bài hát', en: 'Lyrics', icon: 'chatbubble-ellipses', tint: '#38BDF8' },
+  video: { vi: 'Video âm nhạc', en: 'Music Video', icon: 'film', tint: '#FB7185' },
+  icon: { vi: 'Biểu tượng ứng dụng', en: 'App Icon', icon: 'apps', tint: '#FBBF24' },
+  playback: {
+    vi: 'Phát nhạc & chất lượng',
+    en: 'Playback & Quality',
+    icon: 'musical-notes',
+    tint: '#34D399',
+  },
+  controls: {
+    vi: 'Điều khiển & tiện ích',
+    en: 'Controls & Extras',
+    icon: 'hand-left',
+    tint: '#F59E0B',
+  },
+  sources: {
+    vi: 'Nguồn nhạc & Modules',
+    en: 'Sources & Modules',
+    icon: 'git-network',
+    tint: '#22D3EE',
+  },
+  scrobble: { vi: 'Scrobble', en: 'Scrobbling', icon: 'radio', tint: '#EF4444' },
+  library: {
+    vi: 'Sao lưu & danh sách chặn',
+    en: 'Backup & Blocked',
+    icon: 'archive',
+    tint: '#94A3B8',
+  },
+  language: { vi: 'Ngôn ngữ', en: 'Language', icon: 'language', tint: '#818CF8' },
+  credits: { vi: 'Giới thiệu & ghi công', en: 'About & Credits', icon: 'heart', tint: '#F43F5E' },
+};
+
+export const pageTitle = (id: SettingsPageId, vi: boolean) => (vi ? PAGES[id].vi : PAGES[id].en);
+
+export const SettingsHome: React.FC<{
+  vi: boolean;
+  fontFamily?: string;
+  open: (id: SettingsPageId) => void;
+}> = ({ vi, fontFamily, open }) => {
+  const { prefs } = useHolySic();
+  const style = PLAYER_STYLE_META.find((m) => m.id === prefs.playerStyle);
+  const effect = LYRICS_EFFECTS.find((e) => e.id === (prefs.lyricsEffect || 'glow'));
+  const groups: { title: string; rows: { id: SettingsPageId; detail?: string }[] }[] = [
+    {
+      title: vi ? 'Cá nhân hoá' : 'Make it yours',
+      rows: [
+        { id: 'player', detail: style ? (vi ? style.titleVi : style.titleEn) : undefined },
+        { id: 'look' },
+        { id: 'backdrop' },
+        { id: 'lyrics', detail: effect ? (vi ? effect.vi : effect.en) : undefined },
+        { id: 'video', detail: prefs.musicVideo ? (vi ? 'Bật' : 'On') : vi ? 'Tắt' : 'Off' },
+        { id: 'icon' },
+      ],
+    },
+    {
+      title: vi ? 'Nghe nhạc' : 'Listening',
+      rows: [{ id: 'playback' }, { id: 'controls' }],
+    },
+    {
+      title: vi ? 'Nâng cao' : 'Advanced',
+      rows: [
+        { id: 'sources' },
+        { id: 'scrobble' },
+        { id: 'library' },
+        { id: 'language', detail: vi ? 'Tiếng Việt' : 'English' },
+      ],
+    },
+    { title: '', rows: [{ id: 'credits' }] },
+  ];
+  return (
+    <View>
+      {groups.map((g, gi) => (
+        <View key={gi}>
+          {g.title ? <Text style={[styles.groupTitle, { fontFamily }]}>{g.title}</Text> : null}
+          <View style={[styles.group, !g.title && { marginTop: 18 }]}>
+            {g.rows.map((r, i) => {
+              const m = PAGES[r.id];
+              return (
+                <Tap
+                  key={r.id}
+                  feedback="opacity"
+                  onPress={() => open(r.id)}
+                  style={styles.row}
+                  accessibilityRole="button"
+                  accessibilityLabel={vi ? m.vi : m.en}
+                >
+                  <View style={[styles.iconBox, { backgroundColor: m.tint }]}>
+                    <Ionicons name={m.icon} size={16} color="#FFFFFF" />
+                  </View>
+                  <View style={[styles.rowBody, i > 0 && styles.rowDivider]}>
+                    <Text style={styles.rowTitle} numberOfLines={1}>
+                      {vi ? m.vi : m.en}
+                    </Text>
+                    {r.detail ? (
+                      <Text style={styles.rowDetail} numberOfLines={1}>
+                        {r.detail}
+                      </Text>
+                    ) : null}
+                    <Ionicons name="chevron-forward" size={16} color={UI.fg(0.32)} />
+                  </View>
+                </Tap>
+              );
+            })}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+};
+
+/** the bar on top of a settings page: ‹ Settings, and the page's name */
+export const PageHeader: React.FC<{
+  title: string;
+  back: string;
+  onBack: () => void;
+  accent: string;
+  fontFamily?: string;
+}> = ({ title, back, onBack, accent, fontFamily }) => (
+  <View style={styles.header}>
+    <Tap
+      onPress={onBack}
+      feedback="opacity"
+      hitSlop={10}
+      style={styles.backBtn}
+      accessibilityRole="button"
+      accessibilityLabel={back}
+    >
+      <Ionicons name="chevron-back" size={22} color={accent} />
+      <Text style={[styles.backText, { color: accent }]} numberOfLines={1}>
+        {back}
+      </Text>
+    </Tap>
+    <Text style={[styles.headerTitle, { fontFamily }]} numberOfLines={1}>
+      {title}
+    </Text>
+  </View>
+);
+
+const styles = themedSheet(() => ({
+  groupTitle: {
+    color: UI.fg(0.5),
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginTop: 22,
+    marginBottom: 8,
+    marginLeft: 16,
+  },
+  group: {
+    borderRadius: 14,
+    backgroundColor: UI.fg(0.06),
+    overflow: 'hidden',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 14,
+  },
+  iconBox: {
+    width: 29,
+    height: 29,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowBody: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 50,
+    marginLeft: 14,
+    paddingRight: 14,
+  },
+  rowDivider: {
+    borderTopWidth: 0.5,
+    borderTopColor: UI.fg(0.1),
+  },
+  rowTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: UI.text,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  rowDetail: {
+    flexShrink: 1,
+    maxWidth: '45%',
+    color: UI.fg(0.5),
+    fontSize: 15,
+  },
+  // a compact navigation bar: the page's own section headings stay the big titles below
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingTop: 2,
+  },
+  backBtn: {
+    position: 'absolute',
+    left: -6,
+    zIndex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingRight: 8,
+  },
+  backText: {
+    fontSize: 17,
+    fontWeight: '500',
+  },
+  headerTitle: {
+    color: UI.text,
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+    maxWidth: '52%',
+  },
+}));

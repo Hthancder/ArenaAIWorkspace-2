@@ -9,6 +9,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
+import { perfCount } from '../../services/perfProbe';
 import { audioEngine, SpectrumStatus } from '../../services/audio/audioEngine';
 
 interface Props {
@@ -112,11 +113,27 @@ export const SpectrumBars: React.FC<Props> = React.memo(
       Animated.parallel(kick).start();
     }, [vals, peakVals]);
 
+    // last values sent to the UI thread: only real changes cross over (each setValue is a call
+    // into native — 64 of them at 60 fps was thousands per second)
+    const sent = useRef<number[]>([]);
+    const sentPeak = useRef<number[]>([]);
     const push = () => {
       const s = smooth.current;
+      const sv = sent.current;
+      const sp = sentPeak.current;
       for (let i = 0; i < bars; i++) {
-        vals[i].setValue(s[i]);
-        if (peaks) peakVals[i].setValue(peakVal.current[i]);
+        if (!(Math.abs((sv[i] ?? -1) - s[i]) < 0.01)) {
+          vals[i].setValue(s[i]);
+          perfCount('setValue:player');
+          sv[i] = s[i];
+        }
+        if (peaks) {
+          const pv = peakVal.current[i];
+          if (!(Math.abs((sp[i] ?? -1) - pv) < 0.01)) {
+            peakVals[i].setValue(pv);
+            sp[i] = pv;
+          }
+        }
       }
     };
 

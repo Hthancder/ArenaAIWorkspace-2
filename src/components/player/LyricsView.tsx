@@ -1,7 +1,7 @@
 // Synchronized Word-by-Word & Line-Synced Glowing Lyrics View — ported from LyricsScreen.kt & LyricsGlowLine.kt
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -21,6 +21,8 @@ import { storedLyricsInfo, useStoredLyrics } from '../../services/lyrics/lyricsS
 import { openLyricsEditor, providerLabel } from './LyricsEditor';
 import { usePositionSec } from '../../services/audio/playbackClock';
 import { Tap } from '../ui/Tap';
+import { perfCount } from '../../services/perfProbe';
+import { useActiveLyricIndex } from '../../services/lyrics/lyricClock';
 
 // a fresh key per lyrics object (re-fetched lyrics re-mount the list, so every line re-measures)
 const lyricsKeys = new WeakMap<object, string>();
@@ -36,12 +38,12 @@ function lyricsKey(l: object | null | undefined): string {
 }
 
 export const LyricsView: React.FC = () => {
+  perfCount('render:LyricsView');
   const {
     lyrics,
     isLoadingLyrics,
     reloadLyrics,
     currentTrack,
-    activeLyricIndex: clockIndex,
     seekTo,
     darkPalette: palette,
     prefs,
@@ -53,6 +55,7 @@ export const LyricsView: React.FC = () => {
     showToast,
     isOnline,
   } = useHolySic();
+  const clockIndex = useActiveLyricIndex();
   const vi = prefs.language === 'vi';
   const effect: LyricsEffect = prefs.lyricsEffect || 'glow';
   useStoredLyrics();
@@ -150,6 +153,21 @@ export const LyricsView: React.FC = () => {
     setDetached(false);
     follow(true);
   };
+
+  // stable row callbacks (rows are memoized: a line change re-renders only the rows it touches)
+  const rowCtx = useRef({ listKey, seekTo, haptic, lyricsOffsetSec, follow });
+  rowCtx.current = { listKey, seekTo, haptic, lyricsOffsetSec, follow };
+  const onRowLayout = useCallback((id: string, idx: number, y: number) => {
+    lineYs.current.set(`${rowCtx.current.listKey}|${id}`, y);
+    // the line we were waiting for has its place now
+    if (pendingFollow.current && idx === activeRef.current && Date.now() >= handUntil.current)
+      rowCtx.current.follow(false);
+  }, []);
+  const onRowPress = useCallback((line: LyricLine) => {
+    const c = rowCtx.current;
+    c.haptic('selection');
+    c.seekTo(Math.max(0, line.startSec + c.lyricsOffsetSec));
+  }, []);
 
   const cycleAlign = () => {
     haptic('selection');
@@ -420,68 +438,26 @@ export const LyricsView: React.FC = () => {
               </Text>
             );
           }
-          const isDuetV2 = line.agent && line.agent.toLowerCase().includes('2');
-          const textAlign = line.isBackground ? 'center' : isDuetV2 ? 'right' : baseAlign;
-          const look = lineLook(effect, palette.accent, isActive, isPast, dist);
-          const textStyle: TextStyle = line.isBackground
-            ? styles.bgLineText
-            : {
-                fontSize: size.font,
-                lineHeight: size.line,
-                fontWeight: effect === 'minimal' ? '700' : '800',
-              };
-
           return (
-            <Tap
-              feedback="opacity"
+            <LyricRow
               key={line.id}
-              onLayout={(e) => {
-                lineYs.current.set(`${listKey}|${line.id}`, e.nativeEvent.layout.y);
-                // the line we were waiting for has its place now
-                if (
-                  pendingFollow.current &&
-                  idx === activeRef.current &&
-                  Date.now() >= handUntil.current
-                )
-                  follow(false);
-              }}
-              onPress={() => {
-                haptic('selection');
-                seekTo(Math.max(0, line.startSec + lyricsOffsetSec));
-              }}
-              style={[
-                styles.lineWrap,
-                isActive &&
-                  (effect === 'glow' || effect === 'karaoke' || effect === 'wave') && {
-                    backgroundColor: 'rgba(255,255,255,0.06)',
-                    borderRadius: 16,
-                  },
-              ]}
-            >
-              <LineScale
-                scale={look.scale}
-                opacity={look.opacity}
-                origin={
-                  textAlign === 'center' ? 'center' : textAlign === 'right' ? 'right' : 'left'
-                }
-              >
-                {isActive && !line.isBackground ? (
-                  <ActiveLine
-                    line={line}
-                    endSec={line.endSec ?? lyrics.lines[idx + 1]?.startSec}
-                    effect={effect}
-                    accent={palette.accent}
-                    offset={lyricsOffsetSec}
-                    playing={isPlaying}
-                    textStyle={[textStyle, { textAlign, fontFamily }]}
-                    align={textAlign}
-                    gap={size.font * 0.27}
-                  />
-                ) : (
-                  <Text style={[textStyle, look.text, { textAlign, fontFamily }]}>{line.text}</Text>
-                )}
-              </LineScale>
-            </Tap>
+              line={line}
+              idx={idx}
+              isActive={isActive}
+              isPast={isPast}
+              dist={effect === 'depth' ? Math.min(dist, 6) : 0}
+              endSec={line.endSec ?? lyrics.lines[idx + 1]?.startSec}
+              effect={effect}
+              accent={palette.accent}
+              offset={lyricsOffsetSec}
+              playing={isActive ? isPlaying : false}
+              baseAlign={baseAlign}
+              fontFamily={fontFamily}
+              font={size.font}
+              lineH={size.line}
+              onRowLayout={onRowLayout}
+              onRowPress={onRowPress}
+            />
           );
         })}
 
@@ -817,6 +793,94 @@ const FlowWord: React.FC<{
 
 /** Lines settle to their effect's scale / opacity (no font-size jump, so the page never
  *  reflows), anchored on the side the text is aligned to. */
+/** One timed line. Memoized: only rows whose look changes re-render on a line switch. */
+const LyricRow: React.FC<{
+  line: LyricLine;
+  idx: number;
+  isActive: boolean;
+  isPast: boolean;
+  dist: number;
+  endSec?: number;
+  effect: LyricsEffect;
+  accent: string;
+  offset: number;
+  playing: boolean;
+  baseAlign: 'left' | 'center' | 'right';
+  fontFamily: string | undefined;
+  font: number;
+  lineH: number;
+  onRowLayout: (id: string, idx: number, y: number) => void;
+  onRowPress: (line: LyricLine) => void;
+}> = React.memo(
+  ({
+    line,
+    idx,
+    isActive,
+    isPast,
+    dist,
+    endSec,
+    effect,
+    accent,
+    offset,
+    playing,
+    baseAlign,
+    fontFamily,
+    font,
+    lineH,
+    onRowLayout,
+    onRowPress,
+  }) => {
+    const isDuetV2 = line.agent && line.agent.toLowerCase().includes('2');
+    const textAlign = line.isBackground ? 'center' : isDuetV2 ? 'right' : baseAlign;
+    const look = lineLook(effect, accent, isActive, isPast, dist);
+    const textStyle: TextStyle = line.isBackground
+      ? styles.bgLineText
+      : {
+          fontSize: font,
+          lineHeight: lineH,
+          fontWeight: effect === 'minimal' ? '700' : '800',
+        };
+
+    return (
+      <Tap
+        feedback="opacity"
+        onLayout={(e) => onRowLayout(line.id, idx, e.nativeEvent.layout.y)}
+        onPress={() => onRowPress(line)}
+        style={[
+          styles.lineWrap,
+          isActive &&
+            (effect === 'glow' || effect === 'karaoke' || effect === 'wave') && {
+              backgroundColor: 'rgba(255,255,255,0.06)',
+              borderRadius: 16,
+            },
+        ]}
+      >
+        <LineScale
+          scale={look.scale}
+          opacity={look.opacity}
+          origin={textAlign === 'center' ? 'center' : textAlign === 'right' ? 'right' : 'left'}
+        >
+          {isActive && !line.isBackground ? (
+            <ActiveLine
+              line={line}
+              endSec={endSec}
+              effect={effect}
+              accent={accent}
+              offset={offset}
+              playing={playing}
+              textStyle={[textStyle, { textAlign, fontFamily }]}
+              align={textAlign}
+              gap={font * 0.27}
+            />
+          ) : (
+            <Text style={[textStyle, look.text, { textAlign, fontFamily }]}>{line.text}</Text>
+          )}
+        </LineScale>
+      </Tap>
+    );
+  }
+);
+
 const LineScale: React.FC<{
   scale: number;
   opacity: number;
@@ -827,10 +891,10 @@ const LineScale: React.FC<{
   const o = useRef(new Animated.Value(opacity)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(s, { toValue: scale, useNativeDriver: true, speed: 12, bounciness: 4 }),
+      Animated.spring(s, { toValue: scale, useNativeDriver: true, speed: 20, bounciness: 3 }),
       Animated.timing(o, {
         toValue: opacity,
-        duration: 320,
+        duration: 240,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),

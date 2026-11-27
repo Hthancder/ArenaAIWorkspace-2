@@ -9,6 +9,7 @@ import { ArtworkImage } from '../ArtworkImage';
 import { BedsideClockFace, BedsideNightTint } from '../../constants/preferences';
 import { useHolySic } from '../../context/HolySicContext';
 import { useHoldSeek } from '../../hooks/useHoldSeek';
+import { useActiveLyricIndex } from '../../services/lyrics/lyricClock';
 
 export const BedsideClockView: React.FC = () => {
   // the nightstand clock keeps the screen on (released when the style or player closes)
@@ -25,13 +26,13 @@ export const BedsideClockView: React.FC = () => {
     playNext,
     playPrevious,
     lyrics,
-    activeLyricIndex,
     darkPalette: palette,
     prefs,
     updatePrefs,
     haptic,
     seekBy,
   } = useHolySic();
+  const activeLyricIndex = useActiveLyricIndex();
   const vi = prefs.language === 'vi';
   const ff = useHoldSeek(seekBy, 1);
   const rw = useHoldSeek(seekBy, -1);

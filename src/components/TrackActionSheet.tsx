@@ -14,6 +14,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { ArtworkImage } from './ArtworkImage';
 import { HOLYSIC_COLORS } from '../constants/theme';
@@ -54,12 +55,17 @@ export const TrackActionSheet: React.FC = () => {
   } = useHolySic();
 
   const [pickingPlaylist, setPickingPlaylist] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const { height: winH } = useWindowDimensions();
   const [newPlaylistName, setNewPlaylistName] = useState('');
 
   // Keep the last track while the sheet fades out, so iOS can finish dismissing (onDismiss)
   const [lastTrack, setLastTrack] = useState(actionTrack);
   useEffect(() => {
-    if (actionTrack) setLastTrack(actionTrack);
+    if (actionTrack) {
+      setLastTrack(actionTrack);
+      setBlockOpen(false);
+    }
   }, [actionTrack]);
 
   // Actions that present something else (share sheet, Files, another screen) must wait until
@@ -234,243 +240,189 @@ export const TrackActionSheet: React.FC = () => {
                   </View>
                 ) : (
                   <ScrollView
-                    style={{ maxHeight: 360 }}
+                    style={{ maxHeight: Math.min(440, winH * 0.56) }}
                     showsVerticalScrollIndicator={false}
                     scrollEventThrottle={32}
                     onScroll={(e) => (listTopRef.current = e.nativeEvent.contentOffset.y <= 0)}
                   >
-                    <Tap
-                      style={styles.menuItem}
-                      onPress={() => {
-                        addToQueue(sheetTrack, true);
-                        close();
-                      }}
-                    >
-                      <Ionicons name="play-forward-outline" size={21} color={UI.text} />
-                      <Text style={styles.menuLabel}>{vi ? 'Phát kế tiếp' : 'Play Next'}</Text>
-                    </Tap>
-
-                    <Tap
-                      style={styles.menuItem}
-                      onPress={() => {
-                        addToQueue(sheetTrack, false);
-                        close();
-                      }}
-                    >
-                      <Ionicons name="list-outline" size={21} color={UI.text} />
-                      <Text style={styles.menuLabel}>
-                        {vi ? 'Thêm vào cuối hàng chờ' : 'Add to Queue'}
-                      </Text>
-                    </Tap>
-
-                    <Tap
-                      style={styles.menuItem}
-                      onPress={() => {
-                        toggleLike(sheetTrack);
-                        close();
-                      }}
-                    >
-                      <Ionicons
-                        name={liked ? 'heart-dislike-outline' : 'heart-outline'}
-                        size={21}
-                        color={liked ? HOLYSIC_COLORS.roseLike : UI.fg(1)}
-                      />
-                      <Text style={styles.menuLabel}>
-                        {liked
-                          ? vi
-                            ? 'Bỏ khỏi Bài hát đã thích'
-                            : 'Remove from Liked Songs'
-                          : vi
-                            ? 'Thêm vào Bài hát đã thích'
-                            : 'Save to Liked Songs'}
-                      </Text>
-                    </Tap>
-
-                    <Tap style={styles.menuItem} onPress={() => setPickingPlaylist(true)}>
-                      <Ionicons name="add-circle-outline" size={21} color={UI.text} />
-                      <Text style={styles.menuLabel}>
-                        {vi ? 'Thêm vào Playlist…' : 'Add to Playlist…'}
-                      </Text>
-                    </Tap>
-
-                    {!sheetTrack.isLive && (
-                      <Tap
-                        style={styles.menuItem}
-                        onPress={() => closeThen(() => openLyricsEditor(sheetTrack))}
-                      >
-                        <Ionicons name="chatbox-ellipses-outline" size={21} color="#60A5FA" />
-                        <Text style={styles.menuLabel}>
-                          {vi
-                            ? 'Lời bài hát: chọn, sửa, lưu offline…'
-                            : 'Lyrics: choose, edit, keep offline…'}
-                        </Text>
-                      </Tap>
-                    )}
-
-                    {isLocalTrack(sheetTrack) && (
-                      <Tap
-                        style={styles.menuItem}
-                        onPress={() => closeThen(() => openSongEditor(sheetTrack))}
-                      >
-                        <Ionicons name="create-outline" size={21} color="#A78BFA" />
-                        <Text style={styles.menuLabel}>
-                          {vi ? 'Sửa thông tin & ảnh bìa…' : 'Edit info & cover…'}
-                        </Text>
-                      </Tap>
-                    )}
-
-                    {isLocalTrack(sheetTrack) ? (
-                      <Tap
-                        style={styles.menuItem}
+                    {/* the everyday four as tiles: one tap, no reading a long list */}
+                    <View style={styles.quickRow}>
+                      <QuickTile
+                        icon="play-forward"
+                        label={vi ? 'Phát kế tiếp' : 'Play Next'}
                         onPress={() => {
-                          const dir = localDirOf(sheetTrack);
-                          closeThen(() => {
-                            setIsPlayerOpen(false);
-                            LocalLibrary.open(dir);
-                          });
-                        }}
-                      >
-                        <Ionicons name="folder-open-outline" size={21} color="#F472B6" />
-                        <Text style={styles.menuLabel}>
-                          {vi
-                            ? `Hiện trong thư mục: ${localDirOf(sheetTrack) || 'HolySic'}`
-                            : `Show in folder: ${localDirOf(sheetTrack) || 'HolySic'}`}
-                        </Text>
-                      </Tap>
-                    ) : (
-                      <Tap
-                        style={styles.menuItem}
-                        onPress={() => {
-                          if (isOffline) {
-                            removeDownload(sheetTrack.id);
-                          } else {
-                            downloadTrack(sheetTrack);
-                          }
+                          addToQueue(sheetTrack, true);
                           close();
                         }}
-                      >
-                        <Ionicons
-                          name={isOffline ? 'trash-outline' : 'arrow-down-circle-outline'}
-                          size={21}
-                          color={isOffline ? '#F87171' : HOLYSIC_COLORS.flacEmerald}
+                      />
+                      <QuickTile
+                        icon="list"
+                        label={vi ? 'Cuối hàng chờ' : 'Play Last'}
+                        onPress={() => {
+                          addToQueue(sheetTrack, false);
+                          close();
+                        }}
+                      />
+                      <QuickTile
+                        icon={liked ? 'heart' : 'heart-outline'}
+                        tint={liked ? HOLYSIC_COLORS.roseLike : undefined}
+                        label={liked ? (vi ? 'Đã thích' : 'Loved') : vi ? 'Thích' : 'Love'}
+                        onPress={() => {
+                          toggleLike(sheetTrack);
+                          close();
+                        }}
+                      />
+                      <QuickTile
+                        icon="add-circle-outline"
+                        label="Playlist"
+                        onPress={() => setPickingPlaylist(true)}
+                      />
+                    </View>
+
+                    {/* this song: lyrics, file, download */}
+                    <View style={styles.group}>
+                      {!sheetTrack.isLive && (
+                        <SheetRow
+                          icon="chatbox-ellipses-outline"
+                          tint="#60A5FA"
+                          label={vi ? 'Lời bài hát…' : 'Lyrics…'}
+                          hint={vi ? 'Chọn, sửa, lưu offline' : 'Choose, edit, keep offline'}
+                          onPress={() => closeThen(() => openLyricsEditor(sheetTrack))}
                         />
-                        <Text style={styles.menuLabel}>
-                          {isOffline
-                            ? vi
-                              ? 'Xoá bản tải ngoại tuyến'
-                              : 'Remove Offline Download'
-                            : vi
-                              ? 'Tải xuống để nghe offline'
-                              : 'Download for Offline Playback'}
-                        </Text>
-                      </Tap>
-                    )}
+                      )}
+                      {isLocalTrack(sheetTrack) && (
+                        <SheetRow
+                          icon="create-outline"
+                          tint="#A78BFA"
+                          label={vi ? 'Sửa thông tin & ảnh bìa…' : 'Edit info & cover…'}
+                          onPress={() => closeThen(() => openSongEditor(sheetTrack))}
+                        />
+                      )}
+                      {isLocalTrack(sheetTrack) ? (
+                        <SheetRow
+                          icon="folder-open-outline"
+                          tint="#F472B6"
+                          label={vi ? 'Hiện trong thư mục' : 'Show in folder'}
+                          hint={localDirOf(sheetTrack) || 'HolySic'}
+                          onPress={() => {
+                            const dir = localDirOf(sheetTrack);
+                            closeThen(() => {
+                              setIsPlayerOpen(false);
+                              LocalLibrary.open(dir);
+                            });
+                          }}
+                        />
+                      ) : (
+                        <SheetRow
+                          icon={isOffline ? 'trash-outline' : 'arrow-down-circle-outline'}
+                          tint={isOffline ? '#F87171' : HOLYSIC_COLORS.flacEmerald}
+                          label={
+                            isOffline
+                              ? vi
+                                ? 'Xoá bản tải'
+                                : 'Remove download'
+                              : vi
+                                ? 'Tải xuống để nghe offline'
+                                : 'Download for offline'
+                          }
+                          onPress={() => {
+                            if (isOffline) removeDownload(sheetTrack.id);
+                            else downloadTrack(sheetTrack);
+                            close();
+                          }}
+                        />
+                      )}
+                      {/* Save the downloaded file to the Files app with a readable name */}
+                      {isOffline && Platform.OS !== 'web' && (
+                        <SheetRow
+                          icon="document-outline"
+                          label={vi ? 'Lưu tệp vào ứng dụng Tệp' : 'Save file to Files'}
+                          onPress={() => {
+                            const id = sheetTrack.id;
+                            closeThen(() => exportDownload(id));
+                          }}
+                        />
+                      )}
+                    </View>
 
-                    <Tap
-                      style={styles.menuItem}
-                      onPress={() => {
-                        const targetArtist = sheetTrack.artist;
-                        const targetId = sheetTrack.artistId || sheetTrack.artist;
-                        // opens on top of whatever is showing (player included); closing it returns there
-                        closeThen(() =>
-                          openCollection({ kind: 'artist', id: targetId, name: targetArtist })
-                        );
-                      }}
-                    >
-                      <Ionicons name="person-outline" size={21} color={UI.text} />
-                      <Text style={styles.menuLabel}>
-                        {vi
-                          ? `Xem nghệ sĩ: ${sheetTrack.artist}`
-                          : `Go to Artist: ${sheetTrack.artist}`}
-                      </Text>
-                    </Tap>
-
-                    {sheetTrack.albumId && (
-                      <Tap
-                        style={styles.menuItem}
+                    {/* go somewhere */}
+                    <View style={styles.group}>
+                      <SheetRow
+                        icon="person-outline"
+                        label={vi ? 'Xem nghệ sĩ' : 'Go to Artist'}
+                        hint={sheetTrack.artist}
                         onPress={() => {
-                          const albumId = sheetTrack.albumId!;
-                          closeThen(() => openCollection({ kind: 'album', id: albumId }));
+                          const targetArtist = sheetTrack.artist;
+                          const targetId = sheetTrack.artistId || sheetTrack.artist;
+                          // opens on top of whatever is showing (player included)
+                          closeThen(() =>
+                            openCollection({ kind: 'artist', id: targetId, name: targetArtist })
+                          );
                         }}
-                      >
-                        <Ionicons name="disc-outline" size={21} color={UI.text} />
-                        <Text style={styles.menuLabel}>
-                          {vi
-                            ? `Xem Album: ${sheetTrack.album || ''}`
-                            : `Go to Album: ${sheetTrack.album || ''}`}
-                        </Text>
-                      </Tap>
-                    )}
-
-                    {/* Share (OpenSpot) — the iOS share sheet also offers Copy */}
-                    <Tap
-                      style={styles.menuItem}
-                      onPress={() => {
-                        const tr = sheetTrack;
-                        closeThen(() => shareTrack(tr));
-                      }}
-                    >
-                      <Ionicons name="share-outline" size={20} color={UI.text} />
-                      <Text style={styles.menuLabel}>{vi ? 'Chia sẻ bài hát' : 'Share song'}</Text>
-                    </Tap>
-
-                    {/* Save the downloaded file to the Files app with a readable name (Spotube) */}
-                    {isOffline && Platform.OS !== 'web' && (
-                      <Tap
-                        style={styles.menuItem}
+                      />
+                      {sheetTrack.albumId && (
+                        <SheetRow
+                          icon="disc-outline"
+                          label={vi ? 'Xem album' : 'Go to Album'}
+                          hint={sheetTrack.album || undefined}
+                          onPress={() => {
+                            const albumId = sheetTrack.albumId!;
+                            closeThen(() => openCollection({ kind: 'album', id: albumId }));
+                          }}
+                        />
+                      )}
+                      <SheetRow
+                        icon="radio-outline"
+                        label={vi ? 'Radio từ bài này' : 'Start song radio'}
                         onPress={() => {
-                          const id = sheetTrack.id;
-                          closeThen(() => exportDownload(id));
+                          const seed = `${sheetTrack.artist} ${sheetTrack.genre || ''}`.trim();
+                          closeThen(() => startInstantMix(seed));
                         }}
-                      >
-                        <Ionicons name="folder-open-outline" size={20} color={UI.text} />
-                        <Text style={styles.menuLabel}>
-                          {vi ? 'Lưu tệp vào ứng dụng Tệp' : 'Save file to Files'}
-                        </Text>
-                      </Tap>
-                    )}
+                      />
+                      <SheetRow
+                        icon="share-outline"
+                        label={vi ? 'Chia sẻ bài hát' : 'Share song'}
+                        onPress={() => {
+                          const tr = sheetTrack;
+                          closeThen(() => shareTrack(tr));
+                        }}
+                      />
+                    </View>
 
-                    {/* Song radio (Musike autoplay radio seeded from one song) */}
-                    <Tap
-                      style={styles.menuItem}
-                      onPress={() => {
-                        const seed = `${sheetTrack.artist} ${sheetTrack.genre || ''}`.trim();
-                        closeThen(() => startInstantMix(seed));
-                      }}
-                    >
-                      <Ionicons name="radio-outline" size={21} color={UI.text} />
-                      <Text style={styles.menuLabel}>
-                        {vi ? 'Radio từ bài này' : 'Start song radio'}
-                      </Text>
-                    </Tap>
-
-                    {/* Blacklist (Spotube) */}
-                    <Tap
-                      style={styles.menuItem}
-                      onPress={() => {
-                        blockTrack(sheetTrack);
-                        close();
-                      }}
-                    >
-                      <Ionicons name="remove-circle-outline" size={21} color="#F87171" />
-                      <Text style={styles.menuLabel}>
-                        {vi ? 'Chặn bài này' : 'Block this song'}
-                      </Text>
-                    </Tap>
-                    <Tap
-                      style={styles.menuItem}
-                      onPress={() => {
-                        blockArtist(sheetTrack.artist);
-                        close();
-                      }}
-                    >
-                      <Ionicons name="ban-outline" size={21} color="#F87171" />
-                      <Text style={styles.menuLabel}>
-                        {vi
-                          ? `Chặn nghệ sĩ ${sheetTrack.artist.split(',')[0]}`
-                          : `Block ${sheetTrack.artist.split(',')[0]}`}
-                      </Text>
-                    </Tap>
+                    {/* rarely needed: tucked behind one row */}
+                    <View style={styles.group}>
+                      <SheetRow
+                        icon="remove-circle-outline"
+                        tint="#F87171"
+                        label={vi ? 'Không muốn nghe…' : 'Don’t play…'}
+                        chevron={blockOpen ? 'chevron-up' : 'chevron-down'}
+                        onPress={() => setBlockOpen((v) => !v)}
+                      />
+                      {blockOpen && (
+                        <>
+                          <SheetRow
+                            indent
+                            label={vi ? 'Chặn bài này' : 'Block this song'}
+                            onPress={() => {
+                              blockTrack(sheetTrack);
+                              close();
+                            }}
+                          />
+                          <SheetRow
+                            indent
+                            label={
+                              vi
+                                ? `Chặn nghệ sĩ ${sheetTrack.artist.split(',')[0]}`
+                                : `Block ${sheetTrack.artist.split(',')[0]}`
+                            }
+                            onPress={() => {
+                              blockArtist(sheetTrack.artist);
+                              close();
+                            }}
+                          />
+                        </>
+                      )}
+                    </View>
                   </ScrollView>
                 )}
 
@@ -485,6 +437,56 @@ export const TrackActionSheet: React.FC = () => {
     </Modal>
   );
 };
+
+/** one of the four quick actions on top of the sheet */
+const QuickTile: React.FC<{
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  tint?: string;
+  onPress: () => void;
+}> = ({ icon, label, tint, onPress }) => (
+  <Tap
+    style={styles.quickTile}
+    onPress={onPress}
+    accessibilityRole="button"
+    accessibilityLabel={label}
+  >
+    <Ionicons name={icon} size={22} color={tint || UI.text} />
+    <Text style={styles.quickLabel} numberOfLines={2}>
+      {label}
+    </Text>
+  </Tap>
+);
+
+/** a row inside a grouped card: icon, title, optional grey detail */
+const SheetRow: React.FC<{
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  hint?: string;
+  tint?: string;
+  chevron?: 'chevron-up' | 'chevron-down';
+  indent?: boolean;
+  onPress: () => void;
+}> = ({ icon, label, hint, tint, chevron, indent, onPress }) => (
+  <Tap
+    style={[styles.groupRow, indent && styles.groupRowIndent]}
+    onPress={onPress}
+    accessibilityRole="button"
+  >
+    {icon ? <Ionicons name={icon} size={20} color={tint || UI.text} /> : null}
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <Text style={styles.menuLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      {hint ? (
+        <Text style={styles.groupHint} numberOfLines={1}>
+          {hint}
+        </Text>
+      ) : null}
+    </View>
+    {chevron ? <Ionicons name={chevron} size={16} color={UI.fg(0.45)} /> : null}
+  </Tap>
+);
 
 const styles = themedSheet(() => ({
   backdrop: {
@@ -545,6 +547,53 @@ const styles = themedSheet(() => ({
     paddingVertical: 13,
     paddingHorizontal: 6,
     gap: 14,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  quickTile: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderRadius: 14,
+    backgroundColor: UI.fg(0.07),
+  },
+  quickLabel: {
+    color: UI.text,
+    fontSize: 11.5,
+    lineHeight: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  group: {
+    borderRadius: 14,
+    backgroundColor: UI.fg(0.05),
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  groupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 48,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    gap: 14,
+  },
+  groupRowIndent: {
+    paddingLeft: 48,
+    minHeight: 44,
+  },
+  groupHint: {
+    color: UI.fg(0.5),
+    fontSize: 12.5,
+    marginTop: 1,
   },
   menuLabel: {
     color: UI.text,

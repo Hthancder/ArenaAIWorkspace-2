@@ -3,6 +3,8 @@
 
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, View } from 'react-native';
+import { useAppActive } from '../../services/appActivity';
+import { usePlayerCovering } from '../../services/ui/playerStack';
 
 const BARS = [
   { lo: 0.3, hi: 1, ms: 420 },
@@ -11,11 +13,15 @@ const BARS = [
 ];
 
 export const NowPlayingBars: React.FC<{ playing: boolean; color: string; size?: number }> = ({
-  playing,
+  playing: playingIn,
   color,
   size = 16,
 }) => {
   const vals = useRef(BARS.map((b) => new Animated.Value(b.lo))).current;
+  // hidden under the full player or off screen: rest (no animation nobody can see)
+  const covered = usePlayerCovering();
+  const appActive = useAppActive();
+  const playing = playingIn && !covered && appActive;
   useEffect(() => {
     if (!playing) {
       const rest = Animated.parallel(

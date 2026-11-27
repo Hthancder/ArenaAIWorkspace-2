@@ -8,6 +8,8 @@ import { Animated, Easing, Image, Platform, StyleSheet, View, ViewStyle } from '
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { normalizeArtworkUrl } from '../ArtworkImage';
+import { perfCount } from '../../services/perfProbe';
+import { useAppActive } from '../../services/appActivity';
 import { audioEngine } from '../../services/audio/audioEngine';
 import { useHolySic } from '../../context/HolySicContext';
 import { getUi } from '../../theme/ui';
@@ -29,7 +31,8 @@ const useIds = (n: number) =>
  * 0..1 "light energy". Follows the real bass from the audio engine's spectrum when the platform
  * can tap PCM; otherwise a slow, natural breath. Calm when paused, steady when breathing is off.
  */
-export function useAmbientEnergy(active: boolean, breathing: boolean, isPlaying: boolean) {
+export function useAmbientEnergy(activeIn: boolean, breathing: boolean, isPlaying: boolean) {
+  const active = useAppActive() && activeIn;
   const energy = useRef(new Animated.Value(0.35)).current;
   // Everything here runs on the native driver: JS only picks a target ~30×/s from the real
   // spectrum, the UI thread does the easing at full frame rate.
@@ -78,10 +81,13 @@ export function useAmbientEnergy(active: boolean, breathing: boolean, isPlaying:
       for (let i = 0; i < b.length; i++) all += b[i];
       all /= b.length || 1;
       const target = Math.min(1, bass * 0.85 + all * 0.35);
-      // fast attack, slow release, like a light reacting to a kick drum
-      if (target > level) to(target, 90).start();
-      else to(target, 520, Easing.out(Easing.cubic)).start();
-      level = target;
+      // fast attack, slow release, like a light reacting to a kick drum. Smoothed here and sent
+      // as one value (not a new native animation per event: that was 3 bridge calls each time)
+      const next = target > level ? level + (target - level) * 0.6 : level + (target - level) * 0.1;
+      if (Math.abs(next - level) < 0.008) return;
+      level = next;
+      perfCount('anim:ambient');
+      energy.setValue(next);
     });
     const watch = setInterval(() => {
       if (Date.now() - lastReal > 1200) startCalm();

@@ -19,6 +19,8 @@ export interface NativeMenuChild {
 export interface NativeMenuItem extends NativeMenuChild {
   /** items sharing a section number are grouped; groups are split by a divider */
   section?: number;
+  /** this group shows as one row of small icon buttons (iOS 16+) */
+  row?: boolean;
   /** a submenu (one level) */
   children?: NativeMenuChild[];
 }

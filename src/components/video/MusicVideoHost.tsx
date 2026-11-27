@@ -18,6 +18,7 @@ import {
   resolveVideoStream,
   warmVideoCache,
 } from '../../services/video/videoService';
+import { useAppActive } from '../../services/appActivity';
 
 export const MusicVideoHost: React.FC = () => {
   const {
@@ -56,6 +57,7 @@ export const MusicVideoHost: React.FC = () => {
   }, []);
 
   const enabled = videoWanted(prefs.musicVideo, currentTrack);
+  const appActive = useAppActive();
   const trackId = currentTrack?.id;
 
   // ── find + load the video for the playing song ──
@@ -178,9 +180,18 @@ export const MusicVideoHost: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamLabel, mvId, prefs.videoAudio, isPlaying, videoId]);
 
-  // ── follow the audio ──
+  // ── follow the audio ── (only while the app is on screen: the picture is muted and unseen
+  // in the background, so it rests instead of being kept in sync twice a second)
   useEffect(() => {
     if (!enabled) return;
+    if (!appActive) {
+      try {
+        if (player.playing) player.pause();
+      } catch {
+        // not loaded
+      }
+      return;
+    }
     let lastClock = PlaybackClock.get();
     let lastClockAt = Date.now();
     const unsubClock = PlaybackClock.subscribe(() => {
@@ -244,7 +255,7 @@ export const MusicVideoHost: React.FC = () => {
       unsubLive();
       unsubStore();
     };
-  }, [enabled, player]);
+  }, [enabled, player, appActive]);
 
   // pause / play at once when the audio does
   useEffect(() => {

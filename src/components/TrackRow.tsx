@@ -22,6 +22,7 @@ import { T as UI, themedSheet } from '../theme/ui';
 import { Tap } from './ui/Tap';
 import { NativeMenu, nativeMenuAvailable } from './ui/NativeMenu';
 import { useTrackMenu } from './menu/useTrackMenu';
+import { perfCount } from '../services/perfProbe';
 
 interface TrackRowProps {
   track: Track;
@@ -43,6 +44,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   onRemove,
   swipeable = true,
 }) => {
+  perfCount('render:TrackRow');
   const {
     currentTrack,
     isPlaying,

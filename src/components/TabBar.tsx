@@ -14,6 +14,7 @@ import { SpectrumBars, useSpectrumBars } from './ambient/SpectrumBars';
 import { useAmbientEnergy } from './ambient/AmbientLight';
 import { useAppActive } from './ambient/AppBackdrop';
 import { withAlpha } from '../theme/colorMath';
+import { perfCount } from '../services/perfProbe';
 
 export interface TabDef<Id extends string> {
   id: Id;
@@ -31,6 +32,7 @@ interface Props<Id extends string> {
 }
 
 export function TabBar<Id extends string>({ tabs, active, onSelect, fontFamily }: Props<Id>) {
+  perfCount('render:TabBar');
   const { palette, haptic, prefs } = useHolySic();
   const labels = prefs.tabLabels !== false;
   const [width, setWidth] = useState(0);

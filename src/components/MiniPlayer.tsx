@@ -22,8 +22,11 @@ import { T as UI, themedSheet } from '../theme/ui';
 import { LikeHeart } from './ui/LikeHeart';
 import { Tap } from './ui/Tap';
 import { MorphIcon, NudgeIcon } from './ui/MorphIcon';
+import { perfCount } from '../services/perfProbe';
+import { useActiveLyricIndex } from '../services/lyrics/lyricClock';
 
 export const MiniPlayer: React.FC = () => {
+  perfCount('render:MiniPlayer');
   const {
     currentTrack,
     isPlaying,
@@ -37,12 +40,12 @@ export const MiniPlayer: React.FC = () => {
     isLiked,
     toggleLike,
     lyrics,
-    activeLyricIndex,
     palette,
     prefs,
     seekBy,
     ambient,
   } = useHolySic();
+  const activeLyricIndex = useActiveLyricIndex();
   const ff = useHoldSeek(seekBy, 1);
 
   const ambientColors = useAmbientColors();

@@ -6,8 +6,10 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
 import {
   Animated,
+  Easing,
   Image,
   Linking,
+  PanResponder,
   ScrollView,
   StyleSheet,
   Switch,
@@ -40,8 +42,11 @@ import { T as UI, themedSheet } from '../../theme/ui';
 import { useTabScrollToTop } from '../../services/ui/tabBus';
 import { Tap } from '../ui/Tap';
 import { ScrollEdgeBar } from '../ui/ScrollEdgeBar';
+import { PageHeader, SettingsHome, SettingsPageId, pageTitle } from '../settings/SettingsHome';
+import { perfCount } from '../../services/perfProbe';
 
 export const SettingsScreen: React.FC = () => {
+  perfCount('render:Settings');
   const {
     prefs,
     updatePrefs,
@@ -67,6 +72,38 @@ export const SettingsScreen: React.FC = () => {
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
+  // Settings is a short list of doors; each opens its own page (like iOS Settings) instead of
+  // one endless scroll. Every option still exists — just one tap deeper, grouped by purpose.
+  const [page, setPage] = useState<SettingsPageId | null>(null);
+  const enter = useRef(new Animated.Value(1)).current;
+  const openPage = (id: SettingsPageId | null) => {
+    haptic('selection');
+    setPage(id);
+    (scrollRef.current as any)?.scrollTo?.({ y: 0, animated: false });
+    enter.setValue(0);
+    Animated.timing(enter, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  };
+  const back = () => openPage(null);
+  // swipe from the left edge to go back (iOS navigation gesture)
+  const backRef = useRef(back);
+  backRef.current = back;
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const edgePan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_e, g) =>
+        pageRef.current !== null && g.x0 < 28 && g.dx > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      onPanResponderRelease: (_e, g) => {
+        if (g.dx > 70 || g.vx > 0.6) backRef.current();
+      },
+    })
+  ).current;
+
   // Apple previews are governed by the "Allow 30-second previews" switch alone, so the list only
   // shows the full-length sources (one control per behaviour).
   const visibleModules = prefs.moduleOrder.filter((m) => m !== 'itunes');
@@ -80,7 +117,7 @@ export const SettingsScreen: React.FC = () => {
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }} {...edgePan.panHandlers}>
       <Animated.ScrollView
         ref={scrollRef as any}
         style={styles.container}
@@ -94,679 +131,751 @@ export const SettingsScreen: React.FC = () => {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
-        {/* Hero Brand Banner */}
-        <View style={[styles.brandBanner, { borderColor: palette.accent + '35' }]}>
-          <Image
-            source={skinPreview(prefs.appIcon)}
-            style={styles.heroIcon}
-            accessibilityIgnoresInvertColors
-          />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.brandName, { fontFamily }]}>HolySic · iOS</Text>
-            <Text style={styles.brandSub}>
-              {vi
-                ? 'Nghe nhạc lossless trên iPhone · dựa trên Mochy Music của realidkroo (GPL-3.0)'
-                : 'Lossless listening on iPhone · built on Mochy Music by realidkroo (GPL-3.0)'}
-            </Text>
-            <View style={styles.bannerLinksRow}>
-              <Tap
-                onPress={() => Linking.openURL(UPSTREAM_ORIGIN_URL)}
-                style={[styles.miniLinkPill, { backgroundColor: palette.accent }]}
-              >
-                <Ionicons name="logo-github" size={14} color={palette.onAccent} />
-                <Text style={{ color: palette.onAccent, fontSize: 12, fontWeight: '800' }}>
-                  {vi ? 'Mã nguồn gốc' : 'Upstream'}
-                </Text>
-              </Tap>
-              <Tap
-                onPress={() => Linking.openURL(UPSTREAM_DISCORD_URL)}
-                style={styles.miniLinkPillGhost}
-              >
-                <Ionicons name="chatbubbles-outline" size={14} color={UI.text} />
-                <Text style={{ color: UI.text, fontSize: 12, fontWeight: '700' }}>Discord</Text>
-              </Tap>
-            </View>
-          </View>
-        </View>
-
-        {/* Quick Tools */}
-        <View style={styles.quickRow}>
-          <Tap onPress={() => setIsAudioLabOpen(true)} style={styles.quickToolCard}>
-            <Ionicons name="options" size={22} color={palette.accent} />
-            <Text style={styles.quickToolTitle}>Audio Lab & EQ</Text>
-            <Text style={styles.quickToolSub}>AutoEQ · 8D · Reverb</Text>
-          </Tap>
-
-          <Tap onPress={() => setIsRecapOpen(true)} style={styles.quickToolCard}>
-            <Ionicons name="id-card" size={22} color="#34D399" />
-            <Text style={styles.quickToolTitle}>HolySic Recap ID</Text>
-            <Text style={styles.quickToolSub}>Stats & Listener Card</Text>
-          </Tap>
-        </View>
-
-        {/* Language Switch */}
-        <Text style={[styles.sectionTitle, { fontFamily }]}>
-          {vi ? 'Ngôn ngữ / Language' : 'Language / Ngôn ngữ'}
-        </Text>
-        <View style={styles.segmentedRow}>
-          {(['vi', 'en'] as const).map((lang) => {
-            const active = prefs.language === lang;
-            return (
-              <Tap
-                key={lang}
-                onPress={() => {
-                  haptic('selection');
-                  updatePrefs({ language: lang });
-                }}
-                style={[styles.segmentBtn, active && { backgroundColor: palette.accent }]}
-              >
-                <Text
-                  style={{
-                    fontWeight: '800',
-                    color: active ? palette.onAccent : UI.fg(1),
-                  }}
-                >
-                  {lang === 'vi' ? '🇻🇳 Tiếng Việt' : '🌐 English'}
-                </Text>
-              </Tap>
-            );
-          })}
-        </View>
-
-        {/* Player Style Selector */}
-        <Text style={[styles.sectionTitle, { fontFamily }]}>
-          {t(prefs.language, 'playerStyleTitle')}
-        </Text>
-        <View style={styles.cardGroup}>
-          {PLAYER_STYLE_META.map((meta) => {
-            const active = prefs.playerStyle === meta.id;
-            return (
-              <Tap
-                key={meta.id}
-                onPress={() => {
-                  haptic('selection');
-                  updatePrefs({ playerStyle: meta.id as PlayerStyle });
-                }}
-                style={[
-                  styles.styleRow,
-                  active && {
-                    borderColor: palette.accent,
-                    backgroundColor: palette.container + '55',
-                  },
-                ]}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rowTitle}>{vi ? meta.titleVi : meta.titleEn}</Text>
-                  <Text style={styles.rowDesc}>{vi ? meta.descVi : meta.descEn}</Text>
-                </View>
-                <Ionicons
-                  name={active ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={22}
-                  color={active ? palette.accent : UI.text3}
-                />
-              </Tap>
-            );
-          })}
-        </View>
-
-        {/* Customize HolySic Appearance */}
-        <Text style={[styles.sectionTitle, { fontFamily }]}>
-          {t(prefs.language, 'customizeLook')}
-        </Text>
-        <View style={styles.cardGroup}>
-          <View style={styles.themeBlock}>
-            <Text style={styles.rowTitle}>{vi ? 'Giao diện' : 'Appearance'}</Text>
-            <Text style={styles.rowDesc}>
-              {vi
-                ? 'Tự động: sáng ban ngày, tối ban đêm — theo cài đặt của iPhone'
-                : 'Auto follows your iPhone: light by day, dark at night'}
-            </Text>
-            <View style={styles.themeRow}>
-              {(
-                [
-                  { id: 'light', icon: 'sunny', vi: 'Sáng', en: 'Light' },
-                  { id: 'dark', icon: 'moon', vi: 'Tối', en: 'Dark' },
-                  { id: 'auto', icon: 'contrast', vi: 'Tự động', en: 'Auto' },
-                ] as const
-              ).map((o) => {
-                const on = (prefs.themeMode || 'dark') === o.id;
-                return (
-                  <Tap
-                    key={o.id}
-                    onPress={() => updatePrefs({ themeMode: o.id })}
-                    style={[
-                      styles.themeChip,
-                      on && { borderColor: palette.accent, backgroundColor: palette.accent + '22' },
-                    ]}
-                    accessibilityLabel={(vi ? 'Giao diện ' : 'Appearance ') + (vi ? o.vi : o.en)}
-                    accessibilityState={{ selected: on }}
-                  >
-                    <View
-                      style={[
-                        styles.themePreview,
-                        o.id === 'light'
-                          ? { backgroundColor: '#F6F5FA' }
-                          : o.id === 'dark'
-                            ? { backgroundColor: '#0A0A0E' }
-                            : { backgroundColor: '#0A0A0E', overflow: 'hidden' },
-                      ]}
-                    >
-                      {o.id === 'auto' && <View style={styles.themeHalf} />}
-                      <Ionicons
-                        name={o.icon}
-                        size={18}
-                        color={
-                          o.id === 'light'
-                            ? '#F59E0B'
-                            : o.id === 'dark'
-                              ? '#C4B5FD'
-                              : palette.accent
-                        }
-                      />
-                    </View>
-                    <Text style={[styles.themeLabel, on && { color: palette.accent }]}>
-                      {vi ? o.vi : o.en}
-                    </Text>
-                  </Tap>
-                );
-              })}
-            </View>
-          </View>
-          <View style={styles.switchRow}>
-            <View style={{ flex: 1, paddingRight: 10 }}>
-              <Text style={styles.rowTitle}>{t(prefs.language, 'pureBlackOled')}</Text>
-              <Text style={styles.rowDesc}>
-                {vi
-                  ? 'Tiết kiệm pin tối đa trên màn hình OLED của iPhone'
-                  : 'Pitch-black #000000 surfaces for iPhone Super Retina OLED'}
-              </Text>
-            </View>
-            <Switch
-              value={prefs.pureBlack}
-              onValueChange={(v) => updatePrefs({ pureBlack: v })}
-              trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
-            />
-          </View>
-
-          <View style={styles.switchRow}>
-            <View style={{ flex: 1, paddingRight: 10 }}>
-              <Text style={styles.rowTitle}>{t(prefs.language, 'frostedBlur')}</Text>
-              <Text style={styles.rowDesc}>
-                {vi
-                  ? 'Tắt nếu muốn máy đời cũ chạy siêu mượt (như gợi ý trong FAQ HolySic)'
-                  : 'Disable blur on older devices for maximum frame rate'}
-              </Text>
-            </View>
-            <Switch
-              value={prefs.enableBlur}
-              onValueChange={(v) => updatePrefs({ enableBlur: v })}
-              trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
-            />
-          </View>
-
-          <View style={styles.switchRow}>
-            <View style={{ flex: 1, paddingRight: 10 }}>
-              <Text style={styles.rowTitle}>{t(prefs.language, 'miniLyricsTicker')}</Text>
-              <Text style={styles.rowDesc}>
-                {vi
-                  ? 'Hiển thị câu hát đang phát ngay trên thanh MiniPlayer'
-                  : 'Show active lyric line inside the floating MiniPlayer'}
-              </Text>
-            </View>
-            <Switch
-              value={prefs.showMiniLyricsTicker}
-              onValueChange={(v) => updatePrefs({ showMiniLyricsTicker: v })}
-              trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
-            />
-          </View>
-
-          {/* Player Background Mode */}
-          <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>
-            {vi ? 'Hiệu ứng màu nền Player' : 'Player Background Palette'}
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 6 }}>
-              {(
-                [
-                  ['AMBIENT', 'Ambient Light'],
-                  ['APPLE_MUSIC', 'Apple Mesh'],
-                  ['COVER_GRADIENT', 'Cover Gradient'],
-                  ['DARK_GRADIENT', 'Dark Tone'],
-                  ['SOLID', 'Solid OLED'],
-                ] as [PlayerBackgroundStyle, string][]
-              ).map(([id, label]) => {
-                const selected = prefs.playerBackground === id;
-                return (
-                  <Tap
-                    key={id}
-                    onPress={() => updatePrefs({ playerBackground: id })}
-                    style={[
-                      styles.smallOptionPill,
-                      selected && { backgroundColor: palette.accent },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: '700',
-                        color: selected ? palette.onAccent : UI.fg(1),
-                      }}
-                    >
-                      {label}
-                    </Text>
-                  </Tap>
-                );
-              })}
-            </View>
-          </ScrollView>
-
-          {/* Ambient Light (YouTube-style glow from the cover's real colours) */}
-          <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>
-            {vi ? 'Ánh sáng Ambient (như YouTube)' : 'Ambient light (YouTube-style)'}
-          </Text>
-          <Text style={{ color: UI.text3, fontSize: 12, lineHeight: 17 }}>
-            {vi
-              ? 'Màu thật của ảnh bìa lan ra nền, toả sáng quanh ảnh và nhịp theo tiếng bass.'
-              : "The cover's real colours flood the background, glow around the art and pulse with the bass."}
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 8 }}>
-            {(
-              [
-                ['off', vi ? 'Tắt' : 'Off'],
-                ['low', vi ? 'Nhẹ' : 'Low'],
-                ['medium', vi ? 'Vừa' : 'Medium'],
-                ['high', vi ? 'Mạnh' : 'High'],
-              ] as const
-            ).map(([id, label]) => {
-              const selected = prefs.ambientLight === id;
-              return (
-                <Tap
-                  key={id}
-                  onPress={() => updatePrefs({ ambientLight: id })}
-                  style={[styles.smallOptionPill, selected && { backgroundColor: palette.accent }]}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: '700',
-                      color: selected ? palette.onAccent : UI.fg(1),
-                    }}
-                  >
-                    {label}
-                  </Text>
-                </Tap>
-              );
-            })}
-          </View>
-          <View style={styles.switchRow}>
-            <Text style={[styles.rowTitle, { flex: 1, paddingRight: 10 }]}>
-              {vi ? 'Ánh sáng nhịp theo nhạc' : 'Light breathes with the music'}
-            </Text>
-            <Switch
-              value={prefs.ambientBreathing}
-              onValueChange={(v) => updatePrefs({ ambientBreathing: v })}
-              trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
-            />
-          </View>
-          <View style={styles.switchRow}>
-            <Text style={[styles.rowTitle, { flex: 1, paddingRight: 10 }]}>
-              {vi ? 'Lan sáng ra MiniPlayer & Trang chủ' : 'Spill light onto mini player & Home'}
-            </Text>
-            <Switch
-              value={prefs.ambientSpill}
-              onValueChange={(v) => updatePrefs({ ambientSpill: v })}
-              trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
-            />
-          </View>
-          {ambient.lowPower && prefs.ambientLight !== 'off' && (
-            <Text style={{ color: HOLYSIC_COLORS.aacAmber, fontSize: 12, marginBottom: 4 }}>
-              {vi
-                ? '⚡ iPhone đang bật Chế độ nguồn điện thấp: ánh sáng tự dịu bớt và đứng yên để tiết kiệm pin.'
-                : '⚡ Low Power Mode is on: the light is dimmed and steady to save battery.'}
-            </Text>
-          )}
-          {ambient.reduceMotion && !ambient.lowPower && prefs.ambientLight !== 'off' && (
-            <Text style={{ color: UI.text2, fontSize: 12, marginBottom: 4 }}>
-              {vi
-                ? 'Trợ năng › Giảm chuyển động đang bật: ánh sáng vẫn nhịp theo nhạc nhưng không phóng to/thu nhỏ.'
-                : 'Accessibility › Reduce Motion is on: the light still pulses but never zooms.'}
-            </Text>
-          )}
-
-          {/* Font Customizer */}
-          <Text style={[styles.inlineSubLabel, { marginTop: 10 }]}>
-            {vi ? 'Phông chữ' : 'Typography'}
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 6 }}>
-              {(
-                [
-                  ['inter', 'Inter / SF'],
-                  ['rounded', 'SF Rounded'],
-                  ['serif', 'New York Serif'],
-                  ['mono', 'SF Mono'],
-                ] as [AppFontStyle, string][]
-              ).map(([id, label]) => {
-                const selected = prefs.fontStyle === id;
-                return (
-                  <Tap
-                    key={id}
-                    onPress={() => updatePrefs({ fontStyle: id })}
-                    style={[
-                      styles.smallOptionPill,
-                      selected && { backgroundColor: palette.accent },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: '700',
-                        color: selected ? palette.onAccent : UI.fg(1),
-                      }}
-                    >
-                      {label}
-                    </Text>
-                  </Tap>
-                );
-              })}
-            </View>
-          </ScrollView>
-        </View>
-
-        {/* Background & effects · Controls */}
-        <EffectsSettings fontFamily={fontFamily} />
-        <LyricsIconSettings fontFamily={fontFamily} />
-        <VideoSettings fontFamily={fontFamily} />
-
-        {/* Audio Source Modules & Priority Order */}
-        <Text style={[styles.sectionTitle, { fontFamily }]}>
-          {t(prefs.language, 'sourceModules')}
-        </Text>
-        <View style={styles.cardGroup}>
-          <Text style={styles.rowDesc}>
-            {vi
-              ? 'Thứ tự ưu tiên khi HolySic tìm luồng nhạc chất lượng cao nhất cho bài hát:'
-              : 'Module resolution priority when matching tracks:'}
-          </Text>
-
-          {visibleModules.map((modId, idx) => {
-            const enabled = prefs.enabledModules[modId];
-            const labelMap: Record<typeof modId, string> = {
-              monochrome: 'Monochrome · Lossless FLAC (16/24-bit)',
-              jiosaavn: `JioSaavn · Full AAC (${prefs.preferredJioSaavnQuality} kbps)`,
-              innertube: vi ? 'YouTube Music · phát ngay' : 'YouTube Music · instant start',
-            };
-            return (
-              <View key={modId} style={styles.moduleRow}>
-                <Tap
-                  disabled={idx === 0}
-                  onPress={() => moveModuleUp(idx)}
-                  style={[styles.upBtn, idx === 0 && { opacity: 0.25 }]}
-                >
-                  <Ionicons name="arrow-up" size={16} color={UI.text} />
-                </Tap>
-                <Text style={[styles.moduleLabel, !enabled && { opacity: 0.45 }]}>
-                  {idx + 1}. {labelMap[modId]}
-                </Text>
-                <Switch
-                  value={enabled}
-                  onValueChange={(v) =>
-                    updatePrefs({
-                      enabledModules: { ...prefs.enabledModules, [modId]: v },
-                    })
-                  }
-                  trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
-                />
-              </View>
-            );
-          })}
-
-          {/* Playback source behaviour */}
-          <View style={[styles.switchRow, { marginTop: 10 }]}>
-            <View style={{ flex: 1, paddingRight: 10 }}>
-              <Text style={styles.rowTitle}>
-                {vi ? 'Nhớ nguồn phát được' : 'Remember working sources'}
-              </Text>
-              <Text style={styles.rowDesc}>
-                {vi
-                  ? `Bài đã phát được sẽ dùng lại đúng nguồn đó lần sau, nguồn hay lỗi bị xếp xuống cuối (${memoryCount} bài đã nhớ)`
-                  : `Replays use the source that worked last time; failing modules are tried last (${memoryCount} remembered)`}
-              </Text>
-            </View>
-            <Switch
-              value={prefs.rememberSources}
-              onValueChange={(v) => updatePrefs({ rememberSources: v })}
-              trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
-            />
-          </View>
-
-          <View style={styles.switchRow}>
-            <View style={{ flex: 1, paddingRight: 10 }}>
-              <Text style={styles.rowTitle}>
-                {vi ? 'Ưu tiên phát ngay' : 'Prefer instant start'}
-              </Text>
-              <Text style={styles.rowDesc}>
-                {vi
-                  ? 'Trên iPhone, FLAC Monochrome phải tải về 1 lần (~30 MB) mới phát được, nên chỉ dùng khi nguồn phát ngay (YouTube / JioSaavn) không có. Tắt nếu luôn muốn lossless.'
-                  : 'On iPhone, Monochrome FLAC needs a one-time ~30 MB download, so it is used after instant sources. Turn off to always prefer lossless.'}
-              </Text>
-            </View>
-            <Switch
-              value={prefs.preferInstantStart}
-              onValueChange={(v) => updatePrefs({ preferInstantStart: v })}
-              trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
-            />
-          </View>
-
-          <View style={styles.switchRow}>
-            <View style={{ flex: 1, paddingRight: 10 }}>
-              <Text style={styles.rowTitle}>
-                {vi ? 'Cho phép bản preview 30 giây' : 'Allow 30-second previews'}
-              </Text>
-              <Text style={styles.rowDesc}>
-                {vi
-                  ? 'Tắt (mặc định): chỉ phát bản đầy đủ, không bao giờ phát đoạn preview Apple 30s. Bật: dùng preview khi mọi nguồn đầy đủ đều lỗi.'
-                  : 'Off (default): full-length tracks only. On: fall back to Apple 30s previews when every full source fails.'}
-              </Text>
-            </View>
-            <Switch
-              value={prefs.allowPreviewFallback}
-              onValueChange={(v) => updatePrefs({ allowPreviewFallback: v })}
-              trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
-            />
-          </View>
-
-          <Tap
-            onPress={() => {
-              haptic('selection');
-              SourceMemory.clear();
-              StreamFileCache.clear();
-              setMemoryCount(0);
-            }}
-            style={{ marginTop: 6, alignSelf: 'flex-start' }}
-          >
-            <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>
-              {vi ? 'Xoá bộ nhớ nguồn & cache FLAC' : 'Clear source memory & FLAC cache'}
-            </Text>
-          </Tap>
-
-          <Tap
-            feedback="opacity"
-            onPress={() => {
-              haptic('selection');
-              setShowAdvanced((v) => !v);
-            }}
-            style={styles.disclosureRow}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: showAdvanced }}
-          >
-            <Ionicons name="construct-outline" size={16} color={UI.text2} />
-            <Text style={[styles.rowTitle, { flex: 1 }]}>
-              {vi ? 'Nâng cao: bitrate & máy chủ FLAC' : 'Advanced: bitrate & FLAC servers'}
-            </Text>
-            <Ionicons
-              name={showAdvanced ? 'chevron-up' : 'chevron-down'}
-              size={17}
-              color={UI.text3}
-            />
-          </Tap>
-          {showAdvanced && (
+        <Animated.View
+          style={{
+            opacity: enter,
+            transform: [
+              {
+                translateX: enter.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [page === null ? -18 : 28, 0],
+                }),
+              },
+            ],
+          }}
+        >
+          {page === null ? (
             <>
-              {/* JioSaavn Bitrate Choice */}
-              <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>
-                JioSaavn Stream Bitrate
+              {/* Hero Brand Banner */}
+              <View style={[styles.brandBanner, { borderColor: palette.accent + '35' }]}>
+                <Image
+                  source={skinPreview(prefs.appIcon)}
+                  style={styles.heroIcon}
+                  accessibilityIgnoresInvertColors
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.brandName, { fontFamily }]}>HolySic · iOS</Text>
+                  <Text style={styles.brandSub}>
+                    {vi
+                      ? 'Nghe nhạc lossless trên iPhone · dựa trên Mochy Music của realidkroo (GPL-3.0)'
+                      : 'Lossless listening on iPhone · built on Mochy Music by realidkroo (GPL-3.0)'}
+                  </Text>
+                  <View style={styles.bannerLinksRow}>
+                    <Tap
+                      onPress={() => Linking.openURL(UPSTREAM_ORIGIN_URL)}
+                      style={[styles.miniLinkPill, { backgroundColor: palette.accent }]}
+                    >
+                      <Ionicons name="logo-github" size={14} color={palette.onAccent} />
+                      <Text style={{ color: palette.onAccent, fontSize: 12, fontWeight: '800' }}>
+                        {vi ? 'Mã nguồn gốc' : 'Upstream'}
+                      </Text>
+                    </Tap>
+                    <Tap
+                      onPress={() => Linking.openURL(UPSTREAM_DISCORD_URL)}
+                      style={styles.miniLinkPillGhost}
+                    >
+                      <Ionicons name="chatbubbles-outline" size={14} color={UI.text} />
+                      <Text style={{ color: UI.text, fontSize: 12, fontWeight: '700' }}>
+                        Discord
+                      </Text>
+                    </Tap>
+                  </View>
+                </View>
+              </View>
+
+              {/* Quick Tools */}
+              <View style={styles.quickRow}>
+                <Tap onPress={() => setIsAudioLabOpen(true)} style={styles.quickToolCard}>
+                  <Ionicons name="options" size={22} color={palette.accent} />
+                  <Text style={styles.quickToolTitle}>Audio Lab & EQ</Text>
+                  <Text style={styles.quickToolSub}>AutoEQ · 8D · Reverb</Text>
+                </Tap>
+
+                <Tap onPress={() => setIsRecapOpen(true)} style={styles.quickToolCard}>
+                  <Ionicons name="id-card" size={22} color="#34D399" />
+                  <Text style={styles.quickToolTitle}>HolySic Recap ID</Text>
+                  <Text style={styles.quickToolSub}>Stats & Listener Card</Text>
+                </Tap>
+              </View>
+            </>
+          ) : (
+            <PageHeader
+              title={pageTitle(page, vi)}
+              back={vi ? 'Cài đặt' : 'Settings'}
+              onBack={back}
+              accent={palette.accent}
+              fontFamily={fontFamily}
+            />
+          )}
+
+          {page === null && <SettingsHome vi={vi} fontFamily={fontFamily} open={openPage} />}
+          {page === 'player' && (
+            <>
+              {/* Player Style Selector */}
+              <Text style={[styles.sectionTitle, { fontFamily }]}>
+                {t(prefs.language, 'playerStyleTitle')}
               </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                {(['320', '160', '96'] as JioSaavnQuality[]).map((q) => {
-                  const active = prefs.preferredJioSaavnQuality === q;
+              <View style={styles.cardGroup}>
+                {PLAYER_STYLE_META.map((meta) => {
+                  const active = prefs.playerStyle === meta.id;
                   return (
                     <Tap
-                      key={q}
-                      onPress={() => updatePrefs({ preferredJioSaavnQuality: q })}
+                      key={meta.id}
+                      onPress={() => {
+                        haptic('selection');
+                        updatePrefs({ playerStyle: meta.id as PlayerStyle });
+                      }}
                       style={[
-                        styles.smallOptionPill,
-                        active && { backgroundColor: palette.accent },
+                        styles.styleRow,
+                        active && {
+                          borderColor: palette.accent,
+                          backgroundColor: palette.container + '55',
+                        },
                       ]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rowTitle}>{vi ? meta.titleVi : meta.titleEn}</Text>
+                        <Text style={styles.rowDesc}>{vi ? meta.descVi : meta.descEn}</Text>
+                      </View>
+                      <Ionicons
+                        name={active ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={22}
+                        color={active ? palette.accent : UI.text3}
+                      />
+                    </Tap>
+                  );
+                })}
+              </View>
+            </>
+          )}
+          {page === 'look' && (
+            <>
+              {/* Customize HolySic Appearance */}
+              <Text style={[styles.sectionTitle, { fontFamily }]}>
+                {t(prefs.language, 'customizeLook')}
+              </Text>
+              <View style={styles.cardGroup}>
+                <View style={styles.themeBlock}>
+                  <Text style={styles.rowTitle}>{vi ? 'Giao diện' : 'Appearance'}</Text>
+                  <Text style={styles.rowDesc}>
+                    {vi
+                      ? 'Tự động: sáng ban ngày, tối ban đêm — theo cài đặt của iPhone'
+                      : 'Auto follows your iPhone: light by day, dark at night'}
+                  </Text>
+                  <View style={styles.themeRow}>
+                    {(
+                      [
+                        { id: 'light', icon: 'sunny', vi: 'Sáng', en: 'Light' },
+                        { id: 'dark', icon: 'moon', vi: 'Tối', en: 'Dark' },
+                        { id: 'auto', icon: 'contrast', vi: 'Tự động', en: 'Auto' },
+                      ] as const
+                    ).map((o) => {
+                      const on = (prefs.themeMode || 'dark') === o.id;
+                      return (
+                        <Tap
+                          key={o.id}
+                          onPress={() => updatePrefs({ themeMode: o.id })}
+                          style={[
+                            styles.themeChip,
+                            on && {
+                              borderColor: palette.accent,
+                              backgroundColor: palette.accent + '22',
+                            },
+                          ]}
+                          accessibilityLabel={
+                            (vi ? 'Giao diện ' : 'Appearance ') + (vi ? o.vi : o.en)
+                          }
+                          accessibilityState={{ selected: on }}
+                        >
+                          <View
+                            style={[
+                              styles.themePreview,
+                              o.id === 'light'
+                                ? { backgroundColor: '#F6F5FA' }
+                                : o.id === 'dark'
+                                  ? { backgroundColor: '#0A0A0E' }
+                                  : { backgroundColor: '#0A0A0E', overflow: 'hidden' },
+                            ]}
+                          >
+                            {o.id === 'auto' && <View style={styles.themeHalf} />}
+                            <Ionicons
+                              name={o.icon}
+                              size={18}
+                              color={
+                                o.id === 'light'
+                                  ? '#F59E0B'
+                                  : o.id === 'dark'
+                                    ? '#C4B5FD'
+                                    : palette.accent
+                              }
+                            />
+                          </View>
+                          <Text style={[styles.themeLabel, on && { color: palette.accent }]}>
+                            {vi ? o.vi : o.en}
+                          </Text>
+                        </Tap>
+                      );
+                    })}
+                  </View>
+                </View>
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.rowTitle}>{t(prefs.language, 'pureBlackOled')}</Text>
+                    <Text style={styles.rowDesc}>
+                      {vi
+                        ? 'Tiết kiệm pin tối đa trên màn hình OLED của iPhone'
+                        : 'Pitch-black #000000 surfaces for iPhone Super Retina OLED'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={prefs.pureBlack}
+                    onValueChange={(v) => updatePrefs({ pureBlack: v })}
+                    trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+                  />
+                </View>
+
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.rowTitle}>{t(prefs.language, 'frostedBlur')}</Text>
+                    <Text style={styles.rowDesc}>
+                      {vi
+                        ? 'Tắt nếu muốn máy đời cũ chạy siêu mượt (như gợi ý trong FAQ HolySic)'
+                        : 'Disable blur on older devices for maximum frame rate'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={prefs.enableBlur}
+                    onValueChange={(v) => updatePrefs({ enableBlur: v })}
+                    trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+                  />
+                </View>
+
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.rowTitle}>{t(prefs.language, 'miniLyricsTicker')}</Text>
+                    <Text style={styles.rowDesc}>
+                      {vi
+                        ? 'Hiển thị câu hát đang phát ngay trên thanh MiniPlayer'
+                        : 'Show active lyric line inside the floating MiniPlayer'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={prefs.showMiniLyricsTicker}
+                    onValueChange={(v) => updatePrefs({ showMiniLyricsTicker: v })}
+                    trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+                  />
+                </View>
+
+                {/* Player Background Mode */}
+                <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>
+                  {vi ? 'Hiệu ứng màu nền Player' : 'Player Background Palette'}
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 6 }}>
+                    {(
+                      [
+                        ['AMBIENT', 'Ambient Light'],
+                        ['APPLE_MUSIC', 'Apple Mesh'],
+                        ['COVER_GRADIENT', 'Cover Gradient'],
+                        ['DARK_GRADIENT', 'Dark Tone'],
+                        ['SOLID', 'Solid OLED'],
+                      ] as [PlayerBackgroundStyle, string][]
+                    ).map(([id, label]) => {
+                      const selected = prefs.playerBackground === id;
+                      return (
+                        <Tap
+                          key={id}
+                          onPress={() => updatePrefs({ playerBackground: id })}
+                          style={[
+                            styles.smallOptionPill,
+                            selected && { backgroundColor: palette.accent },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: '700',
+                              color: selected ? palette.onAccent : UI.fg(1),
+                            }}
+                          >
+                            {label}
+                          </Text>
+                        </Tap>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+
+                {/* Ambient Light (YouTube-style glow from the cover's real colours) */}
+                <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>
+                  {vi ? 'Ánh sáng Ambient (như YouTube)' : 'Ambient light (YouTube-style)'}
+                </Text>
+                <Text style={{ color: UI.text3, fontSize: 12, lineHeight: 17 }}>
+                  {vi
+                    ? 'Màu thật của ảnh bìa lan ra nền, toả sáng quanh ảnh và nhịp theo tiếng bass.'
+                    : "The cover's real colours flood the background, glow around the art and pulse with the bass."}
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 8 }}>
+                  {(
+                    [
+                      ['off', vi ? 'Tắt' : 'Off'],
+                      ['low', vi ? 'Nhẹ' : 'Low'],
+                      ['medium', vi ? 'Vừa' : 'Medium'],
+                      ['high', vi ? 'Mạnh' : 'High'],
+                    ] as const
+                  ).map(([id, label]) => {
+                    const selected = prefs.ambientLight === id;
+                    return (
+                      <Tap
+                        key={id}
+                        onPress={() => updatePrefs({ ambientLight: id })}
+                        style={[
+                          styles.smallOptionPill,
+                          selected && { backgroundColor: palette.accent },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '700',
+                            color: selected ? palette.onAccent : UI.fg(1),
+                          }}
+                        >
+                          {label}
+                        </Text>
+                      </Tap>
+                    );
+                  })}
+                </View>
+                <View style={styles.switchRow}>
+                  <Text style={[styles.rowTitle, { flex: 1, paddingRight: 10 }]}>
+                    {vi ? 'Ánh sáng nhịp theo nhạc' : 'Light breathes with the music'}
+                  </Text>
+                  <Switch
+                    value={prefs.ambientBreathing}
+                    onValueChange={(v) => updatePrefs({ ambientBreathing: v })}
+                    trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+                  />
+                </View>
+                <View style={styles.switchRow}>
+                  <Text style={[styles.rowTitle, { flex: 1, paddingRight: 10 }]}>
+                    {vi
+                      ? 'Lan sáng ra MiniPlayer & Trang chủ'
+                      : 'Spill light onto mini player & Home'}
+                  </Text>
+                  <Switch
+                    value={prefs.ambientSpill}
+                    onValueChange={(v) => updatePrefs({ ambientSpill: v })}
+                    trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+                  />
+                </View>
+                {ambient.lowPower && prefs.ambientLight !== 'off' && (
+                  <Text style={{ color: HOLYSIC_COLORS.aacAmber, fontSize: 12, marginBottom: 4 }}>
+                    {vi
+                      ? '⚡ iPhone đang bật Chế độ nguồn điện thấp: ánh sáng tự dịu bớt và đứng yên để tiết kiệm pin.'
+                      : '⚡ Low Power Mode is on: the light is dimmed and steady to save battery.'}
+                  </Text>
+                )}
+                {ambient.reduceMotion && !ambient.lowPower && prefs.ambientLight !== 'off' && (
+                  <Text style={{ color: UI.text2, fontSize: 12, marginBottom: 4 }}>
+                    {vi
+                      ? 'Trợ năng › Giảm chuyển động đang bật: ánh sáng vẫn nhịp theo nhạc nhưng không phóng to/thu nhỏ.'
+                      : 'Accessibility › Reduce Motion is on: the light still pulses but never zooms.'}
+                  </Text>
+                )}
+
+                {/* Font Customizer */}
+                <Text style={[styles.inlineSubLabel, { marginTop: 10 }]}>
+                  {vi ? 'Phông chữ' : 'Typography'}
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 6 }}>
+                    {(
+                      [
+                        ['inter', 'Inter / SF'],
+                        ['rounded', 'SF Rounded'],
+                        ['serif', 'New York Serif'],
+                        ['mono', 'SF Mono'],
+                      ] as [AppFontStyle, string][]
+                    ).map(([id, label]) => {
+                      const selected = prefs.fontStyle === id;
+                      return (
+                        <Tap
+                          key={id}
+                          onPress={() => updatePrefs({ fontStyle: id })}
+                          style={[
+                            styles.smallOptionPill,
+                            selected && { backgroundColor: palette.accent },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: '700',
+                              color: selected ? palette.onAccent : UI.fg(1),
+                            }}
+                          >
+                            {label}
+                          </Text>
+                        </Tap>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+
+              <MergedSettings part="look" />
+            </>
+          )}
+          {page === 'backdrop' && <EffectsSettings fontFamily={fontFamily} part="backdrop" />}
+          {page === 'lyrics' && <LyricsIconSettings fontFamily={fontFamily} part="lyrics" />}
+          {page === 'video' && <VideoSettings fontFamily={fontFamily} />}
+          {page === 'icon' && <LyricsIconSettings fontFamily={fontFamily} part="icon" />}
+          {page === 'playback' && <MergedSettings part="playback" />}
+          {page === 'controls' && <EffectsSettings fontFamily={fontFamily} part="controls" />}
+          {page === 'sources' && (
+            <>
+              {/* Audio Source Modules & Priority Order */}
+              <Text style={[styles.sectionTitle, { fontFamily }]}>
+                {t(prefs.language, 'sourceModules')}
+              </Text>
+              <View style={styles.cardGroup}>
+                <Text style={styles.rowDesc}>
+                  {vi
+                    ? 'Thứ tự ưu tiên khi HolySic tìm luồng nhạc chất lượng cao nhất cho bài hát:'
+                    : 'Module resolution priority when matching tracks:'}
+                </Text>
+
+                {visibleModules.map((modId, idx) => {
+                  const enabled = prefs.enabledModules[modId];
+                  const labelMap: Record<typeof modId, string> = {
+                    monochrome: 'Monochrome · Lossless FLAC (16/24-bit)',
+                    jiosaavn: `JioSaavn · Full AAC (${prefs.preferredJioSaavnQuality} kbps)`,
+                    innertube: vi ? 'YouTube Music · phát ngay' : 'YouTube Music · instant start',
+                  };
+                  return (
+                    <View key={modId} style={styles.moduleRow}>
+                      <Tap
+                        disabled={idx === 0}
+                        onPress={() => moveModuleUp(idx)}
+                        style={[styles.upBtn, idx === 0 && { opacity: 0.25 }]}
+                      >
+                        <Ionicons name="arrow-up" size={16} color={UI.text} />
+                      </Tap>
+                      <Text style={[styles.moduleLabel, !enabled && { opacity: 0.45 }]}>
+                        {idx + 1}. {labelMap[modId]}
+                      </Text>
+                      <Switch
+                        value={enabled}
+                        onValueChange={(v) =>
+                          updatePrefs({
+                            enabledModules: { ...prefs.enabledModules, [modId]: v },
+                          })
+                        }
+                        trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+                      />
+                    </View>
+                  );
+                })}
+
+                {/* Playback source behaviour */}
+                <View style={[styles.switchRow, { marginTop: 10 }]}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.rowTitle}>
+                      {vi ? 'Nhớ nguồn phát được' : 'Remember working sources'}
+                    </Text>
+                    <Text style={styles.rowDesc}>
+                      {vi
+                        ? `Bài đã phát được sẽ dùng lại đúng nguồn đó lần sau, nguồn hay lỗi bị xếp xuống cuối (${memoryCount} bài đã nhớ)`
+                        : `Replays use the source that worked last time; failing modules are tried last (${memoryCount} remembered)`}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={prefs.rememberSources}
+                    onValueChange={(v) => updatePrefs({ rememberSources: v })}
+                    trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+                  />
+                </View>
+
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.rowTitle}>
+                      {vi ? 'Ưu tiên phát ngay' : 'Prefer instant start'}
+                    </Text>
+                    <Text style={styles.rowDesc}>
+                      {vi
+                        ? 'Trên iPhone, FLAC Monochrome phải tải về 1 lần (~30 MB) mới phát được, nên chỉ dùng khi nguồn phát ngay (YouTube / JioSaavn) không có. Tắt nếu luôn muốn lossless.'
+                        : 'On iPhone, Monochrome FLAC needs a one-time ~30 MB download, so it is used after instant sources. Turn off to always prefer lossless.'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={prefs.preferInstantStart}
+                    onValueChange={(v) => updatePrefs({ preferInstantStart: v })}
+                    trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+                  />
+                </View>
+
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={styles.rowTitle}>
+                      {vi ? 'Cho phép bản preview 30 giây' : 'Allow 30-second previews'}
+                    </Text>
+                    <Text style={styles.rowDesc}>
+                      {vi
+                        ? 'Tắt (mặc định): chỉ phát bản đầy đủ, không bao giờ phát đoạn preview Apple 30s. Bật: dùng preview khi mọi nguồn đầy đủ đều lỗi.'
+                        : 'Off (default): full-length tracks only. On: fall back to Apple 30s previews when every full source fails.'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={prefs.allowPreviewFallback}
+                    onValueChange={(v) => updatePrefs({ allowPreviewFallback: v })}
+                    trackColor={{ false: UI.surface('#2A2A36'), true: palette.accent }}
+                  />
+                </View>
+
+                <Tap
+                  onPress={() => {
+                    haptic('selection');
+                    SourceMemory.clear();
+                    StreamFileCache.clear();
+                    setMemoryCount(0);
+                  }}
+                  style={{ marginTop: 6, alignSelf: 'flex-start' }}
+                >
+                  <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>
+                    {vi ? 'Xoá bộ nhớ nguồn & cache FLAC' : 'Clear source memory & FLAC cache'}
+                  </Text>
+                </Tap>
+
+                <Tap
+                  feedback="opacity"
+                  onPress={() => {
+                    haptic('selection');
+                    setShowAdvanced((v) => !v);
+                  }}
+                  style={styles.disclosureRow}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showAdvanced }}
+                >
+                  <Ionicons name="construct-outline" size={16} color={UI.text2} />
+                  <Text style={[styles.rowTitle, { flex: 1 }]}>
+                    {vi ? 'Nâng cao: bitrate & máy chủ FLAC' : 'Advanced: bitrate & FLAC servers'}
+                  </Text>
+                  <Ionicons
+                    name={showAdvanced ? 'chevron-up' : 'chevron-down'}
+                    size={17}
+                    color={UI.text3}
+                  />
+                </Tap>
+                {showAdvanced && (
+                  <>
+                    {/* JioSaavn Bitrate Choice */}
+                    <Text style={[styles.inlineSubLabel, { marginTop: 12 }]}>
+                      JioSaavn Stream Bitrate
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                      {(['320', '160', '96'] as JioSaavnQuality[]).map((q) => {
+                        const active = prefs.preferredJioSaavnQuality === q;
+                        return (
+                          <Tap
+                            key={q}
+                            onPress={() => updatePrefs({ preferredJioSaavnQuality: q })}
+                            style={[
+                              styles.smallOptionPill,
+                              active && { backgroundColor: palette.accent },
+                            ]}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: '700',
+                                color: active ? palette.onAccent : UI.fg(1),
+                              }}
+                            >
+                              {q} kbps
+                            </Text>
+                          </Tap>
+                        );
+                      })}
+                    </View>
+
+                    {/* Monochrome Relay Server List */}
+                    <View style={styles.relaySection}>
+                      <View style={styles.relayTopRow}>
+                        <Text style={styles.inlineSubLabel}>Monochrome FLAC Servers</Text>
+                        <Tap
+                          disabled={verifying}
+                          onPress={async () => {
+                            setVerifying(true);
+                            await verifyAllServers();
+                            setVerifying(false);
+                          }}
+                        >
+                          <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>
+                            {verifying ? 'Checking…' : t(prefs.language, 'verifyServers')}
+                          </Text>
+                        </Tap>
+                      </View>
+
+                      {monochromeServers.map((srv) => (
+                        <View key={srv.url} style={styles.srvRow}>
+                          <Ionicons
+                            name={
+                              srv.lastStatus === 'ok'
+                                ? 'checkmark-circle'
+                                : srv.lastStatus === 'down'
+                                  ? 'alert-circle'
+                                  : 'radio-outline'
+                            }
+                            size={16}
+                            color={
+                              srv.lastStatus === 'ok'
+                                ? '#34D399'
+                                : srv.lastStatus === 'down'
+                                  ? '#FBBF24'
+                                  : '#94A3B8'
+                            }
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: UI.text, fontSize: 13, fontWeight: '600' }}>
+                              {srv.name} ({srv.kind})
+                            </Text>
+                            {srv.lastMessage && (
+                              <Text style={{ color: UI.text3, fontSize: 11 }}>
+                                {srv.lastMessage}
+                              </Text>
+                            )}
+                          </View>
+                          {!srv.builtIn && (
+                            <Tap onPress={() => removeMonochromeServer(srv.url)}>
+                              <Ionicons name="trash-outline" size={17} color="#F87171" />
+                            </Tap>
+                          )}
+                        </View>
+                      ))}
+
+                      <View style={styles.addSrvRow}>
+                        <TextInput
+                          value={newServerUrl}
+                          onChangeText={setNewServerUrl}
+                          placeholder="https://your-relay.example.dev"
+                          placeholderTextColor={UI.text3}
+                          autoCapitalize="none"
+                          style={styles.srvInput}
+                        />
+                        <Tap
+                          onPress={() =>
+                            setNewServerKind((k) => (k === 'relay' ? 'streamer' : 'relay'))
+                          }
+                          style={styles.kindToggle}
+                        >
+                          <Text style={{ color: UI.text, fontSize: 11, fontWeight: '700' }}>
+                            {newServerKind.toUpperCase()}
+                          </Text>
+                        </Tap>
+                        <Tap
+                          onPress={async () => {
+                            if (!newServerUrl.trim()) return;
+                            await addMonochromeServer(newServerUrl, newServerKind);
+                            setNewServerUrl('');
+                          }}
+                          style={[styles.addSrvBtn, { backgroundColor: palette.accent }]}
+                        >
+                          <Ionicons name="add" size={18} color={palette.onAccent} />
+                        </Tap>
+                      </View>
+                    </View>
+                  </>
+                )}
+              </View>
+            </>
+          )}
+          {page === 'scrobble' && <MergedSettings part="scrobble" />}
+          {page === 'library' && (
+            <>
+              <MergedSettings part="library" />
+              <MergedSettings part="blacklist" />
+            </>
+          )}
+          {page === 'language' && (
+            <>
+              {/* Language Switch */}
+              <Text style={[styles.sectionTitle, { fontFamily }]}>
+                {vi ? 'Ngôn ngữ / Language' : 'Language / Ngôn ngữ'}
+              </Text>
+              <View style={styles.segmentedRow}>
+                {(['vi', 'en'] as const).map((lang) => {
+                  const active = prefs.language === lang;
+                  return (
+                    <Tap
+                      key={lang}
+                      onPress={() => {
+                        haptic('selection');
+                        updatePrefs({ language: lang });
+                      }}
+                      style={[styles.segmentBtn, active && { backgroundColor: palette.accent }]}
                     >
                       <Text
                         style={{
-                          fontSize: 12,
-                          fontWeight: '700',
+                          fontWeight: '800',
                           color: active ? palette.onAccent : UI.fg(1),
                         }}
                       >
-                        {q} kbps
+                        {lang === 'vi' ? '🇻🇳 Tiếng Việt' : '🌐 English'}
                       </Text>
                     </Tap>
                   );
                 })}
               </View>
+            </>
+          )}
+          {page === 'credits' && (
+            <>
+              {/* Open-Source Credits & GPL-3.0 Attribution */}
+              <Text style={[styles.sectionTitle, { fontFamily }]}>
+                {t(prefs.language, 'aboutAndCredits')}
+              </Text>
+              <View style={styles.cardGroup}>
+                <Text style={[styles.rowDesc, { marginBottom: 12 }]}>
+                  {t(prefs.language, 'freeForeverNote')}
+                </Text>
 
-              {/* Monochrome Relay Server List */}
-              <View style={styles.relaySection}>
-                <View style={styles.relayTopRow}>
-                  <Text style={styles.inlineSubLabel}>Monochrome FLAC Servers</Text>
+                {UPSTREAM_CREDITS.map((credit) => (
                   <Tap
-                    disabled={verifying}
-                    onPress={async () => {
-                      setVerifying(true);
-                      await verifyAllServers();
-                      setVerifying(false);
-                    }}
+                    key={credit.name}
+                    onPress={() => Linking.openURL(credit.url)}
+                    style={[
+                      styles.creditItem,
+                      credit.highlight && {
+                        borderColor: palette.accent + '66',
+                        backgroundColor: palette.container + '44',
+                      },
+                    ]}
                   >
-                    <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>
-                      {verifying ? 'Checking…' : t(prefs.language, 'verifyServers')}
-                    </Text>
-                  </Tap>
-                </View>
-
-                {monochromeServers.map((srv) => (
-                  <View key={srv.url} style={styles.srvRow}>
-                    <Ionicons
-                      name={
-                        srv.lastStatus === 'ok'
-                          ? 'checkmark-circle'
-                          : srv.lastStatus === 'down'
-                            ? 'alert-circle'
-                            : 'radio-outline'
-                      }
-                      size={16}
-                      color={
-                        srv.lastStatus === 'ok'
-                          ? '#34D399'
-                          : srv.lastStatus === 'down'
-                            ? '#FBBF24'
-                            : '#94A3B8'
-                      }
-                    />
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: UI.text, fontSize: 13, fontWeight: '600' }}>
-                        {srv.name} ({srv.kind})
+                      <Text style={styles.creditTitle}>
+                        {credit.name}{' '}
+                        <Text style={{ color: palette.accent, fontWeight: '600' }}>
+                          by {credit.author}
+                        </Text>
                       </Text>
-                      {srv.lastMessage && (
-                        <Text style={{ color: UI.text3, fontSize: 11 }}>{srv.lastMessage}</Text>
-                      )}
+                      <Text style={styles.creditDesc}>{vi ? credit.roleVi : credit.roleEn}</Text>
                     </View>
-                    {!srv.builtIn && (
-                      <Tap onPress={() => removeMonochromeServer(srv.url)}>
-                        <Ionicons name="trash-outline" size={17} color="#F87171" />
-                      </Tap>
-                    )}
-                  </View>
+                    <Ionicons name="open-outline" size={17} color={UI.text2} />
+                  </Tap>
                 ))}
-
-                <View style={styles.addSrvRow}>
-                  <TextInput
-                    value={newServerUrl}
-                    onChangeText={setNewServerUrl}
-                    placeholder="https://your-relay.example.dev"
-                    placeholderTextColor={UI.text3}
-                    autoCapitalize="none"
-                    style={styles.srvInput}
-                  />
-                  <Tap
-                    onPress={() => setNewServerKind((k) => (k === 'relay' ? 'streamer' : 'relay'))}
-                    style={styles.kindToggle}
-                  >
-                    <Text style={{ color: UI.text, fontSize: 11, fontWeight: '700' }}>
-                      {newServerKind.toUpperCase()}
-                    </Text>
-                  </Tap>
-                  <Tap
-                    onPress={async () => {
-                      if (!newServerUrl.trim()) return;
-                      await addMonochromeServer(newServerUrl, newServerKind);
-                      setNewServerUrl('');
-                    }}
-                    style={[styles.addSrvBtn, { backgroundColor: palette.accent }]}
-                  >
-                    <Ionicons name="add" size={18} color={palette.onAccent} />
-                  </Tap>
-                </View>
               </View>
             </>
           )}
-        </View>
-
-        {/* Merged features: Spotube · OpenSpot Music · Musike · Cog */}
-        <MergedSettings />
-
-        {/* Open-Source Credits & GPL-3.0 Attribution */}
-        <Text style={[styles.sectionTitle, { fontFamily }]}>
-          {t(prefs.language, 'aboutAndCredits')}
-        </Text>
-        <View style={styles.cardGroup}>
-          <Text style={[styles.rowDesc, { marginBottom: 12 }]}>
-            {t(prefs.language, 'freeForeverNote')}
-          </Text>
-
-          {UPSTREAM_CREDITS.map((credit) => (
-            <Tap
-              key={credit.name}
-              onPress={() => Linking.openURL(credit.url)}
-              style={[
-                styles.creditItem,
-                credit.highlight && {
-                  borderColor: palette.accent + '66',
-                  backgroundColor: palette.container + '44',
-                },
-              ]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.creditTitle}>
-                  {credit.name}{' '}
-                  <Text style={{ color: palette.accent, fontWeight: '600' }}>
-                    by {credit.author}
-                  </Text>
-                </Text>
-                <Text style={styles.creditDesc}>{vi ? credit.roleVi : credit.roleEn}</Text>
-              </View>
-              <Ionicons name="open-outline" size={17} color={UI.text2} />
-            </Tap>
-          ))}
-        </View>
+        </Animated.View>
       </Animated.ScrollView>
-      <ScrollEdgeBar scrollY={scrollY} title="HolySic" from={60} to={110} fontFamily={fontFamily} />
+      <ScrollEdgeBar
+        scrollY={scrollY}
+        title={page ? pageTitle(page, vi) : 'HolySic'}
+        from={60}
+        to={110}
+        fontFamily={fontFamily}
+      />
     </View>
   );
 };
