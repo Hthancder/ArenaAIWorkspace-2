@@ -32,6 +32,7 @@ import {
   LocalState,
 } from '../../services/local/localLibrary';
 import { Track } from '../../types/music';
+import { NowPlayingBars } from '../ui/NowPlayingBars';
 import { ArtworkImage } from '../ArtworkImage';
 import { openSongEditor } from './SongInfoEditor';
 import { queueM3UImport } from '../merge/ImportModal';
@@ -742,11 +743,7 @@ export const LocalLibraryScreen: React.FC = () => {
           />
           {playing && (
             <View style={styles.playingDot}>
-              <Ionicons
-                name={isPlaying ? 'volume-high' : 'pause'}
-                size={13}
-                color={palette.accent}
-              />
+              <NowPlayingBars playing={isPlaying} color={palette.accent} size={13} />
             </View>
           )}
         </View>

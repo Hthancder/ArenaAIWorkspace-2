@@ -223,6 +223,8 @@ export interface LoadOptions {
   /** keep what the sources return as an offline copy */
   keepOffline?: boolean;
   sources?: Partial<Record<LyricsSourceId, boolean>>;
+  /** no network: answer from the device only, without waiting on the sources to time out */
+  offline?: boolean;
 }
 
 /** Lyrics for a song, honouring the user's choices and offline copies. Never throws. */
@@ -253,7 +255,9 @@ export async function loadLyrics(t: Track, opts: LoadOptions = {}): Promise<Lyri
     }
   }
 
-  const online = await fetchOnlineLyrics(queryOf(t), opts.sources).catch(() => null);
+  const online = opts.offline
+    ? null
+    : await fetchOnlineLyrics(queryOf(t), opts.sources).catch(() => null);
   if (online && online.lines.length) {
     const d = { ...online, trackId: t.id };
     memory.set(t.id, d);

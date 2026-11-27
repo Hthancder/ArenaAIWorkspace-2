@@ -41,7 +41,7 @@ export const LyricsView: React.FC = () => {
     isLoadingLyrics,
     reloadLyrics,
     currentTrack,
-    activeLyricIndex,
+    activeLyricIndex: clockIndex,
     seekTo,
     darkPalette: palette,
     prefs,
@@ -51,6 +51,7 @@ export const LyricsView: React.FC = () => {
     nudgeLyricsOffset,
     isPlaying,
     showToast,
+    isOnline,
   } = useHolySic();
   const vi = prefs.language === 'vi';
   const effect: LyricsEffect = prefs.lyricsEffect || 'glow';
@@ -93,6 +94,9 @@ export const LyricsView: React.FC = () => {
     if (lineYs.current.size > 3000) lineYs.current = new Map();
   }
 
+  // plain (untimed) lyrics have no "current line": no highlight, no follow — like Music
+  const timed = !!lyrics?.synced;
+  const activeLyricIndex = timed ? clockIndex : -1;
   const activeRef = useRef(activeLyricIndex);
   activeRef.current = activeLyricIndex;
   const lyricsRef = useRef(lyrics);
@@ -122,6 +126,7 @@ export const LyricsView: React.FC = () => {
     scrollRef.current.scrollTo({ y: to, animated });
   };
   useEffect(() => {
+    if (!timed && !pendingFollow.current) return;
     if (Date.now() < handUntil.current) return;
     if (detached) setDetached(false);
     follow(true);
@@ -190,7 +195,11 @@ export const LyricsView: React.FC = () => {
               ? vi
                 ? 'Bạn đã tắt lời cho bài này'
                 : 'You turned lyrics off for this song'
-              : t(prefs.language, 'noLyrics')}
+              : !isOnline
+                ? vi
+                  ? 'Đang offline — bài này chưa có lời lưu trên máy. Lời sẽ tự tải khi có mạng.'
+                  : 'Offline — no saved lyrics for this song yet. They’ll load when you’re back online.'
+                : t(prefs.language, 'noLyrics')}
         </Text>
         {!live && currentTrack && (
           <View style={styles.emptyActions}>
@@ -372,10 +381,45 @@ export const LyricsView: React.FC = () => {
         }}
         scrollEventThrottle={32}
       >
+        {!timed && (
+          <Tap
+            onPress={() => openEditor('write')}
+            style={[styles.plainNote, { borderColor: palette.accent + '44' }]}
+            accessibilityRole="button"
+          >
+            <Ionicons name="timer-outline" size={16} color={palette.accent} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.plainNoteTitle}>
+                {vi ? 'Lời chưa có thời gian' : 'These lyrics aren’t timed'}
+              </Text>
+              <Text style={styles.plainNoteText}>
+                {vi
+                  ? 'Chạm để tìm bản đồng bộ hoặc tự gắn giờ khi nghe.'
+                  : 'Tap to find a synced version or time them as you listen.'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={15} color="rgba(255,255,255,0.5)" />
+          </Tap>
+        )}
         {lyrics.lines.map((line, idx) => {
           const isActive = idx === activeLyricIndex;
           const isPast = idx < activeLyricIndex;
           const dist = activeLyricIndex < 0 ? 3 : Math.abs(idx - activeLyricIndex);
+          if (!timed) {
+            return (
+              <Text
+                key={line.id}
+                style={[
+                  styles.plainLine,
+                  { fontSize: size.font * 0.8, lineHeight: size.line * 0.8 },
+                  { textAlign: baseAlign, fontFamily },
+                ]}
+                selectable
+              >
+                {line.text}
+              </Text>
+            );
+          }
           const isDuetV2 = line.agent && line.agent.toLowerCase().includes('2');
           const textAlign = line.isBackground ? 'center' : isDuetV2 ? 'right' : baseAlign;
           const look = lineLook(effect, palette.accent, isActive, isPast, dist);
@@ -841,6 +885,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   retryText: { fontSize: 13.5, fontWeight: '700' },
+  plainLine: {
+    color: 'rgba(255,255,255,0.88)',
+    fontWeight: '700',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  plainNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 8,
+    marginBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  plainNoteTitle: { color: '#FFF', fontSize: 13, fontWeight: '800' },
+  plainNoteText: { color: 'rgba(255,255,255,0.6)', fontSize: 11.5, marginTop: 1 },
   emptyActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',

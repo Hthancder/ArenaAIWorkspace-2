@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { NowPlayingBars } from './ui/NowPlayingBars';
 import { ArtworkImage } from './ArtworkImage';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../constants/theme';
 import { useHolySic } from '../context/HolySicContext';
@@ -196,7 +197,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         />
         {active && (
           <View style={styles.playingOverlay}>
-            <Ionicons name={isPlaying ? 'stats-chart' : 'pause'} size={16} color={palette.accent} />
+            <NowPlayingBars playing={isPlaying} color={palette.accent} size={16} />
           </View>
         )}
       </View>

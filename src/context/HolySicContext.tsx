@@ -125,6 +125,8 @@ export type SearchFilter = 'all' | MusicSourceId | 'video';
 
 interface HolySicExtras {
   isOnline: boolean;
+  /** saved settings are loaded — until then the UI waits (no first-run screen / theme flash) */
+  prefsReady: boolean;
   importSheet: { mode: 'link' | 'list'; text: string } | null;
   openImport: (mode: 'link' | 'list', text?: string) => void;
   closeImport: () => void;
@@ -432,6 +434,20 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const resumeAtRef = useRef(0);
   const sessionRestoredRef = useRef(false);
   const hydratedRef = useRef(false);
+  const [prefsReady, setPrefsReady] = useState(false);
+  const prefsHydratedRef = useRef(false);
+  /** the saved settings have been read (or failed to): updatePrefs may save */
+  const prefsLoadedRef = useRef(false);
+  const pendingPrefsRef = useRef<Partial<HolySicPreferences> | null>(null);
+  const adoptLoadedPrefs = useCallback((loaded: HolySicPreferences) => {
+    const pending = pendingPrefsRef.current;
+    pendingPrefsRef.current = null;
+    prefsLoadedRef.current = true;
+    if (!pending) return loaded;
+    const merged = { ...loaded, ...pending };
+    StorageService.savePreferences(merged).catch(() => undefined);
+    return merged;
+  }, []);
   const [scrobbleState, setScrobbleState] = useState<ScrobbleSettings>(Scrobbler.get());
   /** Listening tracker for scrobbles: wall-clock listened seconds of the current play */
   const playLogRef = useRef<{
@@ -611,6 +627,23 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Hydrate persistent storage
   useEffect(() => {
+    // never keep the UI waiting on slow storage
+    const fallback = setTimeout(() => setPrefsReady(true), 2500);
+    // ready when the settings AND the library (likes, playlists, history…) are in — anything the
+    // user does before that could save over them
+    let parts = 0;
+    const partDone = () => {
+      if (++parts < 2) return;
+      clearTimeout(fallback);
+      setPrefsReady(true);
+    };
+    // settings first: the UI only waits for these
+    StorageService.loadPreferences()
+      .then((p) => {
+        if (!prefsHydratedRef.current) setPrefs(adoptLoadedPrefs(p));
+      })
+      .catch(() => undefined)
+      .finally(partDone);
     (async () => {
       const [
         loadedPrefs,
@@ -639,18 +672,30 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       refreshRemoteStreamClients().catch(() => undefined);
 
-      let savedPrefs = loadedPrefs;
+      const savedPrefs = loadedPrefs;
       // One-time: old default background → the new ambient-light backdrop
-      if (!savedPrefs.ambientIntroduced) {
-        savedPrefs = {
-          ...savedPrefs,
-          ambientIntroduced: true,
-          playerBackground:
-            savedPrefs.playerBackground === 'APPLE_MUSIC' ? 'AMBIENT' : savedPrefs.playerBackground,
-        };
-        StorageService.savePreferences(savedPrefs).catch(() => undefined);
+      const migrate = (p: HolySicPreferences): HolySicPreferences =>
+        p.ambientIntroduced
+          ? p
+          : {
+              ...p,
+              ambientIntroduced: true,
+              playerBackground:
+                p.playerBackground === 'APPLE_MUSIC' ? 'AMBIENT' : p.playerBackground,
+            };
+      prefsHydratedRef.current = true;
+      if (!prefsLoadedRef.current) {
+        const next = migrate(adoptLoadedPrefs(loadedPrefs));
+        if (next !== loadedPrefs) StorageService.savePreferences(next).catch(() => undefined);
+        setPrefs(next);
+      } else {
+        // the quick read already set them (and maybe the user changed something since)
+        setPrefs((cur) => {
+          const next = migrate(cur);
+          if (next !== cur) StorageService.savePreferences(next).catch(() => undefined);
+          return next;
+        });
       }
-      setPrefs(savedPrefs);
       setLikedTracks(savedLiked);
       if (savedPlaylists.length > 0) {
         setPlaylists(savedPlaylists);
@@ -696,7 +741,10 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       audioEngine.applyAudioLab(savedLab);
       setMonochromeServers(savedServers);
       if (savedSearches.length > 0) setSearchHistory(savedSearches);
-    })();
+    })()
+      .catch(() => undefined)
+      .finally(partDone);
+    return () => clearTimeout(fallback);
   }, []);
 
   const refreshHomeFeeds = useCallback(async () => {
@@ -772,6 +820,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       keepOffline:
         p.lyricsKeepOffline !== false && (!!downloadsRef.current[track.id] || isLocalTrack(track)),
       sources: p.lyricsSources,
+      offline: !isOnlineRef.current,
     })
       .then((res) => {
         if (!cancelled) {
@@ -786,13 +835,23 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       cancelled = true;
     };
   }, [lyricsTrackId, lyricsAttempt]);
+  // back online: songs that found no lyrics while offline try again by themselves
+  const wasOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    const cameBack = isOnline && !wasOnlineRef.current;
+    wasOnlineRef.current = isOnline;
+    if (cameBack && lyrics && lyrics.lines.length === 0 && lyrics.origin !== 'override')
+      reloadLyrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline]);
 
   const lyricsOffsetSec = currentTrack ? (prefs.lyricsOffsets?.[currentTrack.id] ?? 0) / 1000 : 0;
   // the active line only changes a few times a minute: follow the clock, re-render on change
   const [activeLyricIndex, setActiveLyricIndex] = useState(-1);
   useEffect(() => {
     const compute = () => {
-      if (!lyrics || lyrics.lines.length === 0) return -1;
+      // untimed lyrics have no current line (their spread-out times are only a layout aid)
+      if (!lyrics || lyrics.lines.length === 0 || !lyrics.synced) return -1;
       const pos = PlaybackClock.get() - lyricsOffsetSec;
       let active = -1;
       for (let i = 0; i < lyrics.lines.length; i++) {
@@ -1677,6 +1736,13 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 
   const updatePrefs = useCallback((patch: Partial<HolySicPreferences>) => {
+    // before the saved settings are read, saving would overwrite them with defaults (and bring the
+    // first-run screen back): remember the change and merge it in once they are loaded
+    if (!prefsLoadedRef.current) {
+      pendingPrefsRef.current = { ...pendingPrefsRef.current, ...patch };
+      setPrefs((prev) => ({ ...prev, ...patch }));
+      return;
+    }
     setPrefs((prev) => {
       const next = { ...prev, ...patch };
       StorageService.savePreferences(next);
@@ -2787,6 +2853,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const extras = useMemo<HolySicExtras>(
     () => ({
       isOnline,
+      prefsReady,
       importSheet,
       openImport,
       closeImport,
@@ -2832,6 +2899,7 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }),
     [
       isOnline,
+      prefsReady,
       importSheet,
       openImport,
       closeImport,

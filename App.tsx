@@ -10,6 +10,7 @@ import {
   Animated,
   Appearance,
   Easing,
+  Image,
   Platform,
   StyleSheet,
   Text,
@@ -71,6 +72,7 @@ const HolySicShell: React.FC = () => {
     chartsSheet,
     closeCharts,
     isPlayerOpen,
+    prefsReady,
   } = useHolySic();
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   useQuickActions();
@@ -152,6 +154,10 @@ const HolySicShell: React.FC = () => {
       isBrandMark: true,
     },
   ];
+
+  // until the saved settings are read, show the launch screen (same as the native splash) instead
+  // of a UI with default theme / language / accent that would re-mount a moment later
+  if (!prefsReady) return <LaunchScreen />;
 
   return (
     // keyed by scheme: the UI re-mounts with the new colours (playback & app state live above it)
@@ -259,6 +265,17 @@ const HolySicShell: React.FC = () => {
   );
 };
 
+/** Same picture as the native splash, so launch is one seamless screen */
+const LaunchScreen: React.FC = () => (
+  <View style={styles.launch}>
+    <Image
+      source={require('./assets/splash-icon.png')}
+      style={styles.launchIcon}
+      resizeMode="contain"
+    />
+  </View>
+);
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -271,6 +288,8 @@ export default function App() {
 }
 
 const styles = themedSheet(() => ({
+  launch: { flex: 1, backgroundColor: '#0B0B0F', alignItems: 'center', justifyContent: 'center' },
+  launchIcon: { width: 200, height: 200 },
   outerFrame: {
     flex: 1,
     alignItems: 'center',

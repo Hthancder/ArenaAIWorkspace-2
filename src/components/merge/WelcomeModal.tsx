@@ -75,12 +75,14 @@ const FEATURES: { icon: string; vi: string; en: string; dvi: string; den: string
 
 export const WelcomeModal: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { prefs, updatePrefs, darkPalette: palette } = useHolySic();
-  useModalLayer('welcome', !prefs.onboarded);
+  const { prefs, updatePrefs, darkPalette: palette, prefsReady } = useHolySic();
+  // only once the saved settings are known — otherwise it flashes on every launch
+  const show = prefsReady && !prefs.onboarded;
+  useModalLayer('welcome', show);
   const [step, setStep] = useState(0);
   const vi = prefs.language === 'vi';
   const fontFamily = resolveFontFamily(prefs.fontStyle);
-  if (prefs.onboarded) return null;
+  if (!show) return null;
 
   const finish = () => updatePrefs({ onboarded: true });
 

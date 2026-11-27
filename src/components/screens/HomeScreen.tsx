@@ -594,7 +594,7 @@ export const HomeScreen: React.FC = () => {
             <View style={styles.sectionHeader}>
               <Tap
                 onPress={() => openCharts(null)}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}
               >
                 <SectionTitle fontFamily={fontFamily}>
                   {vi
@@ -1006,6 +1006,7 @@ const styles = themedSheet(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
     paddingHorizontal: 18,
     marginTop: 20,
     marginBottom: 10,
