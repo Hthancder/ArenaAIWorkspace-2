@@ -120,7 +120,6 @@ export interface HolySicPreferences {
   themeMode: 'dark' | 'light' | 'auto';
   pureBlack: boolean;
   enableBlur: boolean;
-  animationSpeed: number; // 0.6x .. 1.8x
   fontStyle: AppFontStyle;
   playerStyle: PlayerStyle;
   playerBackground: PlayerBackgroundStyle;
@@ -228,7 +227,6 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   themeMode: 'dark',
   pureBlack: false,
   enableBlur: true,
-  animationSpeed: 1.0,
   fontStyle: 'inter',
   playerStyle: 'FLAGSHIP',
   playerBackground: 'AMBIENT',

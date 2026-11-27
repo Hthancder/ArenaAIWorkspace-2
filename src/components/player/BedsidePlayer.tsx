@@ -1,7 +1,7 @@
 // HolySic Bedside Nightstand Clock Player — Ported from BedsideClockFace & BedsideNightTint in PreferenceKeys.kt (Mochy Music)
 
 import { Ionicons } from '@expo/vector-icons';
-import { useKeepAwake } from 'expo-keep-awake';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Tap } from '../ui/Tap';
@@ -11,7 +11,13 @@ import { useHolySic } from '../../context/HolySicContext';
 import { useHoldSeek } from '../../hooks/useHoldSeek';
 
 export const BedsideClockView: React.FC = () => {
-  useKeepAwake();
+  // the nightstand clock keeps the screen on (released when the style or player closes)
+  useEffect(() => {
+    activateKeepAwakeAsync('holysic-bedside').catch(() => {});
+    return () => {
+      deactivateKeepAwake('holysic-bedside').catch(() => {});
+    };
+  }, []);
   const {
     currentTrack,
     isPlaying,

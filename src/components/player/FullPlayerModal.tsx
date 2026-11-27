@@ -798,7 +798,21 @@ export const FullPlayerModal: React.FC = () => {
                 <IpodClassicView />
               </FitStage>
             ) : prefs.playerStyle === 'BEDSIDE' ? (
-              <BedsideClockView />
+              // swipe the clock ← next · → previous (it slides and fades, no tilt)
+              <Animated.View
+                {...coverPan.panHandlers}
+                style={{
+                  flex: 1,
+                  alignSelf: 'stretch',
+                  opacity: coverX.interpolate({
+                    inputRange: [-420, 0, 420],
+                    outputRange: [0.2, 1, 0.2],
+                  }),
+                  transform: [{ translateX: Animated.multiply(coverX, 0.5) }],
+                }}
+              >
+                <BedsideClockView />
+              </Animated.View>
             ) : prefs.playerStyle === 'TURNTABLE' ? (
               <FitStage>
                 <CoverGlow
@@ -808,7 +822,13 @@ export const FullPlayerModal: React.FC = () => {
                   still={ambient.reduceMotion}
                   size={300}
                 >
-                  <TurntableVinylStage />
+                  {/* swipe the deck ← next · → previous */}
+                  <Animated.View
+                    {...coverPan.panHandlers}
+                    style={{ transform: [{ translateX: coverX }] }}
+                  >
+                    <TurntableVinylStage />
+                  </Animated.View>
                 </CoverGlow>
               </FitStage>
             ) : (

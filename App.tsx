@@ -182,7 +182,11 @@ const HolySicShell: React.FC = () => {
         {/* Settings › Background & effects: one layer under every tab */}
         <AppBackdrop />
         {prefs.musicVideo && prefs.videoAmbientApp && (
-          <AppVideoAmbient hidden={isPlayerOpen} level={prefs.videoAmbientLevel * 0.6} />
+          <AppVideoAmbient
+            hidden={isPlayerOpen}
+            level={prefs.videoAmbientLevel * (scheme === 'light' ? 0.45 : 0.6)}
+            light={scheme === 'light'}
+          />
         )}
         <View style={{ flex: 1 }}>
           {/* tabs stay alive once visited (scroll position, search text, open filters survive a

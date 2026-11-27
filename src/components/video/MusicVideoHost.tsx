@@ -29,7 +29,11 @@ export const MusicVideoHost: React.FC = () => {
     queueIndex,
     resolvedStream,
     switchToVideoAudio,
+    audioLab,
   } = useHolySic();
+  // Audio Lab speed (0.75–1.5×) and bit-perfect mode, so the picture runs at the music's pace
+  const audioRate =
+    audioLab.enabled && !prefs.bitPerfect && audioLab.playbackRate > 0 ? audioLab.playbackRate : 1;
   const player = useVideoPlayer(null, (p) => {
     p.muted = true;
     // picture only: never take the audio session from the music engine
@@ -43,8 +47,8 @@ export const MusicVideoHost: React.FC = () => {
   VideoStore.player = player;
   const videoId = useVideoState().videoId;
 
-  const live = useRef({ isPlaying, resolvedStream, switchToVideoAudio, prefs });
-  live.current = { isPlaying, resolvedStream, switchToVideoAudio, prefs };
+  const live = useRef({ isPlaying, resolvedStream, switchToVideoAudio, prefs, audioRate });
+  live.current = { isPlaying, resolvedStream, switchToVideoAudio, prefs, audioRate };
   const switched = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -184,16 +188,21 @@ export const MusicVideoHost: React.FC = () => {
       lastClockAt = Date.now();
     });
     let seekedAt = 0;
+    // only touch the rate when it changes (each set re-applies AVPlayer.rate)
+    const setRate = (r: number) => {
+      if (Math.abs(player.playbackRate - r) > 0.001) player.playbackRate = r;
+    };
     const tick = () => {
       const st = VideoStore.get();
       if (st.status !== 'ready') return;
       const playing = live.current.isPlaying;
       const want = playing && VideoLive.get();
-      const target = lastClock + (playing ? (Date.now() - lastClockAt) / 1000 : 0);
+      const rate = live.current.audioRate;
+      const target = lastClock + (playing ? ((Date.now() - lastClockAt) / 1000) * rate : 0);
       try {
         if (!want) {
+          // (no playbackRate here: on iOS setting a rate starts AVPlayer again)
           if (player.playing) player.pause();
-          player.playbackRate = 1;
           // a resting picture still shows the right scene
           if (Math.abs(player.currentTime - target) > 1.5 && Date.now() - seekedAt > 1500) {
             player.currentTime = target;
@@ -213,12 +222,12 @@ export const MusicVideoHost: React.FC = () => {
             player.currentTime = target;
             seekedAt = Date.now();
           }
-          player.playbackRate = 1;
+          setRate(rate);
         } else if (Math.abs(drift) > 0.12) {
           // small drift: catch up smoothly instead of a jump
-          player.playbackRate = drift > 0 ? 0.94 : 1.06;
+          setRate(rate * (drift > 0 ? 0.94 : 1.06));
         } else {
-          player.playbackRate = 1;
+          setRate(rate);
         }
         if (!player.playing) player.play();
       } catch {

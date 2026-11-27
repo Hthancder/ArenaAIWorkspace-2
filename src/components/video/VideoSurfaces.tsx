@@ -94,8 +94,10 @@ export const VideoAmbient: React.FC<{
   level: number;
   /** extra darkening at the bottom (controls stay readable) */
   shade?: boolean;
+  /** light appearance: a pale frost instead of the dark one */
+  light?: boolean;
   style?: StyleProp<ViewStyle>;
-}> = ({ live, level, shade = true, style }) => {
+}> = ({ live, level, shade = true, light = false, style }) => {
   const st = useVideoState();
   const ready = st.status === 'ready' && !!VideoStore.player;
   useLive(ready && live);
@@ -113,12 +115,16 @@ export const VideoAmbient: React.FC<{
       />
       <BlurView
         intensity={Platform.OS === 'ios' ? 70 : 60}
-        tint="dark"
+        tint={light ? 'light' : 'dark'}
         style={StyleSheet.absoluteFill}
       />
       {shade && (
         <LinearGradient
-          colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.7)']}
+          colors={
+            light
+              ? ['rgba(255,255,255,0.35)', 'rgba(255,255,255,0.55)', 'rgba(255,255,255,0.8)']
+              : ['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.7)']
+          }
           style={StyleSheet.absoluteFill}
         />
       )}
@@ -128,9 +134,10 @@ export const VideoAmbient: React.FC<{
 
 /** Behind the tabs: the last scene, still (menus never move). Fades in; off while the full player
  *  covers the app, so the blur isn't drawn twice. */
-export const AppVideoAmbient: React.FC<{ hidden: boolean; level: number }> = ({
+export const AppVideoAmbient: React.FC<{ hidden: boolean; level: number; light?: boolean }> = ({
   hidden,
   level,
+  light,
 }) => {
   const st = useVideoState();
   const ready = st.status === 'ready';
@@ -146,7 +153,7 @@ export const AppVideoAmbient: React.FC<{ hidden: boolean; level: number }> = ({
   if (!show) return null;
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: fade }]}>
-      <VideoAmbient live={false} level={level} />
+      <VideoAmbient live={false} level={level} light={light} />
     </Animated.View>
   );
 };
