@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Duality - Injection Core
 // @namespace    arena.survev.injection-core
-// @version      1.1.0
+// @version      1.2.0
 // @description  Capture the game and install reversible hooks; no cheat features.
 // @match        https://survev.io/*
 // @match        https://*.survev.io/*
@@ -20,11 +20,13 @@
  *   core.hookSender((forward, type, message, ...rest) => forward(type, message, ...rest));
  *   core.hookSender(handler, knownMethodName); // nếu biết chính xác tên sender
  *   core.addTicker(callback, priority); // trả hàm gỡ
- *   core.status(); core.dispose();
+ *   core.onDispose(callback); core.status(); core.dispose();
  * Dò sender tự động chỉ nhận một method chứa lệnh gọi serializeMsg trực tiếp.
  * Đây là kiểm tra văn bản hẹp, không phải phân tích AST: nếu game đổi hoặc
  * minify khác, có thể không tìm được hoặc cần tự xác minh và chỉ định tên.
- * Handler tự chịu trách nhiệm bảo toàn input và gọi forward. Không tự thêm Fire.
+ * Handler tự chịu trách nhiệm bảo toàn input và gọi forward. Nếu handler lỗi
+ * trước khi forward thì core chuyển tiếp đối số hiện tại; không hoàn tác dữ
+ * liệu handler đã sửa. Lỗi của sender gốc không bị nuốt. Không tự thêm Fire.
  */
 (() => {
   'use strict';
@@ -115,9 +117,21 @@
       if (!alive || !app || typeof handler !== 'function') return false;
       const game = app.game, name = knownMethodName === null ? findSender(game) : knownMethodName;
       if (typeof name !== 'string' || !name) return false;
+      let warned = false;
       return !!patch(game, name, original => function (...args) {
         const receiver = this;
-        return nativeApply(handler, receiver, [(...next) => nativeApply(original, receiver, next), ...args]);
+        let forwarded = false, result, originalFailed = false, originalError;
+        const forward = (...next) => {
+          forwarded = true;
+          try { result = nativeApply(original, receiver, next); return result; }
+          catch (error) { originalFailed = true; originalError = error; throw error; }
+        };
+        try { return nativeApply(handler, receiver, [forward, ...args]); }
+        catch (error) {
+          if (originalFailed) throw originalError;
+          if (!warned) { warned = true; win.console?.warn?.('[Injection core] sender handler failed; forwarding when possible', error); }
+          return forwarded ? result : nativeApply(original, receiver, args);
+        }
       });
     },
     addTicker(fn, priority = 0) {
@@ -125,6 +139,13 @@
       const ticker = app.pixi.ticker || app.pixi._ticker; ticker.add(fn, null, priority);
       let active = true;
       return addCleanup(() => { if (active) { active = false; ticker.remove(fn, null); } });
+    },
+    onDispose(fn) {
+      if (typeof fn !== 'function') throw new TypeError('onDispose requires a function');
+      if (!alive) { notify(fn); return () => {}; }
+      let active = true;
+      addCleanup(() => { if (active) { active = false; fn(); } });
+      return () => { active = false; };
     },
     dispose() {
       if (!alive) return;

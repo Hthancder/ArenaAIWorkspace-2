@@ -65,3 +65,37 @@ test('the checked-in build is reproducible and syntactically valid', () => {
   execFileSync(process.execPath, ['--check', 'duality-reborn.user.js']);
   execFileSync(process.execPath, ['--check', 'src/duality-payload.js']);
 });
+
+test('sender failures forward once, but original sender errors remain visible', async () => {
+  const ctx = context();
+  ctx.console = {warn() {}, error() {}};
+  run(ctx, `
+    globalThis.app = { game: { calls:0, serializeMsg(type, msg) { this.calls++; if (msg.fail) throw Error('original'); return type; }, send(type,msg) { return this.serializeMsg(type,msg); } }, pixi:{stage:{},ticker:{add(){},remove(){}}} };
+    (function() {}).call(app);
+  `);
+  await flush();
+  run(ctx, `globalThis.core = window[Symbol.for('duality.injection.core.v1')];
+    globalThis.mode = 'before';
+    core.hookSender((forward, ...args) => {
+      if (mode === 'before') throw Error('handler');
+      const value = forward(...args);
+      if (mode === 'after') throw Error('handler after forward');
+      return value;
+    });`);
+  assert.equal(run(ctx, `app.game.send(3,{})`), 3);
+  assert.equal(run(ctx, 'app.game.calls'), 1);
+  assert.equal(run(ctx, `mode='after'; app.game.send(4,{})`), 4);
+  assert.equal(run(ctx, 'app.game.calls'), 2);
+  assert.throws(() => run(ctx, `mode='ok'; app.game.send(3,{fail:true})`), /original/);
+  assert.equal(run(ctx, 'app.game.calls'), 3);
+  run(ctx, 'core.dispose()');
+});
+
+test('dispose callbacks run once and can be unregistered', () => {
+  const ctx = context();
+  run(ctx, `globalThis.core = window[Symbol.for('duality.injection.core.v1')]; globalThis.count=0;
+    core.onDispose(() => count++);
+    const cancel = core.onDispose(() => count += 100); cancel();
+    core.dispose(); core.dispose();`);
+  assert.equal(ctx.count, 1);
+});

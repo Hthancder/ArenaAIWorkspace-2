@@ -32,7 +32,7 @@ Các test dùng mock kiểm tra capture, replay, sender, ticker, cleanup và bui
 
 ### Chẩn đoán ESP / X-ray / aimbot
 
-Sau khi cài bản 0.1.4, vào một trận, bật các tính năng cần thử và chờ vài giây. Trong Console chạy:
+Sau khi cài bản 0.1.5, vào một trận, bật các tính năng cần thử và chờ vài giây. Trong Console chạy:
 
 ```js
 JSON.stringify(window[Symbol.for('duality.reborn.diagnostics.v1')]?.status(), null, 2)
@@ -48,3 +48,11 @@ Báo lại kết quả cùng chế độ chơi (solo/đội), tính năng đã b
 - [`client/src/objects/player.ts`](https://github.com/survev/survev/blob/cf49d323a763115b33d486b31c84ea70761da33d/client/src/objects/player.ts), [`objectPool.ts`](https://github.com/survev/survev/blob/cf49d323a763115b33d486b31c84ea70761da33d/client/src/objects/objectPool.ts): player nằm trong `playerPool`, thông tin team nằm trong `teamInfo`; pool chứa mảng nội bộ.
 - [`client/src/objects/building.ts`](https://github.com/survev/survev/blob/cf49d323a763115b33d486b31c84ea70761da33d/client/src/objects/building.ts), [`map.ts`](https://github.com/survev/survev/blob/cf49d323a763115b33d486b31c84ea70761da33d/client/src/map.ts): nóc được đánh dấu bằng `imgs[].isCeiling`, buildings và obstacles ở các pool riêng, không nhất thiết có tên texture chứa `ceiling`.
 - [`client/vite-plugins/codefendPlugin.ts`](https://github.com/survev/survev/blob/cf49d323a763115b33d486b31c84ea70761da33d/client/vite-plugins/codefendPlugin.ts): production đổi tên thuộc tính `m_` bằng tên ngẫu nhiên; không thể giả định tên TypeScript tồn tại nguyên vẹn trên site. Bản port dùng dấu hiệu cấu trúc cho một số mapping và tiếp tục dò sau khi init, nhưng các heuristic còn lại vẫn cần kiểm thử trên bản đang triển khai.
+
+## Injection và rủi ro tài khoản (0.1.5)
+
+So với source ở commit trên, core chặn sender có một lệnh gọi trực tiếp `serializeMsg`, tương ứng với `Game.m_sendMessage`. `MsgType.Input` có giá trị 3 và chứa `inputs`; client chỉ xử lý phần input khi cả hai điều kiện này khớp. Hook Semi Auto không còn tự bật trạng thái bắn ngay lúc khởi động, mà chờ sự kiện nhấn chuột. Core chuyển tiếp nếu handler lỗi trước khi gọi sender; nếu sender đã được gọi thì không gọi lại chỉ vì handler lỗi. **Nếu handler đã sửa object trước khi lỗi, việc chuyển tiếp không tự hoàn tác thay đổi đó.** Lỗi từ sender gốc vẫn được báo.
+
+Các hook che `Function.prototype.toString` và che bộ font trong payload cũ đã bị loại bỏ. Hook method do payload tạo được đăng ký khôi phục khi core dispose nếu chưa bị script khác thay thế. Dispose vẫn không gỡ toàn bộ DOM, event listeners và các hook khác của client gốc; tải lại trang để dọn sạch.
+
+**Không có antiban được bảo đảm.** Source công khai có các nhãn liên quan anti-cheat trong [`shared/net/net.ts`](https://github.com/survev/survev/blob/cf49d323a763115b33d486b31c84ea70761da33d/shared/net/net.ts), xử lý gói lỗi trong [`server/src/game/client.ts`](https://github.com/survev/survev/blob/cf49d323a763115b33d486b31c84ea70761da33d/server/src/game/client.ts), và các chức năng quản lý ban. Source công khai không cho biết toàn bộ cách triển khai, chính sách hoặc kiểm duyệt của máy chủ thực tế; aimbot/X-ray và các tính năng sửa input có thể vi phạm quy định và dẫn đến khóa tài khoản. Muốn tránh rủi ro đó, không sử dụng chúng trên máy chủ không cho phép.

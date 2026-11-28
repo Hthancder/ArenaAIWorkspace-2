@@ -62,9 +62,14 @@ function n() {
   } catch (error) { rebornError("xrayPools", error); }
 }
 function t(e, n, t) {
-  const r = e[n],
-    o = new Proxy(r, t);
-  (et.set(o, r), (e[n] = o));
+  const descriptor = Object.getOwnPropertyDescriptor(e, n);
+  const original = e[n], wrapper = new Proxy(original, t);
+  e[n] = wrapper;
+  Ln[Symbol.for("duality.injection.core.v1")].onDispose(() => {
+    if (e[n] !== wrapper) return;
+    if (descriptor) Object.defineProperty(e, n, descriptor);
+    else delete e[n];
+  });
 }
 function r(e) {
   return Object.keys(Vn.game[Yn.P].teamInfo).find((n) =>
@@ -1922,119 +1927,14 @@ null === Qn &&
   }, 250));
 let Yn = {},
   Xn = !1;
-const et = new WeakMap();
-(t(Ln.Function.prototype, "toString", {
-  apply(e, n, t) {
-    return Reflect.apply(e, et.get(n) || n, t);
-  },
-}));
+// Do not spoof function source or hide fonts from the page. Those global
+// hooks are unrelated to game compatibility and interfere with other code.
 const nt = EventTarget.prototype.addEventListener,
   tt = EventTarget.prototype.removeEventListener,
   rt = Array.from(
     { length: 12 },
-    () =>
-      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"[
-        Math.floor(52 * Math.random())
-      ],
-  ).join(""),
-  ot = Dn.fonts,
-  it = (e) => e && e.family === rt,
-  at = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ot), "size");
-((at.get = new Proxy(at.get, {
-  apply(e, n, t) {
-    return Reflect.apply(e, n, t) - 5;
-  },
-})),
-  Object.defineProperty(Object.getPrototypeOf(ot), "size", at),
-  t(ot, "values", {
-    apply(e, n, t) {
-      const r = Reflect.apply(e, n, t);
-      return {
-        [Symbol.iterator]() {
-          return this;
-        },
-        next() {
-          let e = r.next();
-          for (; !e.done && it(e.value);) e = r.next();
-          return e;
-        },
-      };
-    },
-  }),
-  t(ot, "entries", {
-    apply(e, n, t) {
-      const r = Reflect.apply(e, n, t);
-      return {
-        [Symbol.iterator]() {
-          return this;
-        },
-        next() {
-          let e = r.next();
-          for (; !e.done && it(e.value[0]);) e = r.next();
-          return e;
-        },
-      };
-    },
-  }),
-  t(ot, "keys", {
-    apply(e, n, t) {
-      const r = Reflect.apply(e, n, t);
-      return {
-        [Symbol.iterator]() {
-          return this;
-        },
-        next() {
-          let e = r.next();
-          for (; !e.done && it(e.value);) e = r.next();
-          return e;
-        },
-      };
-    },
-  }),
-  t(ot, "forEach", {
-    apply(e, n, t) {
-      const [r, o] = t;
-      return Reflect.apply(e, n, [
-        (e, n, t) => {
-          it(e) || r.call(o, e, n, t);
-        },
-        o,
-      ]);
-    },
-  }),
-  t(ot, "has", {
-    apply(e, n, t) {
-      const [r] = t;
-      return !it(r) && Reflect.apply(e, n, t);
-    },
-  }),
-  t(ot, "delete", {
-    apply(e, n, t) {
-      const [r] = t;
-      return !it(r) && Reflect.apply(e, n, t);
-    },
-  }),
-  t(ot, "check", {
-    apply(e, n, t) {
-      const [r] = t;
-      return (!r || !r.includes(rt)) && Reflect.apply(e, n, t);
-    },
-  }),
-  t(ot, Symbol.iterator, {
-    apply(e, n, t) {
-      const r = Reflect.apply(e, n, t);
-      return {
-        [Symbol.iterator]() {
-          return this;
-        },
-        next() {
-          let e = r.next();
-          for (; !e.done && it(e.value);) e = r.next();
-          return e;
-        },
-      };
-    },
-  }));
+    () => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"[Math.floor(52 * Math.random())],
+  ).join("");
 const lt = { capture: !0, passive: !1 },
   ct = (e) => {
     if (e.shiftKey && Bn.wn.Oe)
@@ -4763,7 +4663,7 @@ const yo = { Cr: !1, Nr: !1, jr: !1, Or: !1, Rr: 0 },
                   for (const n of Gn.ht) e.addInput(n);
                   Gn.ht.length = 0;
                 })(o),
-              o.inputs
+              3 === r && Array.isArray(o.inputs)
                 ? ((i = o),
                   zr && ((i.shootStart = !0), (i.shootHold = !0)),
                   ((e) => {
@@ -5022,7 +4922,7 @@ const yo = { Cr: !1, Nr: !1, jr: !1, Or: !1, Rr: 0 },
         : n();
     })(),
       Reflect.apply(nt, Ln, ["wheel", ct, lt]),
-      Cr(),
+      (zr = !1),
       Reflect.apply(nt, Ln, ["mousedown", Or]),
       Reflect.apply(nt, Ln, ["mouseup", Nr]),
       t(Ln.Array.prototype, "sort", {

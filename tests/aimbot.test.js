@@ -77,3 +77,26 @@ test('aimbot targets enemy but not teammate once positions are mapped', () => {
   assert.equal(ctx.target.__id, 3);
   assert.equal(ctx.result.pos.x, 405);
 });
+
+test('legacy method hooks restore owned descriptor without clobbering later hooks', () => {
+  const start = source.indexOf('function t(e, n, t) {');
+  const end = source.indexOf('function r(e) {', start);
+  const ctx = vm.createContext({});
+  vm.runInContext(`
+    const cleanup=[];
+    const Ln = {[Symbol.for('duality.injection.core.v1')]: {onDispose(fn) {cleanup.push(fn);}}};
+    ${source.slice(start,end)}
+    const original = function() { return 1; };
+    const obj={method:original};
+    t(obj,'method',{apply(e,n,args) {return Reflect.apply(e,n,args) + 1;}});
+    globalThis.during = obj.method();
+    cleanup.pop()();
+    globalThis.restored = obj.method === original;
+    t(obj,'method',{apply(e,n,args) {return Reflect.apply(e,n,args);}});
+    const newer=()=>3; obj.method=newer; cleanup.pop()();
+    globalThis.preservesNewer = obj.method === newer;
+  `,ctx);
+  assert.equal(ctx.during,2);
+  assert.equal(ctx.restored,true);
+  assert.equal(ctx.preservesNewer,true);
+});
