@@ -2,7 +2,7 @@
 //
 // Each tab has a small world of its own on three planes — far, middle, near — that slide at
 // different speeds as the phone tilts (the far plane the most, like looking through a window
-// at things at different distances) and drift slowly by themselves:
+// at things at different distances):
 //   Home      aurora    big soft lights far away, bokeh in the middle, sparks up close
 //   Search    stars     a dim starfield, brighter stars, a few four-point glints in front
 //   Library   records   vinyl discs in the distance, album sleeves floating, notes up close
@@ -12,7 +12,7 @@
 // re-renders per frame: every plane is a native-driven transform of the shared tilt values.
 
 import React, { useEffect, useMemo } from 'react';
-import { Animated, Easing, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { MainTab } from '../../constants/preferences';
 import { useHolySic } from '../../context/HolySicContext';
@@ -25,12 +25,8 @@ import { useSvgId, useTilt } from './TiltLayers';
 
 const LEVEL = { low: 0.6, medium: 1, high: 1.45 } as const;
 
-/** points each plane slides at full tilt (far → near), and its own slow drift */
-const PLANES = [
-  { depth: 34, drift: 10, period: 14000 },
-  { depth: 19, drift: 7, period: 10500 },
-  { depth: 8, drift: 5, period: 8200 },
-] as const;
+/** points each plane slides at full tilt (far → near) */
+const PLANES = [{ depth: 34 }, { depth: 19 }, { depth: 8 }] as const;
 
 type Item =
   | { k: 'orb'; x: number; y: number; s: number; c: string; o: number }
@@ -347,51 +343,25 @@ const ItemView: React.FC<{ it: Item; k: number }> = ({ it, k }) => {
   }
 };
 
-/** one plane: slides with the eye by `depth` points and drifts on its own */
-const Plane: React.FC<{
-  depth: number;
-  drift: number;
-  period: number;
-  phase: number;
-  children: React.ReactNode;
-}> = ({ depth, drift, period, phase, children }) => {
-  const float = useMemo(() => new Animated.Value(phase), [phase]);
-  useEffect(() => {
-    const half = { duration: period / 2, easing: Easing.inOut(Easing.sin), useNativeDriver: true };
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(float, { toValue: 1, ...half }),
-        Animated.timing(float, { toValue: 0, ...half }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [float, period]);
-  const style = useMemo(() => {
-    const pad = depth + drift + 12;
-    return {
+/** one plane: slides with the eye by `depth` points. No animation of its own: a still phone
+ *  sends nothing, so a still screen costs nothing (an endless drift re-composited the whole
+ *  screen — and every blur over it — 60 times a second, for as long as the tab was open). */
+const Plane: React.FC<{ depth: number; children: React.ReactNode }> = ({ depth, children }) => {
+  const pad = depth + 12;
+  const style = useMemo(
+    () => ({
       position: 'absolute' as const,
       left: -pad,
       right: -pad,
       top: -pad,
       bottom: -pad,
       transform: [
-        {
-          translateX: Animated.add(
-            Animated.multiply(Tilt.x, depth),
-            float.interpolate({ inputRange: [0, 1], outputRange: [-drift * 0.6, drift * 0.6] })
-          ),
-        },
-        {
-          translateY: Animated.add(
-            Animated.multiply(Tilt.y, depth),
-            float.interpolate({ inputRange: [0, 1], outputRange: [drift, -drift] })
-          ),
-        },
+        { translateX: Animated.multiply(Tilt.x, depth) },
+        { translateY: Animated.multiply(Tilt.y, depth) },
       ],
-    };
-  }, [depth, drift, float]);
-  const pad = depth + drift + 12;
+    }),
+    [depth, pad]
+  );
   return (
     <Animated.View pointerEvents="none" style={style}>
       {/* the plane is oversized (its edges never show as it slides); items use screen points */}
@@ -422,7 +392,7 @@ const Scene: React.FC<{
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: fade }]}>
       {planes.map((items, i) => (
-        <Plane key={i} {...PLANES[i]} phase={(i * 0.37) % 1}>
+        <Plane key={i} depth={PLANES[i].depth}>
           {items.map((it, j) => (
             <ItemView key={j} it={it} k={k} />
           ))}

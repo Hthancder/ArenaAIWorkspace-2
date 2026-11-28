@@ -475,7 +475,7 @@ export const LyricsView: React.FC = () => {
               lineH={size.line}
               onRowLayout={onRowLayout}
               onRowPress={onRowPress}
-              tilt={lyricsTilt.on}
+              tilt={lyricsTilt.on && dist <= 1}
             />
           );
         })}
@@ -2124,7 +2124,9 @@ const LyricRow: React.FC<{
   lineH: number;
   onRowLayout: (id: string, idx: number, y: number) => void;
   onRowPress: (line: LyricLine) => void;
-  /** Settings › Motion › Lyrics depth: the sung line floats in front of the others */
+  /** Settings › Motion › Lyrics depth: the sung line floats in front of the others. Only the
+   *  lines next to it are bound to the tilt (≤ 3 views per sensor sample — binding every row
+   *  made each sample update ~100 native views: the page lagged on the phone) */
   tilt?: boolean;
 }> = React.memo(
   ({
@@ -2188,7 +2190,8 @@ const LyricRow: React.FC<{
           scale={look.scale}
           opacity={look.opacity}
           origin={textAlign === 'center' ? 'center' : textAlign === 'right' ? 'right' : 'left'}
-          depth={tilt ? (isActive ? -7 : 3) : 0}
+          depth={tilt ? -8 : 0}
+          lift={isActive}
         >
           {bubble && !(isActive && !line.isBackground) ? (
             <View
@@ -2237,19 +2240,36 @@ const LineScale: React.FC<{
   /** points this line slides with the tilt: < 0 in front of the page (against the eye), > 0
    *  behind it (with the eye) — the sung line floats over the rest */
   depth?: number;
+  /** how far forward it floats eases in / out (the line being sung is lifted), so the float
+   *  hands over from line to line without a jump */
+  lift?: boolean;
   children: React.ReactNode;
-}> = ({ scale, opacity, origin, depth = 0, children }) => {
+}> = ({ scale, opacity, origin, depth = 0, lift = false, children }) => {
   const s = useAnim(scale);
   const o = useAnim(opacity);
+  const k = useAnim(lift ? 1 : 0);
+  useEffect(() => {
+    if (!depth) {
+      // not bound: just remember where it rests, so it re-enters without a jump
+      k.setValue(lift ? 1 : 0);
+      return;
+    }
+    Animated.timing(k, {
+      toValue: lift ? 1 : 0,
+      duration: 380,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [lift, depth, k]);
   const shift = useMemo(
     () =>
       depth
         ? [
-            { translateX: Animated.multiply(Tilt.x, depth) },
-            { translateY: Animated.multiply(Tilt.y, depth * 0.7) },
+            { translateX: Animated.multiply(Tilt.x, Animated.multiply(k, depth)) },
+            { translateY: Animated.multiply(Tilt.y, Animated.multiply(k, depth * 0.7)) },
           ]
         : [],
-    [depth]
+    [depth, k]
   );
   useEffect(() => {
     Animated.parallel([

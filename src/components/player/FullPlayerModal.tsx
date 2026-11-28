@@ -983,6 +983,8 @@ export const FullPlayerModal: React.FC = () => {
                   depth={prefs.motionCoverEdge !== false ? 7 : 0}
                   radius={prefs.playerStyle === 'POSTER' ? 30 : 26}
                   crisp
+                  glass={ambientColors.corners}
+                  shadowTint={ambientColors.dark}
                   follow={coverFollow}
                 >
                   {/* swipe the cover ← next · → previous */}

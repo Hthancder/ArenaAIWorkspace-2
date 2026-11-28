@@ -7,6 +7,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
 import { T as UI } from '../../theme/ui';
 import { ArtworkImage } from '../ArtworkImage';
+import { useAmbientColors } from '../ambient/AmbientLight';
 import { TiltCard, useTilt } from './TiltLayers';
 
 const SIZE = 132;
@@ -19,13 +20,23 @@ export const MotionPreview: React.FC<{ cover: boolean; edge?: boolean }> = ({
   const vi = prefs.language === 'vi';
   const tilt = useTilt(true);
   const on = tilt.on && cover;
+  const amb = useAmbientColors();
   return (
     <View
       style={styles.wrap}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      <TiltCard on={on} maxDeg={11} float={4} depth={edge ? 5 : 0} radius={18} crisp>
+      <TiltCard
+        on={on}
+        maxDeg={11}
+        float={4}
+        depth={edge ? 5 : 0}
+        radius={18}
+        crisp
+        glass={amb.corners}
+        shadowTint={amb.dark}
+      >
         <View style={styles.card}>
           {currentTrack?.artworkUrl ? (
             <ArtworkImage

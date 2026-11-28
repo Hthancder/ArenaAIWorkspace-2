@@ -14,6 +14,7 @@
 
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, StyleSheet, View, ViewStyle } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useHolySic } from '../../context/HolySicContext';
 import { Tilt, TILT_GAIN } from '../../services/motion/tilt';
@@ -66,7 +67,22 @@ export function useSvgId(prefix: string) {
 // ---------------------------------------------------------------- TiltCard
 
 /** slabs drawn for the card's edge (more = smoother edge, each is one small layer) */
-const EDGE_SLICES = 5;
+const EDGE_SLICES = 4;
+
+/** '#rrggbb' + alpha → rgba() (anything else is returned as is) */
+function withAlpha(c: string, a: number) {
+  const t = String(c || '').trim();
+  let m = /^#?([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(t);
+  if (m) {
+    const n = parseInt(m[1], 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+  m = /^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(t);
+  if (m) return `rgba(${[m[1], m[2], m[3]].map((h) => parseInt(h + h, 16)).join(',')},${a})`;
+  m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(t);
+  if (m) return `rgba(${m[1]},${m[2]},${m[3]},${a})`;
+  return `rgba(160,166,186,${a})`;
+}
 
 export const TiltCard: React.FC<{
   on: boolean;
@@ -81,6 +97,11 @@ export const TiltCard: React.FC<{
   /** the card's content is still (artwork): cache it as a bitmap while it turns, so its edges
    *  are antialiased (iOS doesn't smooth the edges of a layer turned in 3D: they stair-step) */
   crisp?: boolean;
+  /** the song's colours (top-left, top-right, bottom-right, bottom-left): the glass edge
+   *  carries them, like crystal catching the cover and the light around it */
+  glass?: [string, string, string, string];
+  /** colour of the shadow cast on the page (the song's darkest tone; black when absent) */
+  shadowTint?: string;
   /** transforms the card's content has of its own (a swipe, a pause scale…): the edge and the
    *  shadow follow them, so they never peek out from behind a moving card */
   follow?: any[];
@@ -93,6 +114,8 @@ export const TiltCard: React.FC<{
   depth = 0,
   radius = 20,
   crisp = false,
+  glass,
+  shadowTint,
   follow,
   style,
   children,
@@ -129,8 +152,10 @@ export const TiltCard: React.FC<{
             const k = (depth * (EDGE_SLICES - i)) / EDGE_SLICES;
             return {
               key: i,
-              // the far slab is darkest; the one just behind the face catches a little light
-              shade: i === EDGE_SLICES - 1 ? '#2A2A34' : i === 0 ? '#08080B' : '#15151C',
+              // the far slab is the most see-through; nearer ones carry more of the colour
+              alpha: 0.2 + (0.26 * (i + 1)) / EDGE_SLICES,
+              // a bright rim on every slab: the stacked rims read as layers of cut glass
+              rim: 0.22 + (0.4 * (i + 1)) / EDGE_SLICES,
               transform: [
                 ...(follow || []),
                 { translateX: Animated.multiply(Tilt.x, k) },
@@ -167,7 +192,7 @@ export const TiltCard: React.FC<{
     <View collapsable={false} style={style}>
       {showDepth && shadowStyle && (
         <Animated.View pointerEvents="none" style={[styles.castShadow, shadowStyle]}>
-          <CastShadow radius={radius} />
+          <CastShadow radius={radius} tint={shadowTint} />
         </Animated.View>
       )}
       <Animated.View style={on ? { transform } : null}>
@@ -181,7 +206,7 @@ export const TiltCard: React.FC<{
               shouldRasterizeIOS
               style={[styles.slabWrap, { transform: sl.transform }]}
             >
-              <View style={[styles.slab, { borderRadius: radius, backgroundColor: sl.shade }]} />
+              <GlassSlab radius={radius} colors={glass} alpha={sl.alpha} rim={sl.rim} />
             </Animated.View>
           ))}
         <View
@@ -198,17 +223,61 @@ export const TiltCard: React.FC<{
   );
 };
 
-/** soft dark blob under a floating card (a low-res gradient: cheap at any size) */
-const CastShadow: React.FC<{ radius: number }> = ({ radius }) => {
+/** One slab of the card's edge: clear glass tinted with the song's colours (a diagonal blend of
+ *  its four corners, so each side of the edge carries the colour of the cover beside it), with a
+ *  bright rim. Translucent: the backdrop shows through, so it sits in the scene instead of
+ *  framing the cover in black. */
+const GlassSlab: React.FC<{
+  radius: number;
+  colors?: [string, string, string, string];
+  alpha: number;
+  rim: number;
+}> = ({ radius, colors, alpha, rim }) => {
+  const c = colors ?? ['#9AA0B4', '#C9CDD9', '#7C8296', '#B4B9C8'];
+  const grad = useMemo(
+    () =>
+      [
+        withAlpha(c[0], alpha),
+        withAlpha(c[1], alpha * 0.8),
+        withAlpha(c[2], alpha),
+        withAlpha(c[3], alpha * 0.8),
+      ] as const,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [c.join(), alpha]
+  );
+  return (
+    <View
+      style={[
+        styles.slab,
+        {
+          borderRadius: radius,
+          borderColor: `rgba(255,255,255,${rim})`,
+          backgroundColor: 'rgba(255,255,255,0.06)',
+        },
+      ]}
+    >
+      <LinearGradient
+        colors={grad}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+      />
+    </View>
+  );
+};
+
+/** soft blob under a floating card, in the song's darkest tone (a low-res gradient: cheap) */
+const CastShadow: React.FC<{ radius: number; tint?: string }> = ({ radius, tint }) => {
   const id = useSvgId('hs-cast-');
+  const col = tint && /^#?[0-9a-f]{6}$/i.test(tint.trim()) ? tint : '#000000';
   return (
     <LowRes>
       <Svg width="100%" height="100%">
         <Defs>
           <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%">
-            <Stop offset="0" stopColor="#000000" stopOpacity={0.55} />
-            <Stop offset={radius > 40 ? '0.6' : '0.5'} stopColor="#000000" stopOpacity={0.3} />
-            <Stop offset="1" stopColor="#000000" stopOpacity={0} />
+            <Stop offset="0" stopColor={col} stopOpacity={0.5} />
+            <Stop offset={radius > 40 ? '0.6' : '0.5'} stopColor={col} stopOpacity={0.26} />
+            <Stop offset="1" stopColor={col} stopOpacity={0} />
           </RadialGradient>
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
@@ -220,6 +289,14 @@ const CastShadow: React.FC<{ radius: number }> = ({ radius }) => {
 const styles = StyleSheet.create({
   castShadow: { position: 'absolute', left: '-12%', right: '-12%', top: '-6%', bottom: '-18%' },
   slabWrap: { position: 'absolute', left: -2, top: -2, right: -2, bottom: -2 },
-  slab: { position: 'absolute', left: 2, top: 2, right: 2, bottom: 2 },
+  slab: {
+    position: 'absolute',
+    left: 2,
+    top: 2,
+    right: 2,
+    bottom: 2,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   crispPad: { padding: 2, margin: -2 },
 });
