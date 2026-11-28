@@ -15,7 +15,7 @@ const payload = read('src/duality-payload.js');
 const header = `// ==UserScript==
 // @name         Duality Reborn (experimental)
 // @namespace    arena.survev.duality-reborn
-// @version      0.1.3
+// @version      0.1.4
 // @description  Duality Client connected to Injection Core
 // @match        https://survev.io/*
 // @match        https://*.survev.io/*

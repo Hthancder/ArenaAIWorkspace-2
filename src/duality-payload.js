@@ -4214,6 +4214,37 @@ const bo = () => {
     ho &&
     so.render(Oe(co, { Mr: Bn, zr: Ne, Sr: () => uo(!1), version: fo }));
 };
+// Player.render begins by passing its interpolated world position to the
+// camera. Observe that first call on a dummy receiver and abort before any
+// rendering side effects; m_ property names vary between production builds.
+function rebornProbeVisualPosition(player) {
+  if (!player || typeof player.render !== "function") return null;
+  const token = {}, stop = {}, reads = [];
+  let candidate = null;
+  const receiver = new Proxy({}, {
+    get(_target, key) {
+      reads.push(key);
+      if (reads.length > 1) throw stop;
+      return token;
+    },
+    set() { throw stop; },
+  });
+  const camera = new Proxy({}, {
+    get() {
+      return (...args) => {
+        if (args.length === 1 && args[0] === token && reads.length === 1) candidate = reads[0];
+        throw stop;
+      };
+    },
+  });
+  try { Reflect.apply(player.render, receiver, [camera, {}]); } catch (error) {
+    if (error !== stop) return null;
+  }
+  if (typeof candidate !== "string") return null;
+  const descriptor = Object.getOwnPropertyDescriptor(player, candidate);
+  const point = descriptor && "value" in descriptor ? descriptor.value : null;
+  return point && Number.isFinite(point.x) && Number.isFinite(point.y) ? candidate : null;
+}
 function rebornFindGraphics(stage) {
   const stack = [stage], visited = new Set();
   while (stack.length && visited.size < 4096) {
@@ -4287,7 +4318,7 @@ const yo = { Cr: !1, Nr: !1, jr: !1, Or: !1, Rr: 0 },
               function r() {
                 const e = Object.keys(o),
                   n = Object.keys(Yn);
-                return e.every((e) => n.includes(e));
+                return e.every((key) => n.includes(key) && Yn[key] != null && Yn[key] !== "");
               }
               const o = {
                   S: "10-7-0-0-17",
@@ -4549,6 +4580,15 @@ const yo = { Cr: !1, Nr: !1, jr: !1, Or: !1, Rr: 0 },
                         n(r, e);
                       } catch (e) {}
                     }
+                  // Use the interpolated position for both drawing and aim
+                  // when the old update-function fingerprint misses it.
+                  if ((!o.ue || !o.he) && o.Y) {
+                    const positionKey = rebornProbeVisualPosition(r[o.Y]);
+                    if (positionKey) {
+                      if (!o.ue) o.ue = positionKey;
+                      if (!o.he) o.he = positionKey;
+                    }
+                  }
                   try {
                     null != o.P &&
                       Object.getOwnPropertyNames(r[o.P].playerPool).forEach(
