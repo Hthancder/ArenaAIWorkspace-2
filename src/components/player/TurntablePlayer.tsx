@@ -1,56 +1,42 @@
 // HolySic Turntable Player Look — Spinning Vinyl LP Record + Pivoted Tonearm Seek Indicator
 
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
+import { useSpin } from '../../hooks/useSpin';
 import { ArtworkImage } from '../ArtworkImage';
 import { useHolySic } from '../../context/HolySicContext';
 import { usePositionSec } from '../../services/audio/playbackClock';
 import { useAppActive } from '../../services/appActivity';
+import { Tilt } from '../../services/motion/tilt';
+import { VinylSheen } from '../motion/VinylDepth';
 
-export const TurntableVinylStage: React.FC = () => {
+/** `motion` = tilt effects on: the record floats above the plinth, its shadow and the groove
+ *  light follow the angle (the deck itself is turned by the player's TiltCard) */
+export const TurntableVinylStage: React.FC<{ motion?: boolean }> = ({ motion = false }) => {
   const { currentTrack, isPlaying, durationSec, darkPalette: palette } = useHolySic();
   const positionSec = usePositionSec();
-  const spinAnim = useRef(new Animated.Value(0)).current;
-
   const active = useAppActive();
   const spinning = isPlaying && active;
-  useEffect(() => {
-    // Resume from wherever the record stopped instead of snapping back to 0° on every play/pause.
-    if (!spinning) {
-      spinAnim.stopAnimation();
-      return;
-    }
-    let stopped = false;
-    let anim: Animated.CompositeAnimation | null = null;
-    spinAnim.stopAnimation((from) => {
-      if (stopped) return;
-      const start = from % 1;
-      spinAnim.setValue(start);
-      anim = Animated.timing(spinAnim, {
-        toValue: 1,
-        duration: Math.max(1, (1 - start) * 9000),
-        easing: Easing.linear,
-        useNativeDriver: true,
-      });
-      anim.start(({ finished }) => {
-        if (!finished || stopped) return;
-        spinAnim.setValue(0);
-        anim = Animated.loop(
-          Animated.timing(spinAnim, {
-            toValue: 1,
-            duration: 9000,
-            easing: Easing.linear,
-            useNativeDriver: true,
-          })
-        );
-        anim.start();
-      });
-    });
-    return () => {
-      stopped = true;
-      anim?.stop();
-    };
-  }, [spinning, spinAnim]);
+  const spinAnim = useSpin(spinning);
+  // the record sits a few points above the plinth: it moves against the eye, its shadow with it
+  const floatMove = useMemo(
+    () => ({
+      transform: [
+        { translateX: Animated.multiply(Tilt.x, -4) },
+        { translateY: Animated.multiply(Tilt.y, -4) },
+      ],
+    }),
+    []
+  );
+  const shadowMove = useMemo(
+    () => ({
+      transform: [
+        { translateX: Animated.multiply(Tilt.x, 7) },
+        { translateY: Animated.add(Animated.multiply(Tilt.y, 7), 6) },
+      ],
+    }),
+    []
+  );
 
   if (!currentTrack) return null;
 
@@ -66,22 +52,28 @@ export const TurntableVinylStage: React.FC = () => {
   return (
     <View style={styles.deckWrap}>
       <View style={[styles.plinth, { borderColor: palette.accent + '28' }]}>
-        {/* Vinyl LP Record */}
-        <Animated.View style={[styles.vinylDisc, { transform: [{ rotate: spinDeg }] }]}>
-          <View style={styles.groove1} />
-          <View style={styles.groove2} />
-          <View style={styles.groove3} />
+        {/* Vinyl LP Record — the wrapper floats (tilt), the disc spins: separate nodes */}
+        <View style={styles.discSlot}>
+          {motion && <Animated.View style={[styles.discShadow, shadowMove]} />}
+          <Animated.View style={motion ? floatMove : undefined}>
+            <Animated.View style={[styles.vinylDisc, { transform: [{ rotate: spinDeg }] }]}>
+              <View style={styles.groove1} />
+              <View style={styles.groove2} />
+              <View style={styles.groove3} />
 
-          {/* Center Artwork Label */}
-          <View style={[styles.centerLabel, { borderColor: palette.accent }]}>
-            <ArtworkImage
-              source={{ uri: currentTrack.artworkUrl }}
-              fallbackSeed={currentTrack.title}
-              style={styles.labelArt}
-            />
-            <View style={styles.spindleHole} />
-          </View>
-        </Animated.View>
+              {/* Center Artwork Label */}
+              <View style={[styles.centerLabel, { borderColor: palette.accent }]}>
+                <ArtworkImage
+                  source={{ uri: currentTrack.artworkUrl }}
+                  fallbackSeed={currentTrack.title}
+                  style={styles.labelArt}
+                />
+                <View style={styles.spindleHole} />
+              </View>
+            </Animated.View>
+            <VinylSheen on={motion} size={252} label={0.43} />
+          </Animated.View>
+        </View>
 
         {/* Tonearm Pivot & Arm */}
         <View style={styles.pivotBase}>
@@ -118,6 +110,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
+  discSlot: {
+    width: 252,
+    height: 252,
+    marginRight: 16,
+  },
+  discShadow: {
+    position: 'absolute',
+    width: 252,
+    height: 252,
+    borderRadius: 126,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
   vinylDisc: {
     width: 252,
     height: 252,
@@ -127,7 +131,6 @@ const styles = StyleSheet.create({
     borderColor: '#23232D',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
   },
   groove1: {
     position: 'absolute',

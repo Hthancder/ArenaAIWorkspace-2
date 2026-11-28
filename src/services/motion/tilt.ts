@@ -44,17 +44,19 @@ const Y = makeValue();
 type Sub = { remove: () => void };
 type SampleListener = (s: MotionSample) => void;
 
-/** raw-ish sample handed to other motion features (shake, face-down…) on the same subscription */
+/** raw-ish sample handed to other motion features (shake…) on the same subscription */
 export interface MotionSample {
-  /** acceleration including gravity, m/s², device axes */
-  ax: number;
-  ay: number;
-  az: number;
+  /** user acceleration (gravity removed), m/s², device axes */
+  ux: number;
+  uy: number;
+  uz: number;
   /** seconds since the previous sample */
   dt: number;
 }
 
 let refs = 0;
+/** holders that draw with the tilt values (shake alone doesn't need them updated) */
+let visualRefs = 0;
 let gain = 1;
 let sensorSub: Sub | null = null;
 let appSub: Sub | null = null;
@@ -64,6 +66,8 @@ let angY = 0; // eye-down, degrees
 let lastT = 0;
 let sensorOk: boolean | null = null;
 const sampleListeners = new Set<SampleListener>();
+/** low-passed gravity, only for sources without a gravity-free acceleration */
+const grav = { x: 0, y: 0, z: 0 };
 
 // web pointer fallback
 let rafId: number | null = null;
@@ -97,16 +101,30 @@ function onMotion(m: any) {
       const k = Math.exp(-dt / LEAK_TAU);
       angX = Math.max(-MAX_DEG, Math.min(MAX_DEG, angX * k));
       angY = Math.max(-MAX_DEG, Math.min(MAX_DEG, angY * k));
-      X.setValue(shape(angX));
-      Y.setValue(shape(angY));
+      if (visualRefs > 0) {
+        X.setValue(shape(angX));
+        Y.setValue(shape(angY));
+      }
     }
   }
-  if (sampleListeners.size && m?.accelerationIncludingGravity) {
-    const g = m.accelerationIncludingGravity;
-    const s: MotionSample = { ax: +g.x || 0, ay: +g.y || 0, az: +g.z || 0, dt };
+  if (sampleListeners.size) {
+    // gravity-free acceleration (CoreMotion's userAcceleration); a few web browsers only give
+    // the version with gravity — then remove a steady 1 g estimate from its magnitude's axis
+    const u = m?.acceleration;
+    let s: MotionSample | null = null;
+    if (u && Number.isFinite(+u.x)) s = { ux: +u.x || 0, uy: +u.y || 0, uz: +u.z || 0, dt };
+    else if (m?.accelerationIncludingGravity) {
+      const g = m.accelerationIncludingGravity;
+      grav.x += (+g.x - grav.x) * 0.1;
+      grav.y += (+g.y - grav.y) * 0.1;
+      grav.z += (+g.z - grav.z) * 0.1;
+      s = { ux: +g.x - grav.x, uy: +g.y - grav.y, uz: +g.z - grav.z, dt };
+    }
+    if (!s) return;
+    const sample = s;
     sampleListeners.forEach((fn) => {
       try {
-        fn(s);
+        fn(sample);
       } catch {
         /* one bad listener must not stop the others */
       }
@@ -176,6 +194,10 @@ function startPointer() {
     document.removeEventListener('pointerleave', leave);
   };
   const tick = () => {
+    if (visualRefs === 0) {
+      rafId = requestAnimationFrame(tick);
+      return;
+    }
     curX += (pointerX - curX) * 0.12;
     curY += (pointerY - curY) * 0.12;
     X.setValue(curX * gain);
@@ -226,13 +248,27 @@ export const Tilt = {
   x: X as Animated.Value,
   /** eye offset below (+) / above (−) */
   y: Y as Animated.Value,
-  /** start using the sensor; call the returned function when done (ref-counted) */
-  acquire(): () => void {
+  /**
+   * Start using the sensor; call the returned function when done (ref-counted).
+   * `visual: false` = only raw samples are needed (shake): the tilt values aren't pushed.
+   */
+  acquire(opts?: { visual?: boolean }): () => void {
+    const visual = opts?.visual !== false;
+    if (visual) {
+      // first effect on screen: start from the centre, not from an angle wound up unseen
+      if (visualRefs === 0) angX = angY = 0;
+      visualRefs += 1;
+    }
     retain();
     let done = false;
     return () => {
       if (done) return;
       done = true;
+      if (visual) {
+        visualRefs = Math.max(0, visualRefs - 1);
+        // the last effect left but the sensor keeps running (shake): ease back to centre
+        if (visualRefs === 0 && refs > 1) settle();
+      }
       release();
     };
   },

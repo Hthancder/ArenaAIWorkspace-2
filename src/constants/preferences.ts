@@ -237,6 +237,13 @@ export interface HolySicPreferences {
   motionHolo: 'off' | 'liked' | 'all';
   /** backgrounds drift with the tilt (player backdrop, your photo / GIF / video background) */
   motionBackdrop: boolean;
+  /** vinyl depth: the record peeks out behind the Flagship cover; the turntable deck tilts and
+   *  its grooves catch a light that follows the angle */
+  motionVinyl: boolean;
+  /** floating dust in the player, on three depths, glinting with the bass */
+  motionDust: boolean;
+  /** shake the phone (a quick back-and-forth) to skip to the next song */
+  shakeSkip: boolean;
 
   // ── Library ──
   /** how the playlists list is ordered (pinned ones always stay on top) */
@@ -351,6 +358,9 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   motionCover: true,
   motionHolo: 'liked',
   motionBackdrop: true,
+  motionVinyl: true,
+  motionDust: true,
+  shakeSkip: false,
   playlistSort: 'custom',
   playlistView: 'list',
   playlistCreator: '',

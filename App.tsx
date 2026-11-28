@@ -51,6 +51,7 @@ const WidgetBridge: React.FC = () => {
   return null;
 };
 import { usePipBridge } from './src/services/pip/usePipBridge';
+import { ShakeToSkip } from './src/components/motion/ShakeToSkip';
 
 /** Picture in Picture (lyrics / now playing card): own component for the same reason */
 const PipBridge: React.FC = () => {
@@ -341,6 +342,7 @@ export default function App() {
         </Perf>
         <WidgetBridge />
         <PipBridge />
+        <ShakeToSkip />
       </HolySicProvider>
     </SafeAreaProvider>
   );

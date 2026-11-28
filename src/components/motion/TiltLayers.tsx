@@ -43,7 +43,7 @@ export function useTilt(active: boolean): { on: boolean; x: Animated.Value; y: A
 }
 
 /** |x| + |y| mapped to 0…1 — how far from centre the phone is tilted */
-function useMagnitude() {
+export function useMagnitude() {
   return useMemo(() => {
     const ax = Tilt.x.interpolate({ inputRange: [-1, 0, 1], outputRange: [1, 0, 1] });
     const ay = Tilt.y.interpolate({ inputRange: [-1, 0, 1], outputRange: [1, 0, 1] });
@@ -56,7 +56,7 @@ function useMagnitude() {
 }
 
 let idSeq = 0;
-function useSvgId(prefix: string) {
+export function useSvgId(prefix: string) {
   const ref = useRef<string | null>(null);
   if (ref.current == null) ref.current = `${prefix}${++idSeq}`;
   return ref.current;

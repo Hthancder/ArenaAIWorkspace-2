@@ -59,6 +59,8 @@ import { useVideoState, videoWanted, VideoStore } from '../../services/video/vid
 import { openMvOptions } from '../video/MvOptionsSheet';
 import { perfCount } from '../../services/perfProbe';
 import { CoverSheen, TiltCard, useTilt } from '../motion/TiltLayers';
+import { VinylPeek } from '../motion/VinylDepth';
+import { DustField } from '../motion/DustField';
 import { openLyricsEditor } from './LyricsEditor';
 import { PipButton } from './PipButton';
 
@@ -182,8 +184,17 @@ export const FullPlayerModal: React.FC = () => {
   const coverTilt = useTilt(
     isPlayerOpen &&
       pane === 'artwork' &&
-      prefs.motionCover !== false &&
-      (prefs.playerStyle === 'FLAGSHIP' || prefs.playerStyle === 'POSTER')
+      (prefs.playerStyle === 'TURNTABLE'
+        ? prefs.motionVinyl !== false
+        : prefs.motionCover !== false &&
+          (prefs.playerStyle === 'FLAGSHIP' || prefs.playerStyle === 'POSTER'))
+  );
+  // dust floats over every backdrop except the self-contained iPod / bedside looks
+  const dustTilt = useTilt(
+    isPlayerOpen &&
+      prefs.motionDust !== false &&
+      prefs.playerStyle !== 'IPOD' &&
+      prefs.playerStyle !== 'BEDSIDE'
   );
   const backTilt = useTilt(
     isPlayerOpen &&
@@ -431,6 +442,7 @@ export const FullPlayerModal: React.FC = () => {
           {videoMode && prefs.videoAmbient && isPlayerOpen && !prefs.pureBlack && (
             <VideoAmbient live={!ambient.reduceMotion} level={prefs.videoAmbientLevel} />
           )}
+          <DustField on={dustTilt.on} colors={ambientColors.corners} energy={energy} />
           {/* Top Bar — also the grab area for swipe-down-to-close */}
           <View style={styles.topBar} {...dismissPan.panHandlers}>
             <Tap hitSlop={10} onPress={() => setIsPlayerOpen(false)} style={styles.topIconBtn}>
@@ -886,14 +898,17 @@ export const FullPlayerModal: React.FC = () => {
                   energy={energy}
                   still={ambient.reduceMotion}
                   size={300}
+                  drift={coverTilt.on ? 10 : 0}
                 >
-                  {/* swipe the deck ← next · → previous */}
-                  <Animated.View
-                    {...coverPan.panHandlers}
-                    style={{ transform: [{ translateX: coverX }] }}
-                  >
-                    <TurntableVinylStage />
-                  </Animated.View>
+                  {/* the deck turns with the phone; swipe it ← next · → previous */}
+                  <TiltCard on={coverTilt.on} maxDeg={7} float={3}>
+                    <Animated.View
+                      {...coverPan.panHandlers}
+                      style={{ transform: [{ translateX: coverX }] }}
+                    >
+                      <TurntableVinylStage motion={coverTilt.on} />
+                    </Animated.View>
+                  </TiltCard>
                 </CoverGlow>
               </FitStage>
             ) : (
@@ -910,6 +925,19 @@ export const FullPlayerModal: React.FC = () => {
                   >
                     {/* turns with the phone (outside the swipe view: the two never share a node) */}
                     <TiltCard on={coverTilt.on} maxDeg={prefs.playerStyle === 'POSTER' ? 8 : 9}>
+                      {/* the LP half out of its sleeve (drawn first = behind the cover) */}
+                      {coverTilt.on &&
+                        prefs.motionVinyl !== false &&
+                        prefs.playerStyle === 'FLAGSHIP' &&
+                        !showVideo && (
+                          <VinylPeek
+                            size={300}
+                            artworkUrl={currentTrack.artworkUrl}
+                            seed={currentTrack.title}
+                            accent={palette.accent}
+                            playing={isPlaying}
+                          />
+                        )}
                       {/* swipe the cover ← next · → previous */}
                       <Animated.View
                         {...coverPan.panHandlers}

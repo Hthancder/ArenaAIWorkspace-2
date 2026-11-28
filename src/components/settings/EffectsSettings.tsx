@@ -607,6 +607,28 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
                   </View>
                 )}
                 {row(
+                  vi ? 'Đĩa than có chiều sâu' : 'Vinyl depth',
+                  vi
+                    ? 'Đĩa than nhô ra sau bìa (Flagship) và quay theo nhạc; kiểu Đĩa than thì cả mâm nghiêng, rãnh đĩa bắt sáng theo góc cầm máy.'
+                    : 'A record peeks out behind the cover (Flagship) and spins with the music; the Turntable deck tilts and its grooves catch the light.',
+                  sw(
+                    prefs.motionVinyl !== false,
+                    (v) => set({ motionVinyl: v }),
+                    vi ? 'Đĩa than có chiều sâu' : 'Vinyl depth'
+                  )
+                )}
+                {row(
+                  vi ? 'Hạt bụi lơ lửng' : 'Floating dust',
+                  vi
+                    ? 'Hạt sáng bay chậm ở ba tầng sâu trong trình phát, lấp lánh theo tiếng bass.'
+                    : 'Specks of light drift on three depths in the player, glinting with the bass.',
+                  sw(
+                    prefs.motionDust !== false,
+                    (v) => set({ motionDust: v }),
+                    vi ? 'Hạt bụi lơ lửng' : 'Floating dust'
+                  )
+                )}
+                {row(
                   vi ? 'Nền có chiều sâu' : 'Background depth',
                   vi
                     ? 'Nền trình phát và ảnh / GIF / video nền trôi nhẹ ngược với bìa, như hình nền iPhone.'
@@ -661,6 +683,18 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
                 : 'Swipe the mini player or the cover sideways (offline songs too)',
               sw(prefs.swipeToSkip !== false, (v) => set({ swipeToSkip: v }))
             )}
+            {Platform.OS !== 'web' &&
+              row(
+                vi ? 'Lắc để chuyển bài' : 'Shake to skip',
+                vi
+                  ? 'Lắc nhanh qua lại để sang bài kế tiếp (khi app đang mở). Đi bộ hay chạy không làm chuyển bài.'
+                  : 'A quick back-and-forth shake skips to the next song (while the app is open). Walking or running won’t trigger it.',
+                sw(
+                  !!prefs.shakeSkip,
+                  (v) => set({ shakeSkip: v }),
+                  vi ? 'Lắc để chuyển bài' : 'Shake to skip'
+                )
+              )}
             {row(
               vi ? 'Mở trình phát khi chọn bài' : 'Open the player when a song starts',
               vi
