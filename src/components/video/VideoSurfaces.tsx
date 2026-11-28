@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Image,
   Platform,
   Pressable,
   StyleProp,
@@ -49,9 +50,58 @@ export const MusicVideoStage: React.FC<{
   /** lyrics under the video: the quick switch shown with the badge */
   lyricsOn?: boolean;
   onToggleLyrics?: () => void;
-}> = ({ width, accent, vi, style, onBadgePress, onExpand, lyricsOn, onToggleLyrics }) => {
+  /** the song on screen: another song's video (between songs) is never shown for it */
+  trackId?: string;
+  /** dimmed behind the "no video" notice, so the card still belongs to the song */
+  artworkUrl?: string;
+}> = ({
+  width,
+  accent,
+  vi,
+  style,
+  onBadgePress,
+  onExpand,
+  lyricsOn,
+  onToggleLyrics,
+  trackId,
+  artworkUrl,
+}) => {
   const st = useVideoState();
-  const ready = st.status === 'ready' && !!VideoStore.player;
+  const mine = !trackId || st.trackId === trackId;
+  const ready = mine && st.status === 'ready' && !!VideoStore.player;
+  // this song has no video to show: a notice in the card instead of the card turning into the
+  // big cover (the camera button shows the cover)
+  const notice: { icon: keyof typeof Ionicons.glyphMap; title: string; sub: string } | null = !mine
+    ? null
+    : st.status === 'none'
+      ? {
+          icon: 'videocam-off-outline',
+          title: vi ? 'Không tìm thấy MV cho bài này' : 'No music video for this song',
+          sub: vi ? 'Chạm nút camera để xem ảnh bìa' : 'Tap the camera button for the cover',
+        }
+      : st.status === 'error'
+        ? {
+            icon: 'alert-circle-outline',
+            title: vi ? 'Không mở được MV' : 'The video could not be opened',
+            sub: vi ? 'Nhạc vẫn phát bình thường' : 'The music keeps playing',
+          }
+        : st.status === 'offline'
+          ? {
+              icon: 'cloud-offline-outline',
+              title: vi ? 'Đang ngoại tuyến' : 'You’re offline',
+              sub: vi
+                ? 'MV cần mạng (hoặc bản đã lưu)'
+                : 'Videos need the internet (or a saved copy)',
+            }
+          : st.status === 'wifi'
+            ? {
+                icon: 'wifi-outline',
+                title: vi ? 'MV chỉ tải qua Wi-Fi' : 'Videos load on Wi-Fi only',
+                sub: vi
+                  ? 'Đổi trong Cài đặt › Video âm nhạc'
+                  : 'Change it in Settings › Music video',
+              }
+            : null;
   useLive(ready);
   const aspect = Math.max(0.5, Math.min(2.4, st.aspect || 16 / 9));
   const h = Math.round(width / aspect);
@@ -112,11 +162,32 @@ export const MusicVideoStage: React.FC<{
           />
         </Animated.View>
       ) : null}
-      {!ready && (
+      {!ready && notice && (
+        <View style={styles.wait}>
+          {artworkUrl ? (
+            <Image
+              source={{ uri: artworkUrl }}
+              style={[StyleSheet.absoluteFill, { opacity: 0.32 }]}
+              resizeMode="cover"
+              blurRadius={Platform.OS === 'web' ? 0 : 18}
+            />
+          ) : null}
+          <View style={styles.noticeIcon}>
+            <Ionicons name={notice.icon} size={20} color="#fff" />
+          </View>
+          <Text style={styles.noticeTitle} numberOfLines={2}>
+            {notice.title}
+          </Text>
+          <Text style={styles.waitText} numberOfLines={2}>
+            {notice.sub}
+          </Text>
+        </View>
+      )}
+      {!ready && !notice && (
         <View style={styles.wait}>
           <ActivityIndicator color={accent} />
           <Text style={styles.waitText}>
-            {st.status === 'searching'
+            {st.status === 'searching' || !mine
               ? vi
                 ? 'Đang tìm video…'
                 : 'Finding the video…'
@@ -318,7 +389,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
   },
-  waitText: { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '600' },
+  waitText: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingHorizontal: 18,
+  },
+  noticeTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 18,
+  },
+  noticeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
   badgeWrap: { position: 'absolute', top: 10, left: 10 },
   cornerRow: {
     position: 'absolute',

@@ -282,6 +282,13 @@ export const MusicVideoHost: React.FC = () => {
     // and added to the next one, so it lands where the music will be, not where it was
     let seekLead = 0.15;
     let checkSeekAt = 0;
+    // iOS: when one of the views sharing the player goes (the card's picture, hidden by the
+    // camera button), the views left behind — the blurred background — could stop on the last
+    // frame although the music went on. A fresh seek a moment later makes every remaining layer
+    // draw again, and a stalled clock (time not moving while it should) is caught the same way.
+    let nudgeAt = 0;
+    let stallT = -1;
+    let stallSince = 0;
     // speed correction: 0 none, 1 gentle (±3 %), 2 firmer (±6 %) — with hysteresis, so the rate
     // isn't flipped back and forth (each change re-applies AVPlayer.rate)
     let level = 0;
@@ -303,6 +310,7 @@ export const MusicVideoHost: React.FC = () => {
       // nobody sees it: nothing to do (it catches up the moment a view shows it)
       if (!shown) {
         if (player.playing) player.pause();
+        stallT = -1;
         return;
       }
       const moving = playing && !buffering;
@@ -312,6 +320,7 @@ export const MusicVideoHost: React.FC = () => {
         lastClock + (moving ? Math.min(1, (Date.now() - lastClockAt) / 1000) * rate : 0);
       try {
         if (!moving) {
+          stallT = -1;
           // (no playbackRate here: on iOS setting a rate starts AVPlayer again)
           if (player.playing) player.pause();
           // a resting picture still shows the right scene
@@ -323,6 +332,33 @@ export const MusicVideoHost: React.FC = () => {
         if (dur > 0 && target > dur - 0.2) {
           // the song runs past the video's end: hold the last frame
           if (player.playing) player.pause();
+          return;
+        }
+        const now = Date.now();
+        if (nudgeAt && now >= nudgeAt) {
+          nudgeAt = 0;
+          seekTo(target, true, rate);
+          if (!player.playing) player.play();
+          return;
+        }
+        // the picture's clock stuck while it should run (and no seek in flight)
+        const ct = player.currentTime;
+        if (Math.abs(ct - stallT) > 0.05 || player.status === 'loading') {
+          stallT = ct;
+          stallSince = now;
+        } else if (
+          now - stallSince > 1600 &&
+          now - seekedAt > 6000 &&
+          player.status === 'readyToPlay'
+        ) {
+          stallSince = now;
+          try {
+            player.pause();
+          } catch {
+            // ignore
+          }
+          seekTo(target, true, rate);
+          player.play();
           return;
         }
         const drift = player.currentTime - target;
@@ -360,11 +396,15 @@ export const MusicVideoHost: React.FC = () => {
     };
     loop();
     const unsubLive = VideoLive.subscribe(tick);
+    const unsubDrop = VideoLive.onDrop(() => {
+      nudgeAt = Date.now() + 250;
+    });
     const unsubStore = VideoStore.subscribe(tick);
     return () => {
       if (timer) clearTimeout(timer);
       unsubClock();
       unsubLive();
+      unsubDrop();
       unsubStore();
     };
   }, [enabled, player, appActive]);

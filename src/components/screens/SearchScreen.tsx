@@ -79,6 +79,9 @@ export const SearchScreen: React.FC = () => {
     isOnline,
   } = useHolySic();
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  // the query you sent with Enter (or by tapping a suggestion): its suggestions stay folded away
+  // until you type something else
+  const [submitted, setSubmitted] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkMsg, setLinkMsg] = useState<string | null>(null);
 
@@ -128,7 +131,7 @@ export const SearchScreen: React.FC = () => {
   // Suggestions as you type (Musike)
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2 || isLink || listCount > 1 || q.startsWith('#')) {
+    if (q.length < 2 || isLink || listCount > 1 || q.startsWith('#') || q === submitted) {
       setSuggestions([]);
       return;
     }
@@ -145,7 +148,7 @@ export const SearchScreen: React.FC = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, isLink, listCount, searchSuggestions]);
+  }, [query, isLink, listCount, searchSuggestions, submitted]);
 
   const runLink = async () => {
     setLinkBusy(true);
@@ -194,6 +197,8 @@ export const SearchScreen: React.FC = () => {
 
   const submitQuery = (q: string) => {
     setQuery(q);
+    setSubmitted(q.trim());
+    setSuggestions([]);
     addSearchHistory(q);
   };
 
@@ -210,7 +215,7 @@ export const SearchScreen: React.FC = () => {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            onSubmitEditing={() => addSearchHistory(query)}
+            onSubmitEditing={() => submitQuery(query)}
             placeholder={t(prefs.language, 'searchPlaceholder')}
             placeholderTextColor={UI.text3}
             returnKeyType="search"

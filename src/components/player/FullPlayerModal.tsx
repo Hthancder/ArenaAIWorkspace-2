@@ -326,10 +326,20 @@ export const FullPlayerModal: React.FC = () => {
   const videoReady = videoMode && video.status === 'ready' && video.trackId === currentTrack?.id;
   // "Tự phát MV" off and not asked for yet
   const videoIdle = videoMode && video.status === 'idle' && video.trackId === currentTrack?.id;
-  const showVideo =
-    videoReady &&
-    !videoHidden &&
-    (prefs.playerStyle === 'FLAGSHIP' || prefs.playerStyle === 'POSTER');
+  const mvLook = prefs.playerStyle === 'FLAGSHIP' || prefs.playerStyle === 'POSTER';
+  // while the video is on, its card keeps the video's shape: between songs, while this song's
+  // video is still being found, and when there is none (a notice in the card) — the card never
+  // jumps back to the big square cover and then shrinks again
+  const videoPending =
+    videoMode &&
+    !videoReady &&
+    !videoIdle &&
+    !currentTrack.isLive &&
+    currentTrack.source !== 'radio' &&
+    currentTrack.source !== 'synth' &&
+    video.status !== 'off' &&
+    video.status !== 'idle';
+  const showVideo = (videoReady || videoPending) && !videoHidden && mvLook;
   const videoAspect = Math.max(1, Math.min(2.4, video.aspect || 16 / 9));
   // lyrics under the video (Settings › Music video › Lyrics under the video)
   const mvLyricsOn = showVideo && prefs.mvLyrics !== false;
@@ -957,6 +967,8 @@ export const FullPlayerModal: React.FC = () => {
                   >
                     {showVideo ? (
                       <MusicVideoStage
+                        trackId={currentTrack.id}
+                        artworkUrl={currentTrack.artworkUrl}
                         width={videoW}
                         accent={palette.accent}
                         vi={vi}

@@ -10,6 +10,10 @@
 // below 1 is composited as a group in an offscreen pass — three full-screen offscreen passes per
 // frame (the climb never stops) just to dim a few dozen dots. A handful of shared opacity
 // nodes (one per brightness step) drive all the specks instead.
+// Lighter still (it was felt on the phone): fewer specks, and only the near layer glints — the
+// far and middle specks are plain Views with a fixed opacity, so the native animation graph
+// updates ~10 views per frame instead of ~110 (the eye only catches the beat on the big
+// specks anyway). The climb and the tilt stay one transform per layer.
 
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -27,12 +31,14 @@ interface Layer {
   opacity: [number, number];
   /** halo around each speck (near layer only) */
   halo?: boolean;
+  /** the specks glint with the bass (otherwise they rest between the two opacities) */
+  glint?: boolean;
 }
 
 const LAYERS: Layer[] = [
-  { count: 26, r: [0.5, 1.1], depth: 9, climb: 95, opacity: [0.32, 0.5] },
-  { count: 15, r: [1.1, 1.8], depth: -7, climb: 62, opacity: [0.36, 0.7] },
-  { count: 7, r: [1.8, 2.8], depth: -22, climb: 40, opacity: [0.3, 0.9], halo: true },
+  { count: 18, r: [0.6, 1.2], depth: 9, climb: 95, opacity: [0.32, 0.5] },
+  { count: 10, r: [1.1, 1.8], depth: -7, climb: 62, opacity: [0.36, 0.7] },
+  { count: 5, r: [1.8, 2.8], depth: -22, climb: 40, opacity: [0.3, 0.9], halo: true, glint: true },
 ];
 
 /** small deterministic PRNG so the specks don't jump around between renders */
@@ -121,6 +127,9 @@ const DustLayer: React.FC<{
 
   // a margin around the screen so parallax never shows an empty edge
   const m = Math.abs(layer.depth) * 1.6;
+  // a resting speck: a plain View, nothing to update per frame
+  const rest = (layer.opacity[0] + layer.opacity[1]) / 2;
+  const Speck: React.ComponentType<any> = layer.glint ? Animated.View : View;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Animated.View style={[StyleSheet.absoluteFill, styles3.parallax]}>
@@ -134,7 +143,7 @@ const DustLayer: React.FC<{
             specks.map((sp, i) => (
               <React.Fragment key={`${dy}-${i}`}>
                 {layer.halo && (
-                  <Animated.View
+                  <Speck
                     style={{
                       position: 'absolute',
                       left: sp.x + m - sp.r * 3.2,
@@ -143,11 +152,11 @@ const DustLayer: React.FC<{
                       height: sp.r * 6.4,
                       borderRadius: sp.r * 3.2,
                       backgroundColor: sp.c,
-                      opacity: glintOp.halo[sp.o],
+                      opacity: layer.glint ? glintOp.halo[sp.o] : rest * sp.o * 0.08,
                     }}
                   />
                 )}
-                <Animated.View
+                <Speck
                   style={{
                     position: 'absolute',
                     left: sp.x + m - sp.r,
@@ -156,7 +165,7 @@ const DustLayer: React.FC<{
                     height: sp.r * 2,
                     borderRadius: sp.r,
                     backgroundColor: sp.c,
-                    opacity: glintOp.speck[sp.o],
+                    opacity: layer.glint ? glintOp.speck[sp.o] : rest * sp.o,
                   }}
                 />
               </React.Fragment>
@@ -169,7 +178,7 @@ const DustLayer: React.FC<{
 };
 
 /** Put it right above the player's backdrop and below its content. */
-export const DustField: React.FC<{
+const DustFieldImpl: React.FC<{
   on: boolean;
   /** the cover's colours tint some of the specks */
   colors: string[];
@@ -177,7 +186,9 @@ export const DustField: React.FC<{
   energy: Animated.Value;
 }> = ({ on, colors, energy }) => {
   const { width, height } = useWindowDimensions();
-  const tint = useMemo(() => colors.slice(0, 4), [colors]);
+  const key = colors.slice(0, 4).join('|');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tint = useMemo(() => colors.slice(0, 4), [key]);
   if (!on || width < 1 || height < 1) return null;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -187,3 +198,13 @@ export const DustField: React.FC<{
     </View>
   );
 };
+
+// the player re-renders several times a second (clock, spectrum state…): the specks only care
+// about their own props, compared by value
+export const DustField = React.memo(
+  DustFieldImpl,
+  (a, b) =>
+    a.on === b.on &&
+    a.energy === b.energy &&
+    a.colors.slice(0, 4).join('|') === b.colors.slice(0, 4).join('|')
+);

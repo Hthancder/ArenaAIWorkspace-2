@@ -1000,6 +1000,44 @@ class HolySicAudioEngine {
     this.fadeHoldTimer = setTimeout(() => this.flushFadeHold(Math.min(3, s)), (s + 12) * 1000);
   }
 
+  /**
+   * A different song was picked: let go of the current one right away. Without this the old
+   * song kept playing (under the new title, still reporting its position and even its own end —
+   * which skipped the new song) for as long as the new one's stream took to resolve, and for
+   * good when every source failed. The old player fades out in a blink and is released; its
+   * status no longer reaches the app. A crossfade hand-over in progress is left alone.
+   */
+  releaseForSwitch(sec = 0.25): void {
+    if (this.fadeInSec > 0) return;
+    this.loadSeq += 1;
+    this.cancelPendingStart();
+    this.startAt = 0;
+    if (Platform.OS !== 'web') {
+      if (!this.nativePlayer) return;
+      const p = this.nativePlayer;
+      try {
+        this.nativeSub?.remove();
+        this.sampleSub?.remove();
+      } catch {
+        // ignore
+      }
+      this.nativeSub = null;
+      this.sampleSub = null;
+      this.nativePlayer = null;
+      this.notifyPlayer();
+      this.fadeOut({ kind: 'native', p }, sec);
+    } else {
+      if (!this.webAudio) return;
+      if (this.webPollTimer) {
+        clearInterval(this.webPollTimer);
+        this.webPollTimer = null;
+      }
+      const el = this.webAudio;
+      this.webAudio = null;
+      this.fadeOut({ kind: 'web', el }, sec);
+    }
+  }
+
   // ───── Held start (crossfade styles where the next song comes in late) ─────
   private startAt = 0;
   private startTimer: ReturnType<typeof setTimeout> | null = null;

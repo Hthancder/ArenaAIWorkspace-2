@@ -96,6 +96,7 @@ export const useVideoHidden = () =>
 // ── which views are on screen and "live" (the picture moves only while one is) ──
 let live = 0;
 const liveSubs = new Set<() => void>();
+const dropSubs = new Set<() => void>();
 export const VideoLive = {
   hold() {
     live += 1;
@@ -106,9 +107,18 @@ export const VideoLive = {
       done = true;
       live = Math.max(0, live - 1);
       if (live === 0) liveSubs.forEach((f) => f());
+      // one view went away while another still shows the picture (the camera button hid the
+      // video, the blurred background stays): the host nudges the shared player
+      else dropSubs.forEach((f) => f());
     };
   },
   get: () => live > 0,
+  onDrop(f: () => void) {
+    dropSubs.add(f);
+    return () => {
+      dropSubs.delete(f);
+    };
+  },
   subscribe(f: () => void) {
     liveSubs.add(f);
     return () => {

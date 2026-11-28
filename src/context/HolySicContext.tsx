@@ -968,8 +968,10 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const playTokenRef = useRef(0);
 
   const internalStartTrack = useCallback(
-    async (track: Track, startAtSec = 0) => {
+    async (track: Track, startAtSec = 0, keepOld = false) => {
       const token = ++playTokenRef.current;
+      // the old song stops now, not when (or if) the new one's stream has been found
+      if (!keepOld) audioEngine.releaseForSwitch();
       // music video mode: a video found earlier (prefetched) lets the audio come from it at once
       if (prefsRef.current.musicVideo && prefsRef.current.videoAudio && !track.mvId) {
         const mv = peekMusicVideo(track);
@@ -2782,7 +2784,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!cur || cur.mvId === mvId) return;
       const next = { ...cur, mvId };
       setQueue((prev) => prev.map((t) => (t.id === cur.id ? next : t)));
-      internalStartTrack(next, PlaybackClock.get());
+      // same song, sound from the video instead: keep the old stream going until it takes over
+      internalStartTrack(next, PlaybackClock.get(), true);
     },
     [internalStartTrack]
   );
