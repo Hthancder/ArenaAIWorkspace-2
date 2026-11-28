@@ -3,7 +3,7 @@
     "name": "HolySic",
     "slug": "holysic",
     "version": "1.0.0-beta.1",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "holysic",
@@ -92,7 +92,13 @@
       ],
       "@bacons/apple-targets",
       "./plugins/withAppIconSkins",
-      "./plugins/withMutedVideoSession"
+      "./plugins/withMutedVideoSession",
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "PORTRAIT_UP"
+        }
+      ]
     ]
   }
 }

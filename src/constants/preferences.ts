@@ -237,6 +237,14 @@ export interface HolySicPreferences {
   videoWifiOnly: boolean;
   /** load the video by itself when a song starts (off: only when the camera button is tapped) */
   videoAutoPlay: boolean;
+  /** the lyrics (current + next line, in the lyrics effect) under the music video in the player */
+  mvLyrics: boolean;
+  /** full-screen video: lyrics as subtitles over the picture */
+  mvFullLyrics: boolean;
+  /** full-screen video: fit the whole picture ('contain') or fill the screen ('cover') */
+  mvFullFit: 'contain' | 'cover';
+  /** the full player turns with the phone (two-column landscape layout); off = always portrait */
+  playerRotate: boolean;
 
   // ── Downloads ──
   /** ask what to bring along (lyrics / music video) each time a song is downloaded */
@@ -371,6 +379,10 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   videoAudio: true,
   videoWifiOnly: false,
   videoAutoPlay: true,
+  mvLyrics: true,
+  mvFullLyrics: true,
+  mvFullFit: 'contain',
+  playerRotate: true,
   downloadAsk: true,
   downloadLyrics: true,
   downloadMv: false,

@@ -496,6 +496,204 @@ export const LyricsView: React.FC = () => {
   );
 };
 
+// ---------------------------------------------------------------- strip
+
+function stripMetrics(lyricsSize: LyricsSize | undefined, variant: 'card' | 'overlay', scale = 1) {
+  const size = SIZES[lyricsSize || 'M'] ?? SIZES.M;
+  const font = Math.round(size.font * (variant === 'overlay' ? 0.95 : 0.72) * scale);
+  const lineH = Math.round(font * 1.36);
+  // room for a wrapped current line + the next one
+  return { font, lineH, height: lineH * 3 + 14 };
+}
+
+/** the strip's fixed height (the player sizes the video above it with this) */
+export function lyricsStripHeight(lyricsSize: LyricsSize | undefined): number {
+  return stripMetrics(lyricsSize, 'card').height;
+}
+
+/**
+ * Two lines of the lyrics — the one being sung, drawn in the chosen lyrics effect, and the next
+ * one waiting under it. Lives under the music video in the player ('card') and over the
+ * full-screen video as subtitles ('overlay'). Same effects as the lyrics page (ActiveLine), so
+ * switching the effect in Settings changes both.
+ *
+ * The box keeps one height whatever happens (loading, no lyrics, a wrapped line), so the video
+ * above it never jumps.
+ */
+export const LyricsStrip: React.FC<{
+  width: number;
+  variant?: 'card' | 'overlay';
+  onPress?: () => void;
+  onLongPress?: () => void;
+  /** text size factor (the landscape full screen is short: smaller subtitles) */
+  scale?: number;
+}> = ({ width, variant = 'card', onPress, onLongPress, scale = 1 }) => {
+  perfCount('render:LyricsStrip');
+  const {
+    lyrics,
+    isLoadingLyrics,
+    darkPalette: palette,
+    prefs,
+    lyricsOffsetSec,
+    isPlaying,
+    currentTrack,
+  } = useHolySic();
+  const clockIndex = useActiveLyricIndex();
+  const vi = prefs.language === 'vi';
+  const effect: LyricsEffect = prefs.lyricsEffect || 'glow';
+  const fontFamily = resolveFontFamily(prefs.fontStyle);
+  const overlay = variant === 'overlay';
+  const { font, lineH, height } = stripMetrics(prefs.lyricsSize, variant, scale);
+
+  const lines = lyrics?.lines ?? [];
+  const timed = !!lyrics?.synced && lines.length > 0;
+  const idx = timed ? clockIndex : -1;
+  const cur = idx >= 0 ? lines[idx] : undefined;
+  const next = timed ? lines[idx + 1] : undefined; // before the first line: the first line waits
+
+  // each new line rises into place (a short glide, not a jump)
+  const rise = useAnim(0);
+  useEffect(() => {
+    if (!timed || idx < 0) return;
+    rise.setValue(1);
+    Animated.spring(rise, { toValue: 0, useNativeDriver: true, speed: 16, bounciness: 3 }).start();
+  }, [idx, timed, rise]);
+
+  const base: TextStyle = {
+    fontSize: font,
+    lineHeight: lineH,
+    fontWeight: effect === 'minimal' ? '700' : '800',
+    textAlign: 'center',
+    fontFamily,
+    ...(overlay
+      ? {
+          textShadowColor: 'rgba(0,0,0,0.55)',
+          textShadowRadius: 8,
+          textShadowOffset: { width: 0, height: 1 },
+        }
+      : null),
+  };
+
+  let note = '';
+  if (!timed) {
+    note = currentTrack?.isLive
+      ? vi
+        ? 'Radio trực tiếp không có lời'
+        : 'Live radio has no lyrics'
+      : isLoadingLyrics
+        ? vi
+          ? 'Đang tìm lời bài hát…'
+          : 'Finding the lyrics…'
+        : lines.length > 0
+          ? vi
+            ? 'Lời chưa có thời gian · chạm để xem'
+            : 'Lyrics aren’t timed · tap to read'
+          : vi
+            ? 'Chưa có lời cho bài này'
+            : 'No lyrics for this song yet';
+  }
+  const nextLook = lineLook(effect, palette.accent, false, false, 1);
+
+  return (
+    <Tap
+      feedback="opacity"
+      disabled={!onPress && !onLongPress}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={450}
+      style={[stripStyles.box, { width, height }, overlay && stripStyles.overlay]}
+      accessibilityRole="button"
+      accessibilityLabel={
+        cur?.text
+          ? (vi ? 'Lời đang hát: ' : 'Now singing: ') + cur.text
+          : vi
+            ? 'Lời bài hát'
+            : 'Lyrics'
+      }
+      accessibilityHint={vi ? 'Chạm để mở trang lời' : 'Opens the lyrics page'}
+    >
+      {note ? (
+        <View style={stripStyles.noteBox}>
+          <Text numberOfLines={2} style={[stripStyles.note, overlay && stripStyles.noteOverlay]}>
+            {note}
+          </Text>
+        </View>
+      ) : (
+        <Animated.View
+          style={{
+            alignSelf: 'stretch',
+            opacity: rise.interpolate({ inputRange: [0, 1], outputRange: [1, 0.25] }),
+            transform: [
+              {
+                translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [0, lineH * 0.7] }),
+              },
+            ],
+          }}
+        >
+          {cur &&
+            (cur.text.trim() ? (
+              <View key={cur.id} style={{ maxHeight: lineH * 2, overflow: 'hidden' }}>
+                <ActiveLine
+                  line={cur}
+                  endSec={cur.endSec ?? lines[idx + 1]?.startSec}
+                  effect={effect}
+                  accent={palette.accent}
+                  offset={lyricsOffsetSec}
+                  playing={isPlaying}
+                  textStyle={base}
+                  align="center"
+                  gap={font * 0.27}
+                />
+              </View>
+            ) : (
+              // an instrumental break (an empty timed line)
+              <Text key={cur.id} style={[base, { color: palette.accent }]}>
+                ♪
+              </Text>
+            ))}
+          {next && (
+            <LineScale
+              origin="center"
+              key={next.id}
+              scale={0.92}
+              opacity={overlay ? 0.75 : nextLook.opacity}
+            >
+              <Text
+                numberOfLines={1}
+                style={[base, nextLook.text, overlay && { color: 'rgba(255,255,255,0.7)' }]}
+              >
+                {next.text.trim() || '♪'}
+              </Text>
+            </LineScale>
+          )}
+        </Animated.View>
+      )}
+    </Tap>
+  );
+};
+
+const stripStyles = StyleSheet.create({
+  // the current line keeps the top, the next one sits under it (a wrapped line pushes it
+  // down, never up over the video)
+  box: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    paddingTop: 4,
+    borderRadius: 16,
+  },
+  overlay: { paddingHorizontal: 16 },
+  note: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  noteBox: { flex: 1, justifyContent: 'center' },
+  noteOverlay: { color: 'rgba(255,255,255,0.6)', fontSize: 14 },
+});
+
 // ---------------------------------------------------------------- effects
 
 export const LYRICS_EFFECTS: {

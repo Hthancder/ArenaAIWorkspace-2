@@ -3,7 +3,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Tap } from '../ui/Tap';
 import { ArtworkImage } from '../ArtworkImage';
 import { BedsideClockFace, BedsideNightTint } from '../../constants/preferences';
@@ -12,7 +12,8 @@ import { useHoldSeek } from '../../hooks/useHoldSeek';
 import { useActiveLyricIndex } from '../../services/lyrics/lyricClock';
 import { useAppActive } from '../../services/appActivity';
 
-export const BedsideClockView: React.FC = () => {
+/** `wide`: the phone lies sideways (StandBy-like) — the clock and the music side by side */
+export const BedsideClockView: React.FC<{ wide?: boolean }> = ({ wide = false }) => {
   // the nightstand clock keeps the screen on (released when the style or player closes)
   useEffect(() => {
     activateKeepAwakeAsync('holysic-bedside').catch(() => {});
@@ -35,6 +36,7 @@ export const BedsideClockView: React.FC = () => {
   } = useHolySic();
   const activeLyricIndex = useActiveLyricIndex();
   const vi = prefs.language === 'vi';
+  const { width: winW } = useWindowDimensions();
   const ff = useHoldSeek(seekBy, 1);
   const rw = useHoldSeek(seekBy, -1);
 
@@ -89,13 +91,28 @@ export const BedsideClockView: React.FC = () => {
   const activeLyric = lyrics && activeLyricIndex >= 0 ? lyrics.lines[activeLyricIndex]?.text : null;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, wide && styles.containerWide]}>
       {/* Clock Tile */}
-      <Tap onPress={cycleFace} style={styles.clockTile}>
+      <Tap onPress={cycleFace} style={[styles.clockTile, wide && styles.clockTileWide]}>
         {prefs.bedsideClockFace === 'STACKED' ? (
           <View style={{ alignItems: 'center' }}>
             <Text style={[styles.stackedDigits, { color: tintColor }]}>{hh}</Text>
             <Text style={[styles.stackedDigits, { color: tintColor, marginTop: -18 }]}>{mm}</Text>
+          </View>
+        ) : wide ? (
+          <View>
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={[
+                styles.bigDigits,
+                styles.bigDigitsWide,
+                // the tile is ~45 % of the screen: the digits follow its width
+                { color: tintColor, fontSize: Math.round(Math.min(112, winW * 0.125)) },
+              ]}
+            >
+              {hh}:{mm}
+            </Text>
           </View>
         ) : (
           <Text style={[styles.bigDigits, { color: tintColor }]}>
@@ -108,7 +125,9 @@ export const BedsideClockView: React.FC = () => {
       </Tap>
 
       {/* Quiet Music Tile */}
-      <View style={[styles.musicTile, { borderColor: tintColor + '28' }]}>
+      <View
+        style={[styles.musicTile, wide && styles.musicTileWide, { borderColor: tintColor + '28' }]}
+      >
         <View style={styles.musicHeader}>
           <ArtworkImage
             source={{ uri: currentTrack.artworkUrl }}
@@ -185,6 +204,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingVertical: 12,
   },
+  containerWide: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 14,
+    paddingVertical: 4,
+  },
+  clockTileWide: { flex: 1.25, paddingHorizontal: 12 },
+  bigDigitsWide: { fontSize: 112, letterSpacing: -3 },
+  musicTileWide: { flex: 1, justifyContent: 'center' },
   clockTile: {
     alignItems: 'center',
     justifyContent: 'center',

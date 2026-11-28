@@ -44,7 +44,12 @@ export const MusicVideoStage: React.FC<{
    *  the video plays — a tap on the picture shows it for a few seconds (like a video app's
    *  controls), so nothing sits on top of the scenes */
   onBadgePress?: () => void;
-}> = ({ width, accent, vi, style, onBadgePress }) => {
+  /** the full-screen button (bottom-right; always there, faint until the picture is tapped) */
+  onExpand?: () => void;
+  /** lyrics under the video: the quick switch shown with the badge */
+  lyricsOn?: boolean;
+  onToggleLyrics?: () => void;
+}> = ({ width, accent, vi, style, onBadgePress, onExpand, lyricsOn, onToggleLyrics }) => {
   const st = useVideoState();
   const ready = st.status === 'ready' && !!VideoStore.player;
   useLive(ready);
@@ -84,9 +89,13 @@ export const MusicVideoStage: React.FC<{
     },
     []
   );
-  // a new video starts clean
+  // a new video starts clean; once it plays, the buttons show for a moment so they can be found
   useEffect(() => {
-    if (!ready) showChrome(false);
+    showChrome(false);
+    if (!ready || (!onExpand && !onToggleLyrics)) return;
+    const t = setTimeout(() => showChrome(true), 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, showChrome]);
   return (
     <View style={[styles.stage, { width, height: h }, style]}>
@@ -164,6 +173,57 @@ export const MusicVideoStage: React.FC<{
               )}
             </Tap>
           </Animated.View>
+          {(onExpand || onToggleLyrics) && (
+            <View pointerEvents="box-none" style={styles.cornerRow}>
+              {onToggleLyrics && (
+                <Animated.View
+                  pointerEvents={chrome ? 'auto' : 'none'}
+                  style={{ opacity: chromeOp }}
+                >
+                  <Tap
+                    feedback="opacity"
+                    hitSlop={8}
+                    disabled={!chrome}
+                    onPress={() => {
+                      showChrome(true); // keep the controls up a little longer
+                      onToggleLyrics();
+                    }}
+                    style={[styles.cornerBtn, lyricsOn && { backgroundColor: accent }]}
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: !!lyricsOn }}
+                    accessibilityLabel={vi ? 'Lời dưới MV' : 'Lyrics under the video'}
+                  >
+                    <Ionicons
+                      name={lyricsOn ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
+                      size={14}
+                      color="#fff"
+                    />
+                  </Tap>
+                </Animated.View>
+              )}
+              {onExpand && (
+                <Animated.View
+                  style={{
+                    opacity: chromeOp.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }),
+                  }}
+                >
+                  <Tap
+                    feedback="opacity"
+                    hitSlop={10}
+                    onPress={() => {
+                      showChrome(false);
+                      onExpand();
+                    }}
+                    style={styles.cornerBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={vi ? 'Xem MV toàn màn hình' : 'Watch full screen'}
+                  >
+                    <Ionicons name="expand" size={15} color="#fff" />
+                  </Tap>
+                </Animated.View>
+              )}
+            </View>
+          )}
         </>
       )}
     </View>
@@ -260,6 +320,24 @@ const styles = StyleSheet.create({
   },
   waitText: { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '600' },
   badgeWrap: { position: 'absolute', top: 10, left: 10 },
+  cornerRow: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cornerBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',

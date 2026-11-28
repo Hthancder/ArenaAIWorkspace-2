@@ -147,6 +147,25 @@ export const VideoSettings: React.FC<{ fontFamily?: string }> = ({ fontFamily })
           sw(prefs.videoAutoPlay !== false, (v) => set({ videoAutoPlay: v }), 'autoplay', !on)
         )}
         {row(
+          vi ? 'Lời dưới MV' : 'Lyrics under the video',
+          vi
+            ? 'Dòng đang hát (theo hiệu ứng lời bạn chọn) và dòng kế tiếp hiện ngay dưới khung MV. Bật/tắt nhanh: chạm MV rồi bấm nút lời, hoặc giữ vào dòng lời để ẩn.'
+            : 'The line being sung (in your lyrics effect) and the next one sit right under the video. Quick switch: tap the video, then the lyrics button — or hold the lyrics to hide them.',
+          sw(prefs.mvLyrics !== false, (v) => set({ mvLyrics: v }), 'mv lyrics', !on)
+        )}
+        {row(
+          vi ? 'Phụ đề khi xem toàn màn hình' : 'Subtitles in full screen',
+          vi
+            ? 'Bấm nút phóng to ở góc MV để xem toàn màn hình; lời hiện như phụ đề trên hình (đổi nhanh bằng nút chữ ở trên cùng).'
+            : 'The expand button in the video’s corner opens it full screen; the lyrics show as subtitles over the picture (the text button at the top switches them).',
+          sw(
+            prefs.mvFullLyrics !== false,
+            (v) => set({ mvFullLyrics: v }),
+            'full screen lyrics',
+            !on
+          )
+        )}
+        {row(
           vi ? 'Tiếng từ video' : 'Audio from the video',
           vi
             ? 'Phát tiếng của chính MV để hình và tiếng khớp tuyệt đối (bản MV có thể khác bản thu âm).'

@@ -291,6 +291,28 @@ const Body: React.FC<{ track: Track }> = ({ track }) => {
                 accessibilityLabel={vi ? 'Tự phát MV' : 'Play videos automatically'}
               />
             </View>
+            <View style={[s.row, s.divider]}>
+              <View style={[s.icon, { backgroundColor: palette.accent + '22' }]}>
+                <Ionicons name="chatbubble-ellipses" size={16} color={palette.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.rowTitle}>{vi ? 'Lời dưới MV' : 'Lyrics under the video'}</Text>
+                <Text style={s.rowDesc}>
+                  {vi
+                    ? 'Dòng đang hát theo hiệu ứng lời, ngay dưới khung MV'
+                    : 'The line being sung, in your lyrics effect, under the video'}
+                </Text>
+              </View>
+              <Switch
+                value={prefs.mvLyrics !== false}
+                onValueChange={(v) => {
+                  haptic('selection');
+                  updatePrefs({ mvLyrics: v });
+                }}
+                trackColor={{ false: c.field, true: palette.accent }}
+                accessibilityLabel={vi ? 'Lời dưới MV' : 'Lyrics under the video'}
+              />
+            </View>
             {prefs.videoAmbient && (
               <View style={[s.row, s.divider]}>
                 <View style={[s.icon, { backgroundColor: palette.accent + '22' }]}>

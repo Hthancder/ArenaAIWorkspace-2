@@ -662,6 +662,18 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
             )}
             {Platform.OS !== 'web' &&
               row(
+                vi ? 'Xoay ngang trình phát' : 'Rotate the player',
+                vi
+                  ? 'Xoay ngang điện thoại khi đang mở trình phát: ảnh bìa / MV lớn bên trái, nút điều khiển bên phải. Phần còn lại của app luôn dọc. Tắt: trình phát cũng luôn dọc (MV toàn màn hình vẫn xoay được).'
+                  : 'Turn the phone while the player is open: the cover or video large on the left, the controls on the right. The rest of the app stays upright. Off: the player stays upright too (the full-screen video still turns).',
+                sw(
+                  prefs.playerRotate !== false,
+                  (v) => set({ playerRotate: v }),
+                  vi ? 'Xoay ngang trình phát' : 'Rotate the player'
+                )
+              )}
+            {Platform.OS !== 'web' &&
+              row(
                 vi ? 'Lắc để chuyển bài' : 'Shake to skip',
                 vi
                   ? 'Lắc nhanh qua lại để sang bài kế tiếp (khi app đang mở). Đi bộ hay chạy không làm chuyển bài.'
