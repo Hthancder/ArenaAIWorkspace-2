@@ -16,7 +16,12 @@ import {
   View,
 } from 'react-native';
 import { t } from '../../constants/i18n';
-import { LyricsEffect, LyricsPosition, LyricsSize } from '../../constants/preferences';
+import {
+  liveLyricsEffect,
+  LyricsEffect,
+  LyricsPosition,
+  LyricsSize,
+} from '../../constants/preferences';
 import { LyricLine, LyricWord } from '../../types/music';
 import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
@@ -62,7 +67,7 @@ export const LyricsView: React.FC = () => {
   } = useHolySic();
   const clockIndex = useActiveLyricIndex();
   const vi = prefs.language === 'vi';
-  const effect: LyricsEffect = prefs.lyricsEffect || 'glow';
+  const effect = effectOf(prefs.lyricsEffect);
   useStoredLyrics();
   const stored = storedLyricsInfo(currentTrack);
   const openEditor = (tab?: 'search' | 'write') => {
@@ -540,7 +545,7 @@ export const LyricsStrip: React.FC<{
   } = useHolySic();
   const clockIndex = useActiveLyricIndex();
   const vi = prefs.language === 'vi';
-  const effect: LyricsEffect = prefs.lyricsEffect || 'glow';
+  const effect = effectOf(prefs.lyricsEffect);
   const fontFamily = resolveFontFamily(prefs.fontStyle);
   const overlay = variant === 'overlay';
   const { font, lineH, height } = stripMetrics(prefs.lyricsSize, variant, scale);
@@ -711,13 +716,6 @@ export const LYRICS_EFFECTS: {
     descEn: 'The sung line zooms in and glows in the accent colour',
   },
   {
-    id: 'karaoke',
-    vi: 'Karaoke',
-    en: 'Karaoke',
-    descVi: 'Từng chữ được tô màu dần theo giọng hát',
-    descEn: 'Each word fills with colour as it is sung',
-  },
-  {
     id: 'wave',
     vi: 'Nhảy chữ',
     en: 'Bounce',
@@ -730,13 +728,6 @@ export const LYRICS_EFFECTS: {
     en: 'Depth',
     descVi: 'Câu xa mờ dần, như Apple Music',
     descEn: 'Lines fade with distance, Apple Music style',
-  },
-  {
-    id: 'neon',
-    vi: 'Neon',
-    en: 'Neon',
-    descVi: 'Chữ phát sáng rực như đèn neon',
-    descEn: 'A bright neon-sign glow',
   },
   {
     id: 'minimal',
@@ -774,13 +765,6 @@ export const LYRICS_EFFECTS: {
     descEn: 'Unsung words split into red and cyan, snapping together when sung',
   },
   {
-    id: 'dissolve',
-    vi: 'Tan biến',
-    en: 'Dissolve',
-    descVi: 'Chữ bừng sáng khi được hát rồi tan thành bụi sáng, bay đi',
-    descEn: 'Words light up as they are sung, then crumble into glowing dust and drift away',
-  },
-  {
     id: 'bloom',
     vi: 'Bừng nở',
     en: 'Bloom',
@@ -808,7 +792,41 @@ export const LYRICS_EFFECTS: {
     descVi: 'Chữ sáng dần và nhích lên theo giọng hát, kiểu Apple Music',
     descEn: 'Words brighten and rise slightly with the voice, Apple Music style',
   },
+  {
+    id: 'slide',
+    vi: 'Trượt vào',
+    en: 'Slide',
+    descVi: 'Chữ lướt nhanh từ bên phải vào chỗ đúng lúc được hát',
+    descEn: 'Each word glides in from the right the moment it is sung',
+  },
+  {
+    id: 'flip',
+    vi: 'Lật chữ',
+    en: 'Flip',
+    descVi: 'Chữ lật xuống như bảng chữ ở sân bay khi được hát',
+    descEn: 'Words flip down into place like an airport departure board',
+  },
+  {
+    id: 'stamp',
+    vi: 'Đóng dấu',
+    en: 'Stamp',
+    descVi: 'Chữ từ lớn dập xuống đúng nhịp, gọn và mạnh',
+    descEn: 'Words punch down from large onto the beat, crisp and strong',
+  },
+  {
+    id: 'cinema',
+    vi: 'Phụ đề phim',
+    en: 'Cinema',
+    descVi: 'Chỉ câu đang hát, hiện lên nhẹ như phụ đề — các câu khác ẩn gần hết',
+    descEn: 'Only the sung line, easing in like a film subtitle — the others almost vanish',
+  },
 ];
+
+/** the saved effect, or its successor if it was retired (unknown → Glow) */
+export function effectOf(e: string | undefined): LyricsEffect {
+  const live = liveLyricsEffect(e);
+  return LYRICS_EFFECTS.some((x) => x.id === live) ? (live as LyricsEffect) : 'glow';
+}
 
 /** effects that run word by word (estimated timing when the lyrics have none) */
 // Reduce Motion: words still light up, but nothing hops, jolts or scales
@@ -819,17 +837,18 @@ AccessibilityInfo.isReduceMotionEnabled?.()
 AccessibilityInfo.addEventListener?.('reduceMotionChanged', (v) => (calm = v));
 
 const FLOWING: LyricsEffect[] = [
-  'karaoke',
   'wave',
   'focus',
   'typewriter',
   'marker',
   'glitch',
-  'dissolve',
   'bloom',
   'spectrum',
   'rain',
   'lift',
+  'slide',
+  'flip',
+  'stamp',
 ];
 
 const SIZES: Record<LyricsSize, { font: number; line: number }> = {
@@ -857,14 +876,6 @@ function lineLook(
           : { color: '#FFFFFF' },
         scale: active ? 1 : Math.max(0.84, 0.93 - dist * 0.02),
         opacity: DEPTH_OPACITY[Math.min(dist, DEPTH_OPACITY.length - 1)],
-      };
-    case 'neon':
-      return {
-        text: active
-          ? { color: '#FFFFFF', textShadowColor: accent, textShadowRadius: 20 }
-          : { color: accent + (past ? '55' : '80') },
-        scale: active ? 1 : 0.9,
-        opacity: 1,
       };
     case 'minimal':
       return {
@@ -902,12 +913,22 @@ function lineLook(
         scale: active ? 1 : 0.9,
         opacity: 1,
       };
-    case 'dissolve':
-      // sung lines are gone (a faint trace), the ones ahead wait
+    case 'cinema':
+      // a film subtitle: the sung line, crisp with a dark edge; the rest nearly gone
       return {
-        text: {
-          color: active ? '#FFFFFF' : past ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.5)',
-        },
+        text: active
+          ? { color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.75)', textShadowRadius: 6 }
+          : { color: '#FFFFFF' },
+        scale: 1,
+        opacity: active ? 1 : past ? 0.1 : 0.16,
+      };
+    case 'slide':
+    case 'flip':
+    case 'stamp':
+      return {
+        text: active
+          ? { color: '#FFFFFF', textShadowColor: accent + '77', textShadowRadius: 10 }
+          : { color: dim },
         scale: active ? 1 : 0.92,
         opacity: 1,
       };
@@ -938,7 +959,7 @@ function lineLook(
   }
 }
 
-/** A line without word timing gets estimated word starts (by syllable-ish length) so karaoke and
+/** A line without word timing gets estimated word starts (by syllable-ish length) so word fills and
  *  bounce still flow through it; real word timing is always preferred. */
 function estimateWords(line: LyricLine, endSec?: number): LyricWord[] {
   const parts = line.text.split(/\s+/).filter(Boolean);
@@ -1010,6 +1031,7 @@ const ActiveLine: React.FC<{
 }> = (p) => {
   const flowing = FLOWING.includes(p.effect);
   const hasWords = !!p.line.words && p.line.words.length > 0;
+  if (p.effect === 'cinema') return <CinemaLine text={p.line.text} textStyle={p.textStyle} />;
   if (!hasWords && !flowing) {
     const look = lineLook(p.effect, p.accent, true, false, 0);
     return <Text style={[p.textStyle, look.text]}>{p.line.text}</Text>;
@@ -1065,11 +1087,11 @@ const ActiveWords: React.FC<React.ComponentProps<typeof ActiveLine>> = ({
             key={i}
             text={w.text}
             lit={i < lit}
-            ms={Math.max(120, Math.min(700, (w.endSec - w.startSec) * 1000))}
+            // fills that follow the voice never lag a long note: ≤ 0.45 s
+            ms={Math.max(120, Math.min(450, (w.endSec - w.startSec) * 1000))}
             effect={effect}
             accent={accent}
             tint={effect === 'spectrum' ? spectrumColor(accent, i) : accent}
-            seed={i}
             settled={w.endSec + 0.4 < shownAt}
             textStyle={textStyle}
             gap={gap}
@@ -1079,15 +1101,13 @@ const ActiveWords: React.FC<React.ComponentProps<typeof ActiveLine>> = ({
     );
   }
 
-  // glow / depth / neon / minimal with real word timing: lit words light up in place
+  // glow / depth / minimal with real word timing: lit words light up in place
   const on: TextStyle =
     effect === 'minimal'
       ? { color: '#FFFFFF' }
-      : effect === 'neon'
-        ? { color: '#FFFFFF', textShadowColor: accent, textShadowRadius: 20 }
-        : { color: '#FFFFFF', textShadowColor: accent, textShadowRadius: 12 };
+      : { color: '#FFFFFF', textShadowColor: accent, textShadowRadius: 12 };
   const off: TextStyle = {
-    color: effect === 'neon' ? accent + '99' : 'rgba(255,255,255,0.38)',
+    color: 'rgba(255,255,255,0.38)',
     textShadowColor: 'transparent',
     textShadowRadius: 0,
   };
@@ -1158,34 +1178,35 @@ const TypeLine: React.FC<{
 };
 
 type FlowFx =
-  | 'karaoke'
   | 'wave'
   | 'focus'
   | 'marker'
   | 'glitch'
-  | 'dissolve'
   | 'bloom'
   | 'spectrum'
   | 'rain'
-  | 'lift';
+  | 'lift'
+  | 'slide'
+  | 'flip'
+  | 'stamp';
 const FLOW_FX = new Set<string>([
-  'karaoke',
   'wave',
   'focus',
   'marker',
   'glitch',
-  'dissolve',
   'bloom',
   'spectrum',
   'rain',
   'lift',
+  'slide',
+  'flip',
+  'stamp',
 ]);
 const isFlowFx = (e: LyricsEffect): e is FlowFx => FLOW_FX.has(e);
 
-/** how long the lit copy takes to come in, per effect (karaoke-like fills use the word's length) */
+/** how long the lit copy takes to come in, per effect (fills use the word's length, ≤ 0.45 s) */
 function litMs(effect: FlowFx, ms: number): number {
   switch (effect) {
-    case 'karaoke':
     case 'marker':
     case 'spectrum':
     case 'lift':
@@ -1196,36 +1217,32 @@ function litMs(effect: FlowFx, ms: number): number {
       return 220;
     case 'rain':
       return 200;
-    case 'dissolve':
-      return 180;
+    case 'slide':
+      return 230;
+    case 'flip':
+      return 260;
+    case 'stamp':
+      return 200;
     default:
       return 160;
   }
 }
 
-/** dust specks of a dissolving word: where they start (% across the word) and where they fly */
-const DUST = [
-  { x: 12, dx: -9, dy: 20, r: 3, accent: true },
-  { x: 34, dx: 4, dy: 30, r: 2.5, accent: false },
-  { x: 58, dx: -3, dy: 24, r: 3.5, accent: true },
-  { x: 80, dx: 10, dy: 32, r: 2.5, accent: false },
-  { x: 46, dx: 7, dy: 16, r: 2, accent: false },
-];
-
 const IN = { inputRange: [0, 1], extrapolate: 'clamp' as const };
 
 /** One word of a word-by-word line. Native-driven opacity / transform only — every moving part is
  *  an interpolation of one or two values, built once per word (not on each render):
- *  karaoke   the lit copy fades in over the word's own duration
  *  wave      the word hops
  *  focus     a soft, haloed copy pulls into a crisp one
  *  marker    an accent band sweeps under the word over its duration
  *  glitch    red / cyan copies split off the unsung word snap back with a short jolt
- *  dissolve  lights up, holds, then blurs out and crumbles into specks of light that drift up
  *  bloom     pops open while an accent copy of the word spreads out and fades, like a ripple
  *  spectrum  fills with its own hue of a rainbow that starts at the accent
  *  rain      drops in from above and lands with a little bounce
- *  lift      brightens and rises a hair over its duration (Apple Music style) */
+ *  lift      brightens and rises a hair over its duration (Apple Music style)
+ *  slide     glides in from the right (≈ half an em) as it lights
+ *  flip      turns down into place around its middle, like a split-flap board
+ *  stamp     punches down from 1.6× onto the line */
 const FlowWord: React.FC<{
   text: string;
   lit: boolean;
@@ -1234,18 +1251,16 @@ const FlowWord: React.FC<{
   accent: string;
   /** this word's colour (the spectrum hue; the accent otherwise) */
   tint: string;
-  /** the word's index (varies the dust) */
-  seed: number;
   /** already sung (and over) when the line appeared: shown in its final state, no entrance */
   settled: boolean;
   textStyle: any;
   gap: number;
-}> = React.memo(({ text, lit, ms, effect, accent, tint, seed, settled, textStyle, gap }) => {
+}> = React.memo(({ text, lit, ms, effect, accent, tint, settled, textStyle, gap }) => {
   const done = settled && lit;
   const v = useAnim(done ? 1 : 0);
   const hop = useAnim(0);
-  // dissolve: 0 → 1 as the word falls apart; bloom: the ripple
-  const d = useAnim(done && effect === 'dissolve' ? 1 : 0);
+  // bloom: the ripple
+  const d = useAnim(0);
   const fs: number = (StyleSheet.flatten(textStyle)?.fontSize as number) || 25;
 
   // a word long sung when the line appears (opened mid-line, a seek) just sits in its final
@@ -1273,24 +1288,14 @@ const FlowWord: React.FC<{
       Animated.timing(v, {
         toValue: 1,
         duration: litMs(effect, ms),
-        easing: Easing.out(Easing.quad),
+        // the moving entrances decelerate into place (no wobble, done in a quarter second)
+        easing:
+          effect === 'slide' || effect === 'flip' || effect === 'stamp'
+            ? Easing.out(Easing.cubic)
+            : Easing.out(Easing.quad),
         useNativeDriver: true,
       })
     );
-    if (effect === 'dissolve') {
-      // stays lit while it is sung (+ a beat), then falls apart
-      d.setValue(0);
-      run(
-        Animated.timing(d, {
-          toValue: 1,
-          delay: ms + 380,
-          duration: calm ? 600 : 1000,
-          easing: Easing.in(Easing.quad),
-          useNativeDriver: true,
-        })
-      );
-      return () => anims.forEach((a) => a.stop());
-    }
     if (effect === 'bloom') {
       d.setValue(0);
       run(
@@ -1324,7 +1329,7 @@ const FlowWord: React.FC<{
     } else if (effect === 'rain') {
       // from above, landing with a bounce (the spring overshoots below the line and back)
       hop.setValue(1);
-      run(Animated.spring(hop, { toValue: 0, useNativeDriver: true, speed: 11, bounciness: 13 }));
+      run(Animated.spring(hop, { toValue: 0, useNativeDriver: true, speed: 16, bounciness: 9 }));
     } else if (effect === 'glitch') {
       // a few frames of jolt as the layers lock together
       hop.setValue(0);
@@ -1353,43 +1358,6 @@ const FlowWord: React.FC<{
           jolt: hop.interpolate({ inputRange: [-1, 1], outputRange: [-4, 4] }),
         };
       }
-      case 'dissolve':
-        return {
-          dustXY: DUST.map((p, k) => {
-            // each word scatters a little differently
-            const flip = (seed + k) % 2 ? 1 : -1;
-            return {
-              x: d.interpolate({ ...IN, outputRange: [0, p.dx * flip] }),
-              y: d.interpolate({
-                ...IN,
-                outputRange: [0, -(p.dy + ((seed * 7 + k * 5) % 9)) * (fs / 25)],
-              }),
-            };
-          }),
-          dustScale: d.interpolate({ ...IN, outputRange: [0.6, 0.2] }),
-          // the unsung word, then (once gone) a faint trace so the line keeps its shape
-          base: Animated.add(off, d.interpolate({ ...IN, outputRange: [0, 0.28] })),
-          crisp: Animated.multiply(
-            v,
-            d.interpolate({
-              inputRange: [0, 0.5, 1],
-              outputRange: [1, 0.2, 0],
-              extrapolate: 'clamp',
-            })
-          ),
-          halo: d.interpolate({
-            inputRange: [0, 0.35, 1],
-            outputRange: [0, 0.9, 0],
-            extrapolate: 'clamp',
-          }),
-          rise: d.interpolate({ ...IN, outputRange: [0, calm ? 0 : -fs * 0.22] }),
-          grow: d.interpolate({ ...IN, outputRange: [1, calm ? 1 : 1.07] }),
-          dust: d.interpolate({
-            inputRange: [0, 0.12, 0.7, 1],
-            outputRange: [0, 1, 0.65, 0],
-            extrapolate: 'clamp',
-          }),
-        };
       case 'bloom':
         return {
           off,
@@ -1416,6 +1384,20 @@ const FlowWord: React.FC<{
           off,
           scale: v.interpolate({ ...IN, outputRange: [calm ? 1 : 0.96, 1] }),
         };
+      case 'slide':
+        return { off, dx: v.interpolate({ ...IN, outputRange: [calm ? 0 : fs * 0.5, 0] }) };
+      case 'flip':
+        return {
+          off,
+          turn: v.interpolate({ ...IN, outputRange: [calm ? '0deg' : '-88deg', '0deg'] }),
+        };
+      case 'stamp':
+        return {
+          off,
+          press: v.interpolate({ ...IN, outputRange: [calm ? 1 : 1.6, 1] }),
+          // the lit copy is fully there a little before it lands
+          ink: v.interpolate({ inputRange: [0, 0.6], outputRange: [0, 1], extrapolate: 'clamp' }),
+        };
       case 'wave':
         return {
           off,
@@ -1425,7 +1407,7 @@ const FlowWord: React.FC<{
       default:
         return { off };
     }
-  }, [effect, v, hop, d, fs, seed]) as Record<string, any>;
+  }, [effect, v, hop, d, fs]) as Record<string, any>;
 
   if (effect === 'focus') {
     return (
@@ -1511,78 +1493,6 @@ const FlowWord: React.FC<{
     );
   }
 
-  if (effect === 'dissolve') {
-    const moving = { transform: [{ translateY: n.rise }, { scale: n.grow }] };
-    return (
-      <View style={{ marginRight: gap }}>
-        <Animated.Text
-          style={[textStyle, styles.wordText, { color: 'rgba(255,255,255,0.5)', opacity: n.base }]}
-        >
-          {text}
-        </Animated.Text>
-        {/* breaking up: a soft, glowing copy takes over from the crisp one, then fades */}
-        <Animated.Text
-          style={[
-            textStyle,
-            styles.wordText,
-            styles.wordLit,
-            moving,
-            {
-              color: 'rgba(255,255,255,0.4)',
-              textShadowColor: tint,
-              textShadowRadius: 16,
-              opacity: n.halo,
-            },
-            Platform.OS === 'web' && ({ filter: 'blur(3px)' } as any),
-          ]}
-        >
-          {text}
-        </Animated.Text>
-        <Animated.Text
-          style={[
-            textStyle,
-            styles.wordText,
-            styles.wordLit,
-            moving,
-            {
-              color: '#FFFFFF',
-              textShadowColor: accent + 'CC',
-              textShadowRadius: 14,
-              opacity: n.crisp,
-            },
-          ]}
-        >
-          {text}
-        </Animated.Text>
-        {lit &&
-          !calm &&
-          DUST.slice(0, text.length > 3 ? 5 : 3).map((p, k) => (
-            <Animated.View
-              key={k}
-              pointerEvents="none"
-              style={[
-                styles.dust,
-                {
-                  left: `${p.x}%`,
-                  width: p.r * 2,
-                  height: p.r * 2,
-                  borderRadius: p.r,
-                  backgroundColor: p.accent ? accent : '#FFFFFF',
-                  shadowColor: accent,
-                  opacity: n.dust,
-                  transform: [
-                    { translateX: n.dustXY[k].x },
-                    { translateY: n.dustXY[k].y },
-                    { scale: n.dustScale },
-                  ],
-                },
-              ]}
-            />
-          ))}
-      </View>
-    );
-  }
-
   if (effect === 'bloom') {
     return (
       <Animated.View style={{ marginRight: gap, transform: [{ scale: n.pop }] }}>
@@ -1650,15 +1560,46 @@ const FlowWord: React.FC<{
     );
   }
 
-  const litColor = effect === 'karaoke' ? accent : effect === 'spectrum' ? tint : '#FFFFFF';
+  if (effect === 'slide' || effect === 'flip' || effect === 'stamp') {
+    const move =
+      effect === 'slide'
+        ? { opacity: v, transform: [{ translateX: n.dx }] }
+        : effect === 'flip'
+          ? { opacity: v, transform: [{ perspective: fs * 14 }, { rotateX: n.turn }] }
+          : { opacity: n.ink, transform: [{ scale: n.press }] };
+    return (
+      <View style={{ marginRight: gap }}>
+        <Animated.Text
+          style={[textStyle, styles.wordText, { color: 'rgba(255,255,255,0.4)', opacity: n.off }]}
+        >
+          {text}
+        </Animated.Text>
+        <Animated.Text
+          style={[
+            textStyle,
+            styles.wordText,
+            styles.wordLit,
+            {
+              color: '#FFFFFF',
+              textShadowColor: effect === 'stamp' ? accent + 'CC' : accent + '88',
+              textShadowRadius: effect === 'stamp' ? 12 : 10,
+            },
+            move,
+          ]}
+        >
+          {text}
+        </Animated.Text>
+      </View>
+    );
+  }
+
+  const litColor = effect === 'spectrum' ? tint : '#FFFFFF';
   const glow =
-    effect === 'karaoke'
-      ? accent + 'AA'
-      : effect === 'spectrum'
-        ? tint + 'AA'
-        : effect === 'lift'
-          ? 'rgba(255,255,255,0.55)'
-          : accent + '88';
+    effect === 'spectrum'
+      ? tint + 'AA'
+      : effect === 'lift'
+        ? 'rgba(255,255,255,0.55)'
+        : accent + '88';
   return (
     <Animated.View
       style={[
@@ -1695,6 +1636,39 @@ const FlowWord: React.FC<{
     </Animated.View>
   );
 });
+
+/** Cinema: the sung line eases in like a film subtitle (a short fade and rise, once, when it
+ *  becomes the line) — word timing is ignored on purpose, a subtitle shows whole. */
+const CinemaLine: React.FC<{ text: string; textStyle: any }> = ({ text, textStyle }) => {
+  const a = useAnim(0);
+  useEffect(() => {
+    const anim = Animated.timing(a, {
+      toValue: 1,
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    anim.start();
+    return () => anim.stop();
+  }, [a]);
+  const rise = useMemo(() => a.interpolate({ ...IN, outputRange: [calm ? 0 : 10, 0] }), [a]);
+  return (
+    <Animated.Text
+      style={[
+        textStyle,
+        {
+          color: '#FFFFFF',
+          textShadowColor: 'rgba(0,0,0,0.75)',
+          textShadowRadius: 6,
+          opacity: a,
+          transform: [{ translateY: rise }],
+        },
+      ]}
+    >
+      {text}
+    </Animated.Text>
+  );
+};
 
 /** Lines settle to their effect's scale / opacity (no font-size jump, so the page never
  *  reflows), anchored on the side the text is aligned to. */
@@ -1756,7 +1730,7 @@ const LyricRow: React.FC<{
         style={[
           styles.lineWrap,
           isActive &&
-            (effect === 'glow' || effect === 'karaoke' || effect === 'wave') && {
+            (effect === 'glow' || effect === 'wave') && {
               backgroundColor: 'rgba(255,255,255,0.06)',
               borderRadius: 16,
             },
@@ -1963,13 +1937,6 @@ const styles = StyleSheet.create({
   wordLit: { position: 'absolute', left: 0, top: 0 },
   // a highlighter stroke: the lower ⅔ of the line, slightly past the word's start
   // a speck of a dissolving word (starts on the word's middle, flies up as it fades)
-  dust: {
-    position: 'absolute',
-    top: '46%',
-    shadowOpacity: 0.9,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 0 },
-  },
   markerBand: {
     position: 'absolute',
     left: -3,

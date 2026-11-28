@@ -4,7 +4,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
-import { DEFAULT_PREFERENCES, HolySicPreferences } from '../../constants/preferences';
+import {
+  DEFAULT_PREFERENCES,
+  HolySicPreferences,
+  liveLyricsEffect,
+} from '../../constants/preferences';
 import { DEFAULT_EQ_BANDS } from '../../data/curatedCatalog';
 import {
   AudioLabSettings,
@@ -83,6 +87,11 @@ export const StorageService = {
       ...DEFAULT_PREFERENCES,
       ...saved,
       moduleOrder: order,
+      // a lyrics effect that was retired → its closest successor
+      lyricsEffect: (liveLyricsEffect(saved.lyricsEffect) ||
+        DEFAULT_PREFERENCES.lyricsEffect) as HolySicPreferences['lyricsEffect'],
+      pipEffect: (liveLyricsEffect(saved.pipEffect) ||
+        DEFAULT_PREFERENCES.pipEffect) as HolySicPreferences['pipEffect'],
       enabledModules: {
         ...DEFAULT_PREFERENCES.enabledModules,
         ...(saved.enabledModules || {}),

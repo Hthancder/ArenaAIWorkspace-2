@@ -6,6 +6,7 @@
 
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
+import { liveLyricsEffect } from '../../constants/preferences';
 import { useHolySic } from '../../context/HolySicContext';
 import { audioEngine } from '../audio/audioEngine';
 import { PlaybackClock } from '../audio/playbackClock';
@@ -42,7 +43,9 @@ export function usePipBridge(): void {
   const auto = !!prefs.pipAuto;
   // the floating window follows the Lyrics screen's effect unless the user picked its own
   const effect =
-    !prefs.pipEffect || prefs.pipEffect === 'app' ? prefs.lyricsEffect || 'glow' : prefs.pipEffect;
+    liveLyricsEffect(
+      !prefs.pipEffect || prefs.pipEffect === 'app' ? prefs.lyricsEffect : prefs.pipEffect
+    ) || 'glow';
   // the same light as the player: its colours, at the user's ambient strength
   const ambientList =
     ambient.level > 0 && !prefs.pureBlack

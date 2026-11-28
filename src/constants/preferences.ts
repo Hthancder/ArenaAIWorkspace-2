@@ -24,22 +24,35 @@ export type DockVisualizer = 'off' | 'bars' | 'glow';
 /** how the synced lyrics come alive */
 export type LyricsEffect =
   | 'glow'
-  | 'karaoke'
   | 'wave'
   | 'depth'
-  | 'neon'
   | 'minimal'
   // Phase 20 — from lyric-video typography (focus pull, typewriter, marker, RGB split)
   | 'focus'
   | 'typewriter'
   | 'marker'
   | 'glitch'
-  // Phase 22 — word by word: dissolve to dust, bloom, spectrum, falling words, Apple-style lift
-  | 'dissolve'
+  // Phase 22 — word by word: bloom, spectrum, falling words, Apple-style lift
   | 'bloom'
   | 'spectrum'
   | 'rain'
-  | 'lift';
+  | 'lift'
+  // Phase 24 — quick, each its own kind of motion: sideways, a split-flap turn, a stamp, and a
+  // film subtitle (karaoke / neon were too close to Glow, dissolve lagged behind the voice)
+  | 'slide'
+  | 'flip'
+  | 'stamp'
+  | 'cinema';
+
+/** effects taken out in Phase 24 → the closest one still there (saved settings, PiP choice) */
+const RETIRED_EFFECTS: Record<string, LyricsEffect> = {
+  karaoke: 'lift',
+  neon: 'glow',
+  dissolve: 'bloom',
+};
+export function liveLyricsEffect<T extends string>(e: T | undefined): T | LyricsEffect | undefined {
+  return e && RETIRED_EFFECTS[e] ? RETIRED_EFFECTS[e] : e;
+}
 export type LyricsSize = 'S' | 'M' | 'L';
 
 /** Background colour presets for the 'color' backdrop (dark tone, light tone) */

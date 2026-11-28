@@ -7,7 +7,7 @@ import { Text, View } from 'react-native';
 import { PLAYER_STYLE_META } from '../../constants/preferences';
 import { useHolySic } from '../../context/HolySicContext';
 import { T as UI, themedSheet } from '../../theme/ui';
-import { LYRICS_EFFECTS } from '../player/LyricsView';
+import { effectOf, LYRICS_EFFECTS } from '../player/LyricsView';
 import { Tap } from '../ui/Tap';
 import { storageDetail } from './StorageSettings';
 
@@ -147,6 +147,14 @@ const KEYWORDS: Record<SettingsPageId, string[]> = {
     'thanh lời',
     'bìa vuông',
     'lời dọc',
+    'trượt',
+    'lật chữ',
+    'đóng dấu',
+    'phụ đề',
+    'slide',
+    'flip',
+    'stamp',
+    'cinema',
   ],
   video: [
     'mv',
@@ -370,7 +378,7 @@ export const SettingsHome: React.FC<{
 }> = ({ vi, fontFamily, open }) => {
   const { prefs } = useHolySic();
   const style = PLAYER_STYLE_META.find((m) => m.id === prefs.playerStyle);
-  const effect = LYRICS_EFFECTS.find((e) => e.id === (prefs.lyricsEffect || 'glow'));
+  const effect = LYRICS_EFFECTS.find((e) => e.id === effectOf(prefs.lyricsEffect));
   const groups: { title: string; rows: { id: SettingsPageId; detail?: string }[] }[] = [
     {
       title: vi ? 'Cá nhân hoá' : 'Make it yours',

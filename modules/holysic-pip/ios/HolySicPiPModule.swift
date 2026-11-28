@@ -33,25 +33,8 @@ private let LEAD: Double = 0.15
 
 /// effects that move between frames (the render loop runs at 20 fps for them)
 private let ANIMATED_FX: Set<String> = [
-  "glow", "wave", "focus", "typewriter", "glitch", "dissolve", "bloom", "spectrum", "rain", "lift",
-]
-
-/// a speck of a dissolving word: where it starts (% across the word), where it drifts, its radius
-struct Speck {
-  let x: CGFloat
-  let dx: CGFloat
-  let dy: CGFloat
-  let r: CGFloat
-  let accent: Bool
-}
-
-/// same specks as the app (LyricsView DUST) and the web window
-private let DUST: [Speck] = [
-  Speck(x: 12, dx: -9, dy: 20, r: 3, accent: true),
-  Speck(x: 34, dx: 4, dy: 30, r: 2.5, accent: false),
-  Speck(x: 58, dx: -3, dy: 24, r: 3.5, accent: true),
-  Speck(x: 80, dx: 10, dy: 32, r: 2.5, accent: false),
-  Speck(x: 46, dx: 7, dy: 16, r: 2, accent: false),
+  "glow", "wave", "focus", "typewriter", "glitch", "bloom", "spectrum", "rain", "lift",
+  "slide", "flip", "stamp", "cinema",
 ]
 
 /// one sung word: real timing from the lyrics, or estimated from the line's length
@@ -82,8 +65,8 @@ private struct Meta {
   var noLyrics = "♪"
   /** "Up next · Title — Artist" (shown when there are no lyrics to show) */
   var upNext = ""
-  /// the lyrics effect (same ids as the app: glow, karaoke, wave, depth, neon, minimal, focus,
-  /// typewriter, marker, glitch, dissolve, bloom, spectrum, rain, lift)
+  /// the lyrics effect (same ids as the app: glow, wave, depth, minimal, focus, typewriter,
+  /// marker, glitch, bloom, spectrum, rain, lift, slide, flip, stamp, cinema)
   var effect = "glow"
   /// the player's ambient light: primary, dark base, then the cover's 4 corners ([] = accent)
   var ambient: [UIColor] = []
@@ -384,7 +367,7 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
         self.timerInterval = 0
         return
       }
-      // fast while a karaoke line fills, slow otherwise (progress only)
+      // fast while a sung line moves, slow otherwise (progress only)
       let fast = self.active && self.lyrics.synced && self.meta.showLyrics && self.clock().playing
       let moving = fast && ANIMATED_FX.contains(self.meta.effect)
       let interval = self.active ? (moving ? 0.05 : fast ? 0.08 : 0.5) : 1.0
@@ -881,8 +864,11 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     let accent = meta.accent
     let lh = font.lineHeight
     // line-level effects light the whole line unless the lyrics have real word timing
-    let wholeLine = !real && (fx == "glow" || fx == "depth" || fx == "neon" || fx == "minimal")
-    func frac(_ w: PWord) -> Double { max(0, min(1, (t - w.start) / max(0.12, w.end - w.start))) }
+    let wholeLine = !real && (fx == "glow" || fx == "depth" || fx == "minimal")
+    // fills that follow the voice: ≤ 0.45 s, so a long note never lags (same as the app)
+    func frac(_ w: PWord) -> Double {
+      max(0, min(1, (t - w.start) / PiPEngine.fillS(w)))
+    }
     func lit(_ w: PWord) -> Bool { wholeLine || t >= w.start }
     func put(_ text: String, _ x: CGFloat, _ y: CGFloat, _ color: UIColor) {
       (text as NSString).draw(
@@ -896,18 +882,6 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     defer { ctx.restoreGState() }
 
     switch fx {
-    case "karaoke":
-      for b in boxes {
-        noShadow()
-        put(b.w.text, b.x, b.y, dim)
-        let f = CGFloat(frac(b.w))
-        if f <= 0 { continue }
-        ctx.saveGState()
-        ctx.clip(to: CGRect(x: b.x - 2, y: b.y - 8, width: (b.width + 4) * f, height: lh + 16))
-        ctx.setShadow(offset: .zero, blur: 12, color: accent.withAlphaComponent(0.7).cgColor)
-        put(b.w.text, b.x, b.y, accent)
-        ctx.restoreGState()
-      }
     case "wave":
       for b in boxes {
         let age = t - b.w.start
@@ -921,18 +895,6 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
           noShadow()
         }
         put(b.w.text, b.x, b.y + CGFloat(dy) * font.pointSize * 0.14, age >= 0 ? .white : dim)
-      }
-    case "neon":
-      for b in boxes {
-        if lit(b.w) {
-          ctx.setShadow(offset: .zero, blur: 24, color: accent.cgColor)
-          put(b.w.text, b.x, b.y, .white)
-          ctx.setShadow(offset: .zero, blur: 10, color: accent.cgColor)
-          put(b.w.text, b.x, b.y, .white)
-        } else {
-          noShadow()
-          put(b.w.text, b.x, b.y, accent.withAlphaComponent(0.6))
-        }
       }
     case "focus":
       noShadow()
@@ -955,7 +917,8 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       let ghost = UIColor.white.withAlphaComponent(0.16)
       var cursorDone = false
       for b in boxes {
-        let f = frac(b.w)
+        // typed over the word's whole length (as the app does), not the capped fill time
+        let f = max(0, min(1, (t - b.w.start) / max(0.12, b.w.end - b.w.start)))
         let chars = Array(b.w.text)
         let n = f >= 1 ? chars.count : min(chars.count, Int(ceil(Double(chars.count) * f)))
         let shown = String(chars[0..<n])
@@ -1014,68 +977,6 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
         put(b.w.text, b.x + sp + jolt, b.y, cyan)
         ctx.restoreGState()
         put(b.w.text, b.x + jolt, b.y, age >= 0 ? .white : UIColor.white.withAlphaComponent(0.5))
-      }
-    case "dissolve":
-      // lights up while sung, then blurs out and crumbles into specks of light that drift up
-      noShadow()
-      let fsz = font.pointSize
-      let sc = fsz / 25
-      for (i, b) in boxes.enumerated() {
-        let age = t - b.w.start
-        if age < 0 {
-          put(b.w.text, b.x, b.y, UIColor.white.withAlphaComponent(0.5))
-          continue
-        }
-        let raw = max(0, min(1, t - PiPEngine.dissolveAt(b.w)))
-        let k = CGFloat(raw * raw)
-        if k <= 0 {
-          ctx.saveGState()
-          ctx.setAlpha(CGFloat(0.5 + 0.5 * min(1, age / 0.18)))
-          ctx.setShadow(offset: .zero, blur: 16, color: accent.withAlphaComponent(0.8).cgColor)
-          put(b.w.text, b.x, b.y, .white)
-          ctx.restoreGState()
-          continue
-        }
-        // a faint trace keeps the line's shape
-        put(b.w.text, b.x, b.y, UIColor.white.withAlphaComponent(0.14 * k))
-        let dy: CGFloat = still ? 0 : -fsz * 0.22 * k
-        let crisp: CGFloat = k < 0.5 ? 1 - 1.6 * k : max(0, 0.2 - 0.4 * (k - 0.5))
-        let halo: CGFloat = k < 0.35 ? (k / 0.35) * 0.9 : 0.9 * (1 - (k - 0.35) / 0.65)
-        if halo > 0.01 {
-          PiPEngine.blurDraw(
-            ctx, b.w.text, font: font, at: CGPoint(x: b.x, y: b.y + dy),
-            color: accent.withAlphaComponent(halo), blur: 10)
-        }
-        if crisp > 0.01 {
-          ctx.saveGState()
-          ctx.setAlpha(crisp)
-          put(b.w.text, b.x, b.y + dy, .white)
-          ctx.restoreGState()
-        }
-        if still { continue }
-        var dust: CGFloat = 0
-        if k < 0.12 {
-          dust = k / 0.12
-        } else if k < 0.7 {
-          dust = 1 - ((k - 0.12) / 0.58) * 0.35
-        } else {
-          dust = 0.65 * (1 - (k - 0.7) / 0.3)
-        }
-        ctx.saveGState()
-        ctx.setShadow(offset: .zero, blur: 6, color: accent.cgColor)
-        ctx.setAlpha(max(0, dust))
-        let n = b.w.text.count > 3 ? 5 : 3
-        for j in 0..<n {
-          let p = DUST[j]
-          let flip: CGFloat = (i + j) % 2 == 1 ? 1 : -1
-          let r = max(0.6, p.r * sc * (0.6 - 0.4 * k) * 1.6)
-          let jitter = CGFloat((i * 7 + j * 5) % 9)
-          let cx = b.x + b.width * p.x / 100 + p.dx * flip * k * sc
-          let cy = b.y + fsz * 0.55 - (p.dy + jitter) * sc * k * 1.4
-          (p.accent ? accent : UIColor.white).setFill()
-          ctx.fillEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
-        }
-        ctx.restoreGState()
       }
     case "bloom":
       // pops open while an accent copy of the word spreads out and fades, like a ripple
@@ -1192,6 +1093,51 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
           put(b.w.text, b.x, b.y, dim)
         }
       }
+    case "slide", "flip", "stamp":
+      // quick entrances that decelerate into place: from the right / a split-flap turn / a stamp
+      let fsz = font.pointSize
+      let dur = fx == "slide" ? 0.23 : fx == "flip" ? 0.26 : 0.2
+      for b in boxes {
+        noShadow()
+        let age = t - b.w.start
+        let k = age < 0 ? 0 : min(1, age / dur)
+        let e = CGFloat(1 - pow(1 - k, 3))
+        if e < 1 { put(b.w.text, b.x, b.y, UIColor.white.withAlphaComponent(0.4 * (1 - e))) }
+        if k <= 0 { continue }
+        let cx = b.x + b.width / 2
+        let cy = b.y + lh * 0.5
+        ctx.saveGState()
+        ctx.setShadow(
+          offset: .zero, blur: fx == "stamp" ? 12 : 10,
+          color: accent.withAlphaComponent(fx == "stamp" ? 0.8 : 0.55).cgColor)
+        if fx == "slide" {
+          ctx.setAlpha(e)
+          put(b.w.text, b.x + (still ? 0 : fsz * 0.5 * (1 - e)), b.y, .white)
+        } else if fx == "flip" {
+          ctx.setAlpha(e)
+          let sy: CGFloat = still ? 1 : max(0.03, cos((1 - e) * 88 * .pi / 180))
+          ctx.translateBy(x: cx, y: cy)
+          ctx.scaleBy(x: 1, y: sy)
+          ctx.translateBy(x: -cx, y: -cy)
+          put(b.w.text, b.x, b.y, .white)
+        } else {
+          ctx.setAlpha(CGFloat(min(1, k / 0.6)))
+          let sc: CGFloat = still ? 1 : 1.6 - 0.6 * e
+          ctx.translateBy(x: cx, y: cy)
+          ctx.scaleBy(x: sc, y: sc)
+          ctx.translateBy(x: -cx, y: -cy)
+          put(b.w.text, b.x, b.y, .white)
+        }
+        ctx.restoreGState()
+      }
+    case "cinema":
+      // a film subtitle: the whole line eases in (fade + a short rise), crisp with a dark edge
+      let a = max(0, min(1, (t - lineStart) / 0.28))
+      let e = CGFloat(1 - pow(1 - a, 3))
+      ctx.setAlpha(e)
+      ctx.setShadow(offset: .zero, blur: 6, color: UIColor.black.withAlphaComponent(0.75).cgColor)
+      let dy: CGFloat = still ? 0 : font.pointSize * 0.4 * (1 - e)
+      for b in boxes { put(b.w.text, b.x, b.y + dy, .white) }
     default:
       // depth / minimal: bright and dim (depth adds a soft white halo to the sung words)
       for b in boxes {
@@ -1207,8 +1153,8 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     }
   }
 
-  /// A neighbouring (not sung) line in the effect's look: dimmer with distance in Depth, accent
-  /// in Neon, out of focus in Focus, faint in Typewriter
+  /// A neighbouring (not sung) line in the effect's look: dimmer with distance in Depth, nearly
+  /// gone in Cinema, out of focus in Focus, faint in Typewriter
   private func drawContext(
     _ s: String, _ rect: CGRect, size: CGFloat, align: NSTextAlignment, distance: Int, lines: Int
   ) {
@@ -1221,8 +1167,8 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     case "depth":
       let alphas: [CGFloat] = [0, 0.5, 0.32, 0.2]
       color = UIColor.white.withAlphaComponent(alphas[min(3, d)])
-    case "neon":
-      color = meta.accent.withAlphaComponent(d == 1 ? 0.55 : 0.32)
+    case "cinema":
+      color = UIColor.white.withAlphaComponent(d == 1 ? 0.16 : 0.08)
     case "focus":
       color = UIColor.white.withAlphaComponent(d == 1 ? 0.6 : 0.4)
       blur = CGFloat(7 + d * 2)
@@ -1337,9 +1283,9 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     }
   }
 
-  /// dissolve: a word starts to fall apart once sung (+ a beat), same timing as the app
-  static func dissolveAt(_ w: PWord) -> Double {
-    w.start + max(0.12, min(0.7, w.end - w.start)) + 0.38
+  /// a word's fill time: ≤ 0.45 s (same cap as the app)
+  static func fillS(_ w: PWord) -> Double {
+    max(0.12, min(0.45, w.end - w.start))
   }
 
   /// Is anything on the sung line moving at lyrics time `t`? (mirrors pipLyricsFx.fxBusy)
@@ -1350,17 +1296,21 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     switch fx {
     case "glow":
       return t - lineStart < 0.4
-    case "karaoke", "marker", "typewriter", "lift":
+    case "typewriter":
       return words.contains { t >= $0.start && t < $0.start + max(0.12, $0.end - $0.start) + 0.05 }
+    case "marker", "lift":
+      return words.contains { t >= $0.start && t < $0.start + fillS($0) + 0.05 }
     case "spectrum":
-      return words.contains { t >= $0.start && t < $0.start + max(0.5, $0.end - $0.start) + 0.05 }
+      return words.contains { t >= $0.start && t < $0.start + max(0.5, fillS($0)) + 0.05 }
+    case "slide": return within(0.26)
+    case "flip": return within(0.29)
+    case "stamp": return within(0.23)
+    case "cinema": return t - lineStart < 0.32
     case "wave": return within(0.6)
     case "focus": return within(0.3)
     case "glitch": return within(0.25)
     case "bloom": return within(0.75)
     case "rain": return within(0.7)
-    case "dissolve":
-      return words.contains { t >= $0.start && t < dissolveAt($0) + 1.05 }
     default: return false
     }
   }

@@ -30,11 +30,14 @@ export const ANIMATED_FX = new Set([
   'focus',
   'typewriter',
   'glitch',
-  'dissolve',
   'bloom',
   'spectrum',
   'rain',
   'lift',
+  'slide',
+  'flip',
+  'stamp',
+  'cinema',
 ]);
 
 /** The words of the sung line — real timing, or estimated (cached: asked for every frame) */
@@ -53,10 +56,10 @@ export function lineWords(
   return words;
 }
 
-const clampMs = (w: PipWord) => Math.max(0.12, Math.min(0.7, w.end - w.start));
-/** dissolve: when a word starts to fall apart (it stays lit while sung, + a beat), and how long */
-const dissolveAt = (w: PipWord) => w.start + clampMs(w) + 0.38;
-const DISSOLVE_S = 1;
+/** a word's fill time (the app caps it at 0.45 s so a long note never lags) */
+const fillS = (w: PipWord) => Math.max(0.12, Math.min(0.45, w.end - w.start));
+/** ease-out cubic */
+const outCubic = (k: number) => 1 - Math.pow(1 - k, 3);
 
 /**
  * Is anything on the sung line moving at lyrics time `t`? The render loop only draws a new frame
@@ -67,15 +70,23 @@ export function fxBusy(fx: string, words: PipWord[], lineStart: number, t: numbe
   switch (fx) {
     case 'glow':
       return t - lineStart < 0.4;
-    case 'karaoke':
-    case 'marker':
     case 'typewriter':
-    case 'lift':
       return words.some(
         (w) => t >= w.start && t < w.start + Math.max(0.12, w.end - w.start) + 0.05
       );
+    case 'marker':
+    case 'lift':
+      return words.some((w) => t >= w.start && t < w.start + fillS(w) + 0.05);
     case 'spectrum':
-      return words.some((w) => t >= w.start && t < w.start + Math.max(0.5, w.end - w.start) + 0.05);
+      return words.some((w) => t >= w.start && t < w.start + Math.max(0.5, fillS(w)) + 0.05);
+    case 'slide':
+      return within(0.26);
+    case 'flip':
+      return within(0.29);
+    case 'stamp':
+      return within(0.23);
+    case 'cinema':
+      return t - lineStart < 0.32;
     case 'wave':
       return within(0.6);
     case 'focus':
@@ -86,8 +97,6 @@ export function fxBusy(fx: string, words: PipWord[], lineStart: number, t: numbe
       return within(0.75);
     case 'rain':
       return within(0.7);
-    case 'dissolve':
-      return words.some((w) => t >= w.start && t < dissolveAt(w) + DISSOLVE_S + 0.05);
     default:
       return false;
   }
@@ -434,9 +443,9 @@ export function drawSung(ctx: CanvasRenderingContext2D, o: SungOpts) {
   const { boxes, fs } = layout(ctx, words, o.x, o.y, o.w, o.h, o.size, o.maxLines, o.align);
   const fx = o.effect;
   const t = o.t;
-  const frac = (wd: PipWord) => clamp01((t - wd.start) / Math.max(0.12, wd.end - wd.start));
+  const frac = (wd: PipWord) => clamp01((t - wd.start) / fillS(wd));
   // line-level effects light the whole line unless the lyrics have real word timing
-  const wholeLine = !real && (fx === 'glow' || fx === 'depth' || fx === 'neon' || fx === 'minimal');
+  const wholeLine = !real && (fx === 'glow' || fx === 'depth' || fx === 'minimal');
   const lit = (wd: PipWord) => wholeLine || t >= wd.start;
   const still = calm();
   ctx.save();
@@ -464,22 +473,6 @@ export function drawSung(ctx: CanvasRenderingContext2D, o: SungOpts) {
       if (!lit(b.w)) ctx.shadowColor = 'transparent';
       ctx.fillText(b.w.text, b.x, b.y);
     }
-  } else if (fx === 'karaoke') {
-    for (const b of boxes) {
-      ctx.fillStyle = 'rgba(255,255,255,0.42)';
-      ctx.fillText(b.w.text, b.x, b.y);
-      const f = frac(b.w);
-      if (f <= 0) continue;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(b.x - 2, b.y - 8, (b.width + 4) * f, fs * 1.2 + 16);
-      ctx.clip();
-      ctx.shadowColor = rgba(o.accent, 0.7);
-      ctx.shadowBlur = 12;
-      ctx.fillStyle = o.accent;
-      ctx.fillText(b.w.text, b.x, b.y);
-      ctx.restore();
-    }
   } else if (fx === 'wave') {
     for (const b of boxes) {
       const age = t - b.w.start;
@@ -497,21 +490,6 @@ export function drawSung(ctx: CanvasRenderingContext2D, o: SungOpts) {
       }
       ctx.fillText(b.w.text, b.x, b.y + dy * fs * 0.14);
     }
-  } else if (fx === 'neon') {
-    for (const b of boxes) {
-      if (lit(b.w)) {
-        ctx.shadowColor = o.accent;
-        ctx.shadowBlur = 24;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(b.w.text, b.x, b.y);
-        ctx.shadowBlur = 10;
-        ctx.fillText(b.w.text, b.x, b.y);
-      } else {
-        ctx.shadowColor = 'transparent';
-        ctx.fillStyle = rgba(o.accent, 0.6);
-        ctx.fillText(b.w.text, b.x, b.y);
-      }
-    }
   } else if (fx === 'focus') {
     for (const b of boxes) {
       const k = clamp01((t - b.w.start) / 0.28);
@@ -527,7 +505,8 @@ export function drawSung(ctx: CanvasRenderingContext2D, o: SungOpts) {
     const ink = inkOn(o.accent);
     let cursorDone = false;
     for (const b of boxes) {
-      const f = frac(b.w);
+      // typed over the word's whole length (as the app does), not the capped fill time
+      const f = clamp01((t - b.w.start) / Math.max(0.12, b.w.end - b.w.start));
       const n = f >= 1 ? b.w.text.length : Math.ceil(b.w.text.length * f);
       const shown = b.w.text.slice(0, n);
       ctx.fillStyle = '#FFFFFF';
@@ -600,71 +579,6 @@ export function drawSung(ctx: CanvasRenderingContext2D, o: SungOpts) {
       ctx.restore();
       ctx.fillStyle = age >= 0 ? '#FFFFFF' : 'rgba(255,255,255,0.5)';
       ctx.fillText(b.w.text, b.x + jolt, b.y);
-    }
-  } else if (fx === 'dissolve') {
-    for (let i = 0; i < boxes.length; i++) {
-      const b = boxes[i];
-      const age = t - b.w.start;
-      if (age < 0) {
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.fillText(b.w.text, b.x, b.y);
-        continue;
-      }
-      const raw = clamp01((t - dissolveAt(b.w)) / DISSOLVE_S);
-      const k = raw * raw; // eases in, like the app
-      if (k <= 0) {
-        ctx.save();
-        ctx.globalAlpha = 0.5 + 0.5 * clamp01(age / 0.18);
-        ctx.shadowColor = rgba(o.accent, 0.8);
-        ctx.shadowBlur = 16;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(b.w.text, b.x, b.y);
-        ctx.restore();
-        continue;
-      }
-      // a faint trace keeps the line's shape
-      ctx.fillStyle = `rgba(255,255,255,${0.14 * k})`;
-      ctx.fillText(b.w.text, b.x, b.y);
-      const dy = still ? 0 : -fs * 0.22 * k;
-      const crisp = k < 0.5 ? 1 - 1.6 * k : Math.max(0, 0.2 - 0.4 * (k - 0.5));
-      const halo = k < 0.35 ? (k / 0.35) * 0.9 : 0.9 * (1 - (k - 0.35) / 0.65);
-      if (halo > 0.01) blurText(ctx, b.w.text, b.x, b.y + dy, rgba(o.accent, halo), 10);
-      if (crisp > 0.01) {
-        ctx.save();
-        ctx.globalAlpha = crisp;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(b.w.text, b.x, b.y + dy);
-        ctx.restore();
-      }
-      if (still) continue;
-      // specks of light drift up and away
-      const dust =
-        k < 0.12
-          ? k / 0.12
-          : k < 0.7
-            ? 1 - ((k - 0.12) / 0.58) * 0.35
-            : 0.65 * (1 - (k - 0.7) / 0.3);
-      ctx.save();
-      ctx.shadowColor = o.accent;
-      ctx.shadowBlur = 6;
-      const n = b.w.text.length > 3 ? 5 : 3;
-      for (let j = 0; j < n; j++) {
-        const p = DUST[j];
-        const flip = (i + j) % 2 ? 1 : -1;
-        const r = p.r * (fs / 25) * (0.6 - 0.4 * k) * 1.6;
-        ctx.globalAlpha = Math.max(0, dust);
-        ctx.fillStyle = p.accent ? o.accent : '#FFFFFF';
-        ctx.beginPath();
-        ctx.arc(
-          b.x + (b.width * p.x) / 100 + p.dx * flip * k * (fs / 25),
-          b.y + fs * 0.55 - (p.dy + ((i * 7 + j * 5) % 9)) * (fs / 25) * k * 1.4,
-          Math.max(0.6, r),
-          0,
-          Math.PI * 2
-        );
-        ctx.fill();
-      }
-      ctx.restore();
     }
   } else if (fx === 'bloom') {
     for (const b of boxes) {
@@ -772,6 +686,54 @@ export function drawSung(ctx: CanvasRenderingContext2D, o: SungOpts) {
       ctx.fillText(b.w.text, b.x, b.y - (still ? 0 : fs * 0.1 * e));
       ctx.restore();
     }
+  } else if (fx === 'slide' || fx === 'flip' || fx === 'stamp') {
+    for (const b of boxes) {
+      const age = t - b.w.start;
+      const dur = fx === 'slide' ? 0.23 : fx === 'flip' ? 0.26 : 0.2;
+      const k = age < 0 ? 0 : clamp01(age / dur);
+      const e = outCubic(k);
+      if (e < 1) {
+        ctx.shadowColor = 'transparent';
+        ctx.fillStyle = `rgba(255,255,255,${0.4 * (1 - e)})`;
+        ctx.fillText(b.w.text, b.x, b.y);
+      }
+      if (k <= 0) continue;
+      ctx.save();
+      ctx.shadowColor = rgba(o.accent, fx === 'stamp' ? 0.8 : 0.55);
+      ctx.shadowBlur = fx === 'stamp' ? 12 : 10;
+      ctx.fillStyle = '#FFFFFF';
+      const cx = b.x + b.width / 2;
+      const cy = b.y + fs * 0.6;
+      if (fx === 'slide') {
+        ctx.globalAlpha = e;
+        ctx.fillText(b.w.text, b.x + (still ? 0 : fs * 0.5 * (1 - e)), b.y);
+      } else if (fx === 'flip') {
+        // a split-flap turn: the word folds down around its middle (cos of −88° → 0°)
+        ctx.globalAlpha = e;
+        const sy = still ? 1 : Math.max(0.03, Math.cos(((1 - e) * 88 * Math.PI) / 180));
+        ctx.translate(cx, cy);
+        ctx.scale(1, sy);
+        ctx.translate(-cx, -cy);
+        ctx.fillText(b.w.text, b.x, b.y);
+      } else {
+        ctx.globalAlpha = clamp01(k / 0.6);
+        const sc = still ? 1 : 1.6 - 0.6 * e;
+        ctx.translate(cx, cy);
+        ctx.scale(sc, sc);
+        ctx.translate(-cx, -cy);
+        ctx.fillText(b.w.text, b.x, b.y);
+      }
+      ctx.restore();
+    }
+  } else if (fx === 'cinema') {
+    // a film subtitle: the whole line eases in (fade + a short rise), crisp with a dark edge
+    const e = outCubic(clamp01((t - o.lineStart) / 0.28));
+    ctx.globalAlpha = e;
+    ctx.shadowColor = 'rgba(0,0,0,0.75)';
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = '#FFFFFF';
+    const dy = still ? 0 : fs * 0.4 * (1 - e);
+    for (const b of boxes) ctx.fillText(b.w.text, b.x, b.y + dy);
   } else {
     // depth / minimal: bright and dim (depth adds a soft white halo to the sung words)
     for (const b of boxes) {
@@ -787,27 +749,18 @@ export function drawSung(ctx: CanvasRenderingContext2D, o: SungOpts) {
   ctx.restore();
 }
 
-/** dust specks of a dissolving word (same as the app's): x % across, drift, radius */
-const DUST = [
-  { x: 12, dx: -9, dy: 20, r: 3, accent: true },
-  { x: 34, dx: 4, dy: 30, r: 2.5, accent: false },
-  { x: 58, dx: -3, dy: 24, r: 3.5, accent: true },
-  { x: 80, dx: 10, dy: 32, r: 2.5, accent: false },
-  { x: 46, dx: 7, dy: 16, r: 2, accent: false },
-];
-
 /** How a neighbouring (not sung) line looks in this effect */
 export function contextLine(
   effect: string,
-  accent: string,
+  _accent: string,
   distance: number
 ): { color: string; blur: number } {
   const d = Math.max(1, distance);
   switch (effect) {
     case 'depth':
       return { color: `rgba(255,255,255,${[0, 0.5, 0.32, 0.2][Math.min(3, d)]})`, blur: 0 };
-    case 'neon':
-      return { color: rgba(accent, d === 1 ? 0.55 : 0.32), blur: 0 };
+    case 'cinema':
+      return { color: `rgba(255,255,255,${d === 1 ? 0.16 : 0.08})`, blur: 0 };
     case 'focus':
       return { color: `rgba(255,255,255,${d === 1 ? 0.6 : 0.4})`, blur: 7 + d * 2 };
     case 'typewriter':

@@ -17,7 +17,7 @@ import {
   useStoredLyrics,
 } from '../../services/lyrics/lyricsStore';
 import { T as UI, themedSheet } from '../../theme/ui';
-import { LYRICS_EFFECTS } from '../player/LyricsView';
+import { effectOf, LYRICS_EFFECTS } from '../player/LyricsView';
 import { luminance, spectrumColor } from '../../theme/colorMath';
 import { Tap } from '../ui/Tap';
 import { Pip, usePipState } from '../../services/pip/pip';
@@ -37,13 +37,6 @@ const EffectSample: React.FC<{ id: LyricsEffect; accent: string }> = ({ id, acce
   const base = { fontSize: 15, fontWeight: '800' as const };
   const dim = 'rgba(255,255,255,0.4)';
   switch (id) {
-    case 'karaoke':
-      return (
-        <Text style={base}>
-          <Text style={{ color: accent }}>Hát lên </Text>
-          <Text style={{ color: dim }}>nào</Text>
-        </Text>
-      );
     case 'wave':
       return (
         <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
@@ -59,12 +52,6 @@ const EffectSample: React.FC<{ id: LyricsEffect; accent: string }> = ({ id, acce
           <Text style={[base, { color: '#FFF' }]}>Hát lên nào</Text>
           <Text style={[base, { color: '#FFF', fontSize: 12, opacity: 0.5 }]}>Câu sau</Text>
         </View>
-      );
-    case 'neon':
-      return (
-        <Text style={[base, { color: '#FFF', textShadowColor: accent, textShadowRadius: 12 }]}>
-          Hát lên nào
-        </Text>
       );
     case 'minimal':
       return <Text style={[base, { color: '#FFF', fontWeight: '700' }]}>Hát lên nào</Text>;
@@ -135,38 +122,6 @@ const EffectSample: React.FC<{ id: LyricsEffect; accent: string }> = ({ id, acce
             </Text>
             <Text style={[base, { color: dim }]}>nào</Text>
           </View>
-        </View>
-      );
-    case 'dissolve':
-      return (
-        <View style={{ flexDirection: 'row' }}>
-          <View>
-            <Text style={[base, { color: 'rgba(255,255,255,0.14)' }]}>Hát </Text>
-            {[
-              [8, -2, 3],
-              [16, -8, 2],
-              [4, -12, 2],
-              [20, -15, 1.5],
-            ].map(([x, y, r], k) => (
-              <View
-                key={k}
-                style={{
-                  position: 'absolute',
-                  left: x,
-                  top: 8 + y,
-                  width: r * 2,
-                  height: r * 2,
-                  borderRadius: r,
-                  backgroundColor: k % 2 ? '#FFF' : accent,
-                  opacity: 0.85 - k * 0.15,
-                }}
-              />
-            ))}
-          </View>
-          <Text style={[base, { color: '#FFF', textShadowColor: accent, textShadowRadius: 10 }]}>
-            lên{' '}
-          </Text>
-          <Text style={[base, { color: 'rgba(255,255,255,0.5)' }]}>nào</Text>
         </View>
       );
     case 'bloom':
@@ -248,6 +203,65 @@ const EffectSample: React.FC<{ id: LyricsEffect; accent: string }> = ({ id, acce
           <Text style={[base, { color: 'rgba(255,255,255,0.38)' }]}>nào</Text>
         </View>
       );
+    case 'slide':
+      return (
+        <View style={{ flexDirection: 'row' }}>
+          <Text style={[base, { color: '#FFF' }]}>Hát </Text>
+          <Text style={[base, { color: '#FFF', opacity: 0.7, transform: [{ translateX: 5 }] }]}>
+            lên
+          </Text>
+          <Text style={[base, { color: dim, marginLeft: 5 }]}>nào</Text>
+        </View>
+      );
+    case 'flip':
+      return (
+        <View style={{ flexDirection: 'row' }}>
+          <Text style={[base, { color: '#FFF' }]}>Hát </Text>
+          <Text
+            style={[
+              base,
+              { color: '#FFF', transform: [{ perspective: 120 }, { rotateX: '-45deg' }] },
+            ]}
+          >
+            lên
+          </Text>
+          <Text style={[base, { color: dim, marginLeft: 5 }]}>nào</Text>
+        </View>
+      );
+    case 'stamp':
+      return (
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={[base, { color: '#FFF' }]}>Hát </Text>
+          <Text
+            style={[
+              base,
+              {
+                color: '#FFF',
+                textShadowColor: accent,
+                textShadowRadius: 10,
+                transform: [{ scale: 1.25 }],
+              },
+            ]}
+          >
+            lên
+          </Text>
+          <Text style={[base, { color: dim, marginLeft: 5 }]}>nào</Text>
+        </View>
+      );
+    case 'cinema':
+      return (
+        <View style={{ alignItems: 'center' }}>
+          <Text style={[base, { color: '#FFF', fontSize: 11, opacity: 0.14 }]}>Câu trước</Text>
+          <Text
+            style={[
+              base,
+              { color: '#FFF', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 5 },
+            ]}
+          >
+            Hát lên nào
+          </Text>
+        </View>
+      );
     default:
       return (
         <Text
@@ -266,7 +280,7 @@ export const LyricsIconSettings: React.FC<{ fontFamily?: string; part?: 'lyrics'
   const show = (k: string) => !part || part === k;
   const { prefs, updatePrefs, palette, haptic, showToast } = useHolySic();
   const vi = prefs.language === 'vi';
-  const effect = prefs.lyricsEffect || 'glow';
+  const effect = effectOf(prefs.lyricsEffect);
 
   // the real Home Screen icon wins (it can change outside the app, e.g. after a reinstall)
   useEffect(() => {
