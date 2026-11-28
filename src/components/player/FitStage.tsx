@@ -2,7 +2,7 @@
  * HolySic — iOS music player. Based on Mochy Music by realidkroo (GPL-3.0).
  * https://github.com/realidkroo/Mochy-Music
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 
 /**
@@ -11,12 +11,19 @@ import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
  * space the player has left for it. On a 4" iPhone SE the stage is ~190pt tall;
  * without this the cover would ride over the top bar and the song title.
  */
-export const FitStage: React.FC<{ children: React.ReactNode; padding?: number }> = ({
-  children,
-  padding = 4,
-}) => {
+export const FitStage: React.FC<{
+  children: React.ReactNode;
+  padding?: number;
+  /** the room and what is in it, whenever either changes — a music video sizes itself to the
+   *  room instead of being scaled down (a scaled video and its buttons are resampled: soft) */
+  onMeasure?: (box: { w: number; h: number }, content: { w: number; h: number }) => void;
+}> = ({ children, padding = 4, onMeasure }) => {
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [content, setContent] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    if (box.h > 0 && content.h > 0) onMeasure?.(box, content);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [box, content]);
 
   const onBox = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;

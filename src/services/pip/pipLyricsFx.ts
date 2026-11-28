@@ -34,10 +34,10 @@ export const ANIMATED_FX = new Set([
   'spectrum',
   'rain',
   'lift',
-  'slide',
-  'flip',
-  'stamp',
-  'cinema',
+  'scramble',
+  'ball',
+  'pen',
+  'bubble',
 ]);
 
 /** The words of the sung line — real timing, or estimated (cached: asked for every frame) */
@@ -58,8 +58,32 @@ export function lineWords(
 
 /** a word's fill time (the app caps it at 0.45 s so a long note never lags) */
 const fillS = (w: PipWord) => Math.max(0.12, Math.min(0.45, w.end - w.start));
-/** ease-out cubic */
-const outCubic = (k: number) => 1 - Math.pow(1 - k, 3);
+/** a word's typing / writing time: the whole time it is sung */
+const spanS = (w: PipWord) => Math.max(0.12, w.end - w.start);
+/** Handwriting: how long the pen takes over a word (the app: 0.92 × its length, 0.16–1.2 s) */
+const penS = (w: PipWord) => Math.max(0.16, Math.min(1.2, (w.end - w.start) * 0.92));
+/** Sing-along: the hop onto word i (≤ 0.45 s, ending on its start) — same as the app */
+export function hopS(words: PipWord[], i: number): number {
+  const span = i > 0 ? words[i].start - words[i - 1].start : 0.45;
+  return Math.max(0.14, Math.min(0.45, span * 0.85));
+}
+
+// Decode: look-alike glyphs of the same kind (same sets as the app's cipherChar)
+const CIPHER_LOWER = 'aceimnorsuvxz';
+const CIPHER_UPPER = 'ABCDEGHKMNOPRSUVXZ';
+const CIPHER_DIGIT = '0123456789';
+export function cipherChar(c: string, seed: number): string {
+  const set = /[0-9]/.test(c)
+    ? CIPHER_DIGIT
+    : c !== c.toLowerCase()
+      ? CIPHER_UPPER
+      : c !== c.toUpperCase()
+        ? CIPHER_LOWER
+        : null;
+  if (!set) return c;
+  const h = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return set.charAt(Math.floor((h - Math.floor(h)) * set.length) % set.length);
+}
 
 /**
  * Is anything on the sung line moving at lyrics time `t`? The render loop only draws a new frame
@@ -79,14 +103,16 @@ export function fxBusy(fx: string, words: PipWord[], lineStart: number, t: numbe
       return words.some((w) => t >= w.start && t < w.start + fillS(w) + 0.05);
     case 'spectrum':
       return words.some((w) => t >= w.start && t < w.start + Math.max(0.5, fillS(w)) + 0.05);
-    case 'slide':
-      return within(0.26);
-    case 'flip':
-      return within(0.29);
-    case 'stamp':
-      return within(0.23);
-    case 'cinema':
-      return t - lineStart < 0.32;
+    case 'scramble':
+      // the cipher flickers while a word is being decoded
+      return words.some((w) => t >= w.start && t < w.start + spanS(w) + 0.05);
+    case 'pen':
+      return words.some((w) => t >= w.start && t < w.start + penS(w) + 0.05);
+    case 'ball':
+      // in the air (a hop ends on a word's start) or squashing on landing
+      return words.some((w, i) => t >= w.start - hopS(words, i) && t < w.start + 0.16);
+    case 'bubble':
+      return t - lineStart < 0.45;
     case 'wave':
       return within(0.6);
     case 'focus':
@@ -686,54 +712,171 @@ export function drawSung(ctx: CanvasRenderingContext2D, o: SungOpts) {
       ctx.fillText(b.w.text, b.x, b.y - (still ? 0 : fs * 0.1 * e));
       ctx.restore();
     }
-  } else if (fx === 'slide' || fx === 'flip' || fx === 'stamp') {
-    for (const b of boxes) {
-      const age = t - b.w.start;
-      const dur = fx === 'slide' ? 0.23 : fx === 'flip' ? 0.26 : 0.2;
-      const k = age < 0 ? 0 : clamp01(age / dur);
-      const e = outCubic(k);
-      if (e < 1) {
-        ctx.shadowColor = 'transparent';
-        ctx.fillStyle = `rgba(255,255,255,${0.4 * (1 - e)})`;
-        ctx.fillText(b.w.text, b.x, b.y);
-      }
-      if (k <= 0) continue;
+  } else if (fx === 'scramble') {
+    // Decode: decoded letters white, the next few flicker through look-alike glyphs (accent),
+    // the rest faint — glyphs drawn on the real letters' places, so nothing shifts
+    const tick = still ? 0 : Math.floor(t * 14);
+    let gi = 0;
+    boxes.forEach((b, wi) => {
+      const f = clamp01((t - b.w.start) / spanS(b.w));
+      const chars = Array.from(b.w.text);
+      const n = f >= 1 ? chars.length : f <= 0 ? 0 : Math.ceil(chars.length * f);
+      let x = b.x;
+      chars.forEach((ch, ci) => {
+        const cw = ctx.measureText(ch).width;
+        if (ci < n) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillText(ch, x, b.y);
+        } else if (f > 0 && f < 1 && ci < n + 4 && !still) {
+          const g = cipherChar(ch, tick * 31 + (gi + ci) * 7 + wi);
+          ctx.save();
+          ctx.shadowColor = o.accent;
+          ctx.shadowBlur = 8;
+          ctx.fillStyle = o.accent;
+          ctx.fillText(g, x + (cw - ctx.measureText(g).width) / 2, b.y);
+          ctx.restore();
+        } else {
+          ctx.fillStyle = 'rgba(255,255,255,0.2)';
+          ctx.fillText(ch, x, b.y);
+        }
+        x += cw;
+      });
+      gi += chars.length + 1;
+    });
+  } else if (fx === 'ball') {
+    // Sing-along: the ball lands on each word as it is sung, hopping over from the last one
+    let started = 0;
+    while (started < boxes.length && boxes[started].w.start <= t) started++;
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
       ctx.save();
-      ctx.shadowColor = rgba(o.accent, fx === 'stamp' ? 0.8 : 0.55);
-      ctx.shadowBlur = fx === 'stamp' ? 12 : 10;
-      ctx.fillStyle = '#FFFFFF';
-      const cx = b.x + b.width / 2;
-      const cy = b.y + fs * 0.6;
-      if (fx === 'slide') {
-        ctx.globalAlpha = e;
-        ctx.fillText(b.w.text, b.x + (still ? 0 : fs * 0.5 * (1 - e)), b.y);
-      } else if (fx === 'flip') {
-        // a split-flap turn: the word folds down around its middle (cos of −88° → 0°)
-        ctx.globalAlpha = e;
-        const sy = still ? 1 : Math.max(0.03, Math.cos(((1 - e) * 88 * Math.PI) / 180));
-        ctx.translate(cx, cy);
-        ctx.scale(1, sy);
-        ctx.translate(-cx, -cy);
-        ctx.fillText(b.w.text, b.x, b.y);
-      } else {
-        ctx.globalAlpha = clamp01(k / 0.6);
-        const sc = still ? 1 : 1.6 - 0.6 * e;
-        ctx.translate(cx, cy);
-        ctx.scale(sc, sc);
-        ctx.translate(-cx, -cy);
-        ctx.fillText(b.w.text, b.x, b.y);
-      }
+      if (i < started) {
+        ctx.shadowColor = rgba(o.accent, 0.6);
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = '#FFFFFF';
+      } else ctx.fillStyle = 'rgba(255,255,255,0.42)';
+      ctx.fillText(b.w.text, b.x, b.y);
       ctx.restore();
     }
-  } else if (fx === 'cinema') {
-    // a film subtitle: the whole line eases in (fade + a short rise), crisp with a dark edge
-    const e = outCubic(clamp01((t - o.lineStart) / 0.28));
-    ctx.globalAlpha = e;
-    ctx.shadowColor = 'rgba(0,0,0,0.75)';
-    ctx.shadowBlur = 6;
-    ctx.fillStyle = '#FFFFFF';
-    const dy = still ? 0 : fs * 0.4 * (1 - e);
-    for (const b of boxes) ctx.fillText(b.w.text, b.x, b.y + dy);
+    const R = Math.max(5, fs * 0.15);
+    const spot = (b: Box) => ({ x: b.x + b.width / 2, y: b.y - R * 0.35 });
+    const cur = Math.max(0, started - 1);
+    let p = spot(boxes[cur]);
+    let sx = 1;
+    let sy = 1;
+    const next = started < boxes.length ? started : -1;
+    if (next >= 0 && !still) {
+      const hop = hopS(
+        boxes.map((b) => b.w),
+        next
+      );
+      const until = boxes[next].w.start - t;
+      if (until < hop) {
+        const k = clamp01(1 - until / hop);
+        const q = spot(boxes[next]);
+        const H = Math.max(fs * 0.7, R * 4);
+        p = { x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k - H * 4 * k * (1 - k) };
+      }
+    }
+    const age = started > 0 ? t - boxes[cur].w.start : 1;
+    if (age >= 0 && age < 0.16 && !still) {
+      const k = 1 - age / 0.16;
+      sx = 1 + 0.35 * k;
+      sy = 1 - 0.32 * k;
+    }
+    ctx.save();
+    ctx.shadowColor = o.accent;
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = o.accent;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + R * (1 - sy), R * sx, R * sy, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if (fx === 'pen') {
+    // Handwriting: italic ink uncovered by a pen nib that follows the voice
+    ctx.font = `italic 800 ${fs}px ${FONT}`;
+    for (const b of boxes) {
+      const f = clamp01((t - b.w.start) / penS(b.w));
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillText(b.w.text, b.x, b.y);
+      if (f <= 0) continue;
+      const iw = (b.width + fs * 0.3) * f;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(b.x - 4, b.y - 8, iw + 4, fs * 1.3 + 16);
+      ctx.clip();
+      ctx.shadowColor = rgba(o.accent, 0.55);
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(b.w.text, b.x, b.y);
+      ctx.restore();
+      if (f < 1 && !still) {
+        ctx.save();
+        ctx.shadowColor = o.accent;
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = o.accent;
+        ctx.beginPath();
+        ctx.arc(b.x + (b.width + fs * 0.1) * f, b.y + fs * 0.92, Math.max(3, fs * 0.09), 0, 7);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  } else if (fx === 'bubble') {
+    // Chat: the line arrives as a message bubble (a spring from its corner); words fill in
+    const age = t - o.lineStart;
+    const k = clamp01(age / 0.42);
+    // ease-out-back: overshoots a touch, like the app's spring
+    const back = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
+    const sc = still ? 1 : 0.55 + 0.45 * back;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const b of boxes) {
+      minX = Math.min(minX, b.x);
+      maxX = Math.max(maxX, b.x + b.width);
+      minY = Math.min(minY, b.y);
+      maxY = Math.max(maxY, b.y + fs * 1.2);
+    }
+    const px = fs * 0.6;
+    const py = fs * 0.32;
+    const bx = minX - px;
+    const by = minY - py;
+    const bw = maxX - minX + px * 2;
+    const bh = maxY - minY + py * 2;
+    ctx.save();
+    ctx.globalAlpha = clamp01(age / 0.15);
+    ctx.translate(bx, by + bh);
+    ctx.scale(sc, sc);
+    ctx.translate(-bx, -(by + bh));
+    ctx.shadowColor = rgba(o.accent, 0.5);
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = o.accent;
+    const r = Math.min(bh / 2, fs * 0.9);
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by);
+    ctx.lineTo(bx + bw - r, by);
+    ctx.arcTo(bx + bw, by, bx + bw, by + r, r);
+    ctx.lineTo(bx + bw, by + bh - r);
+    ctx.arcTo(bx + bw, by + bh, bx + bw - r, by + bh, r);
+    ctx.lineTo(bx + 6, by + bh);
+    ctx.arcTo(bx, by + bh, bx, by + bh - 6, 6); // the tucked-in corner (a speech tail)
+    ctx.lineTo(bx, by + r);
+    ctx.arcTo(bx, by, bx + r, by, r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    const ink = inkOn(o.accent);
+    for (const b of boxes) {
+      ctx.fillStyle = lit(b.w)
+        ? ink
+        : ink === '#FFFFFF'
+          ? 'rgba(255,255,255,0.55)'
+          : 'rgba(17,17,22,0.5)';
+      ctx.fillText(b.w.text, b.x, b.y);
+    }
+    ctx.restore();
   } else {
     // depth / minimal: bright and dim (depth adds a soft white halo to the sung words)
     for (const b of boxes) {
@@ -759,11 +902,11 @@ export function contextLine(
   switch (effect) {
     case 'depth':
       return { color: `rgba(255,255,255,${[0, 0.5, 0.32, 0.2][Math.min(3, d)]})`, blur: 0 };
-    case 'cinema':
-      return { color: `rgba(255,255,255,${d === 1 ? 0.16 : 0.08})`, blur: 0 };
     case 'focus':
       return { color: `rgba(255,255,255,${d === 1 ? 0.6 : 0.4})`, blur: 7 + d * 2 };
     case 'typewriter':
+    case 'scramble':
+    case 'pen':
     case 'rain':
       return { color: `rgba(255,255,255,${d === 1 ? 0.24 : 0.14})`, blur: 0 };
     default:

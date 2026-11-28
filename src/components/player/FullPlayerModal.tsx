@@ -13,7 +13,7 @@ import { ScrubBar } from './ScrubBar';
 import { AudioOutput, useAudioOutput } from '../../services/audio/audioOutput';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -66,7 +66,7 @@ import { openMvOptions } from '../video/MvOptionsSheet';
 import { MvFullscreen } from '../video/MvFullscreen';
 import { Orientation } from '../../services/ui/orientation';
 import { perfCount } from '../../services/perfProbe';
-import { CoverSheen, TiltCard, useTilt } from '../motion/TiltLayers';
+import { TiltCard, useTilt } from '../motion/TiltLayers';
 import { DustField } from '../motion/DustField';
 import { openLyricsEditor } from './LyricsEditor';
 import { PipButton } from './PipButton';
@@ -275,14 +275,6 @@ export const FullPlayerModal: React.FC = () => {
   const coverX = useRef(new Animated.Value(0)).current;
   // the cover settles back a little on pause and springs forward on play (Apple Music)
   const coverScale = useRef(new Animated.Value(isPlaying ? 1 : 0.94)).current;
-  useEffect(() => {
-    Animated.spring(coverScale, {
-      toValue: isPlaying ? 1 : 0.94,
-      useNativeDriver: true,
-      speed: 10,
-      bounciness: isPlaying ? 7 : 2,
-    }).start();
-  }, [isPlaying, coverScale]);
   const coverPan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) =>
@@ -318,6 +310,30 @@ export const FullPlayerModal: React.FC = () => {
   const videoHidden = useVideoHidden();
   const lastShowVideoRef = useRef(false);
 
+  // the stage's height minus everything under the video (lyrics strip, poster bars) — measured
+  const [mvFit, setMvFit] = useState({ room: 0 });
+  const mvFitRef = useRef({ videoH: 0 });
+  const onStageMeasure = useCallback(
+    (box: { w: number; h: number }, content: { w: number; h: number }) => {
+      const vh = mvFitRef.current.videoH;
+      if (!vh) return;
+      const room = Math.floor(box.h - 10 - (content.h - vh));
+      setMvFit((p) => (Math.abs(p.room - room) < 2 ? p : { room }));
+    },
+    []
+  );
+  const [mvOnCard, setMvOnCard] = useState(false);
+  // a music video never settles back on pause: a scaled video (and the buttons on it) is
+  // resampled, which reads as soft — it stays at 1:1 on the pixel grid
+  useEffect(() => {
+    const big = isPlaying || mvOnCard;
+    Animated.spring(coverScale, {
+      toValue: big ? 1 : 0.94,
+      useNativeDriver: true,
+      speed: 10,
+      bounciness: big ? 7 : 2,
+    }).start();
+  }, [isPlaying, mvOnCard, coverScale]);
   if (!currentTrack) return null;
   const vi = prefs.language === 'vi';
 
@@ -340,6 +356,8 @@ export const FullPlayerModal: React.FC = () => {
     video.status !== 'off' &&
     video.status !== 'idle';
   const showVideo = (videoReady || videoPending) && !videoHidden && mvLook;
+  // (render-time sync of a value the effect above needs; set before the early return)
+  if (mvOnCard !== showVideo) setMvOnCard(showVideo);
   const videoAspect = Math.max(1, Math.min(2.4, video.aspect || 16 / 9));
   // lyrics under the video (Settings › Music video › Lyrics under the video)
   const mvLyricsOn = showVideo && prefs.mvLyrics !== false;
@@ -357,12 +375,17 @@ export const FullPlayerModal: React.FC = () => {
   const leftW = contentW - rightW - LAND_GAP;
   const leftH = winH - padT - padB - 12;
   let videoW = Math.min(winW - 36, 400);
+  if (!landscape && showVideo && mvFit.room > 0) {
+    // portrait: as wide as the stage has height for (FitStage would scale it down otherwise)
+    videoW = Math.round(Math.max(200, Math.min(videoW, mvFit.room * videoAspect)));
+  }
   if (landscape) {
     const posterExtra = prefs.playerStyle === 'POSTER' ? 100 : 0;
     const roomH = Math.max(120, leftH - stripH - posterExtra - 8);
     videoW = Math.round(Math.max(200, Math.min(leftW - 8, roomH * videoAspect, 1000)));
   }
   const videoH = Math.round(videoW / videoAspect);
+  mvFitRef.current.videoH = showVideo ? videoH : 0;
   const hideMvLyrics = () => {
     haptic('selection');
     updatePrefs({ mvLyrics: false });
@@ -929,7 +952,7 @@ export const FullPlayerModal: React.FC = () => {
           </FitStage>
         ) : (
           /* Flagship & Poster Cover Stage — wrapped in the ambient glow */
-          <FitStage>
+          <FitStage onMeasure={onStageMeasure}>
             <View style={styles.flagshipCoverCenter}>
               <CoverGlow
                 colors={ambientColors}
@@ -940,7 +963,13 @@ export const FullPlayerModal: React.FC = () => {
                 drift={coverTilt.on ? 12 : 0}
               >
                 {/* turns with the phone (outside the swipe view: the two never share a node) */}
-                <TiltCard on={coverTilt.on} maxDeg={prefs.playerStyle === 'POSTER' ? 8 : 9}>
+                {/* a playing video doesn't turn: a layer in 3D is resampled every frame (soft
+                    picture and buttons) and its straight edges stair-step on iOS, which doesn't
+                    antialias them — the depth comes from the light and the page behind it */}
+                <TiltCard
+                  on={coverTilt.on && !showVideo}
+                  maxDeg={prefs.playerStyle === 'POSTER' ? 8 : 9}
+                >
                   {/* swipe the cover ← next · → previous */}
                   <Animated.View
                     {...coverPan.panHandlers}
@@ -950,7 +979,14 @@ export const FullPlayerModal: React.FC = () => {
                     style={[
                       styles.coverShadowWrap,
                       prefs.playerStyle === 'POSTER' && styles.posterCoverWrap,
-                      showVideo && { width: videoW, height: videoH, borderRadius: 20 },
+                      showVideo && {
+                        width: videoW,
+                        height: videoH,
+                        borderRadius: 20,
+                        // the edge line is drawn over the picture instead (below): under it, its
+                        // antialiased rim peeks out around the clipped video as a ragged fringe
+                        borderWidth: 0,
+                      },
                       {
                         transform: [
                           { translateX: coverX },
@@ -985,12 +1021,7 @@ export const FullPlayerModal: React.FC = () => {
                         style={styles.coverImage}
                       />
                     )}
-                    {!showVideo && (
-                      <CoverSheen
-                        on={coverTilt.on}
-                        size={prefs.playerStyle === 'POSTER' ? 270 : 300}
-                      />
-                    )}
+                    {showVideo && <View pointerEvents="none" style={styles.videoEdge} />}
                   </Animated.View>
                 </TiltCard>
               </CoverGlow>
@@ -1614,6 +1645,13 @@ const styles = StyleSheet.create({
   coverImage: {
     width: '100%',
     height: '100%',
+  },
+  // the card's edge line over the video (a hairline, so the rim is clean on every scale)
+  videoEdge: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.16)',
   },
   videoInCard: {
     width: '100%',

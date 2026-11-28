@@ -34,7 +34,7 @@ private let LEAD: Double = 0.15
 /// effects that move between frames (the render loop runs at 20 fps for them)
 private let ANIMATED_FX: Set<String> = [
   "glow", "wave", "focus", "typewriter", "glitch", "bloom", "spectrum", "rain", "lift",
-  "slide", "flip", "stamp", "cinema",
+  "scramble", "ball", "pen", "bubble",
 ]
 
 /// one sung word: real timing from the lyrics, or estimated from the line's length
@@ -66,7 +66,7 @@ private struct Meta {
   /** "Up next · Title — Artist" (shown when there are no lyrics to show) */
   var upNext = ""
   /// the lyrics effect (same ids as the app: glow, wave, depth, minimal, focus, typewriter,
-  /// marker, glitch, bloom, spectrum, rain, lift, slide, flip, stamp, cinema)
+  /// marker, glitch, bloom, spectrum, rain, lift, scramble, ball, pen, bubble)
   var effect = "glow"
   /// the player's ambient light: primary, dark base, then the cover's 4 corners ([] = accent)
   var ambient: [UIColor] = []
@@ -1093,51 +1093,151 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
           put(b.w.text, b.x, b.y, dim)
         }
       }
-    case "slide", "flip", "stamp":
-      // quick entrances that decelerate into place: from the right / a split-flap turn / a stamp
-      let fsz = font.pointSize
-      let dur = fx == "slide" ? 0.23 : fx == "flip" ? 0.26 : 0.2
-      for b in boxes {
-        noShadow()
-        let age = t - b.w.start
-        let k = age < 0 ? 0 : min(1, age / dur)
-        let e = CGFloat(1 - pow(1 - k, 3))
-        if e < 1 { put(b.w.text, b.x, b.y, UIColor.white.withAlphaComponent(0.4 * (1 - e))) }
-        if k <= 0 { continue }
-        let cx = b.x + b.width / 2
-        let cy = b.y + lh * 0.5
-        ctx.saveGState()
-        ctx.setShadow(
-          offset: .zero, blur: fx == "stamp" ? 12 : 10,
-          color: accent.withAlphaComponent(fx == "stamp" ? 0.8 : 0.55).cgColor)
-        if fx == "slide" {
-          ctx.setAlpha(e)
-          put(b.w.text, b.x + (still ? 0 : fsz * 0.5 * (1 - e)), b.y, .white)
-        } else if fx == "flip" {
-          ctx.setAlpha(e)
-          let sy: CGFloat = still ? 1 : max(0.03, cos((1 - e) * 88 * .pi / 180))
-          ctx.translateBy(x: cx, y: cy)
-          ctx.scaleBy(x: 1, y: sy)
-          ctx.translateBy(x: -cx, y: -cy)
+    case "scramble":
+      // Decode: decoded letters white, the next few flicker through look-alike glyphs (accent),
+      // the rest faint — the glyphs sit centred on the real letters' places, so nothing shifts
+      noShadow()
+      let tick = still ? 0 : Int(floor(t * 14))
+      let ghost = UIColor.white.withAlphaComponent(0.2)
+      var gi = 0
+      for (wi, b) in boxes.enumerated() {
+        let f = max(0, min(1, (t - b.w.start) / max(0.12, b.w.end - b.w.start)))
+        let chars = Array(b.w.text)
+        let n =
+          f >= 1
+          ? chars.count : (f <= 0 ? 0 : min(chars.count, Int(ceil(Double(chars.count) * f))))
+        var x = b.x
+        for (ci, ch) in chars.enumerated() {
+          let one = String(ch)
+          let cw = PiPEngine.width(one, font)
+          if ci < n {
+            put(one, x, b.y, .white)
+          } else if f > 0 && f < 1 && ci < n + 4 && !still {
+            let g = PiPEngine.cipherChar(one, tick * 31 + (gi + ci) * 7 + wi)
+            ctx.saveGState()
+            ctx.setShadow(offset: .zero, blur: 8, color: accent.cgColor)
+            put(g, x + (cw - PiPEngine.width(g, font)) / 2, b.y, accent)
+            ctx.restoreGState()
+          } else {
+            put(one, x, b.y, ghost)
+          }
+          x += cw
+        }
+        gi += chars.count + 1
+      }
+    case "ball":
+      // Sing-along: the ball lands on each word as it is sung, hopping over from the last one
+      var started = 0
+      while started < boxes.count && boxes[started].w.start <= t { started += 1 }
+      for (i, b) in boxes.enumerated() {
+        if i < started {
+          ctx.setShadow(offset: .zero, blur: 10, color: accent.withAlphaComponent(0.6).cgColor)
           put(b.w.text, b.x, b.y, .white)
         } else {
-          ctx.setAlpha(CGFloat(min(1, k / 0.6)))
-          let sc: CGFloat = still ? 1 : 1.6 - 0.6 * e
-          ctx.translateBy(x: cx, y: cy)
-          ctx.scaleBy(x: sc, y: sc)
-          ctx.translateBy(x: -cx, y: -cy)
-          put(b.w.text, b.x, b.y, .white)
+          noShadow()
+          put(b.w.text, b.x, b.y, dim)
         }
-        ctx.restoreGState()
       }
-    case "cinema":
-      // a film subtitle: the whole line eases in (fade + a short rise), crisp with a dark edge
-      let a = max(0, min(1, (t - lineStart) / 0.28))
-      let e = CGFloat(1 - pow(1 - a, 3))
-      ctx.setAlpha(e)
-      ctx.setShadow(offset: .zero, blur: 6, color: UIColor.black.withAlphaComponent(0.75).cgColor)
-      let dy: CGFloat = still ? 0 : font.pointSize * 0.4 * (1 - e)
-      for b in boxes { put(b.w.text, b.x, b.y + dy, .white) }
+      let fsz = font.pointSize
+      let R = max(5, fsz * 0.15)
+      func spot(_ b: WBox) -> CGPoint { CGPoint(x: b.x + b.width / 2, y: b.y + fsz * 0.05) }
+      let cur = max(0, started - 1)
+      var p = spot(boxes[cur])
+      var sx: CGFloat = 1
+      var sy: CGFloat = 1
+      if started < boxes.count && !still {
+        let hop = PiPEngine.hopS(boxes.map { $0.w }, started)
+        let until = boxes[started].w.start - t
+        if until < hop {
+          let k = CGFloat(max(0, min(1, 1 - until / hop)))
+          let q = spot(boxes[started])
+          let H = max(fsz * 0.7, R * 4)
+          p = CGPoint(x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k - H * 4 * k * (1 - k))
+        }
+      }
+      let age = started > 0 ? t - boxes[cur].w.start : 1
+      if age >= 0 && age < 0.16 && !still {
+        let k = CGFloat(1 - age / 0.16)
+        sx = 1 + 0.35 * k
+        sy = 1 - 0.32 * k
+      }
+      ctx.setShadow(offset: .zero, blur: 10, color: accent.cgColor)
+      accent.setFill()
+      UIBezierPath(
+        ovalIn: CGRect(
+          x: p.x - R * sx, y: p.y + R * (1 - sy) - R * sy, width: R * sx * 2, height: R * sy * 2)
+      ).fill()
+    case "pen":
+      // Handwriting: italic ink uncovered by a pen nib that follows the voice
+      let traits = font.fontDescriptor.symbolicTraits.union(.traitItalic)
+      var italic = font
+      if let d = font.fontDescriptor.withSymbolicTraits(traits) {
+        italic = UIFont(descriptor: d, size: font.pointSize)
+      }
+      let fsz = font.pointSize
+      func ink(_ text: String, _ x: CGFloat, _ y: CGFloat, _ color: UIColor) {
+        (text as NSString).draw(
+          at: CGPoint(x: x, y: y), withAttributes: [.font: italic, .foregroundColor: color])
+      }
+      for b in boxes {
+        noShadow()
+        let f = CGFloat(max(0, min(1, (t - b.w.start) / PiPEngine.penS(b.w))))
+        ink(b.w.text, b.x, b.y, UIColor.white.withAlphaComponent(0.18))
+        if f <= 0 { continue }
+        let iw = (b.width + fsz * 0.3) * f
+        ctx.saveGState()
+        ctx.clip(to: CGRect(x: b.x - 4, y: b.y - 8, width: iw + 4, height: lh + 16))
+        ctx.setShadow(offset: .zero, blur: 8, color: accent.withAlphaComponent(0.55).cgColor)
+        ink(b.w.text, b.x, b.y, .white)
+        ctx.restoreGState()
+        if f < 1 && !still {
+          ctx.saveGState()
+          ctx.setShadow(offset: .zero, blur: 12, color: accent.cgColor)
+          accent.setFill()
+          let r = max(3, fsz * 0.09)
+          let nx = b.x + (b.width + fsz * 0.1) * f
+          let ny = b.y + font.ascender
+          UIBezierPath(ovalIn: CGRect(x: nx - r, y: ny - r, width: r * 2, height: r * 2)).fill()
+          ctx.restoreGState()
+        }
+      }
+    case "bubble":
+      // Chat: the line arrives as a message bubble (a spring from its corner); words fill in
+      let age = t - lineStart
+      let k = max(0, min(1, age / 0.42))
+      let back = 1 + 2.2 * pow(k - 1, 3) + 1.2 * pow(k - 1, 2)
+      let sc = CGFloat(still ? 1 : 0.55 + 0.45 * back)
+      var minX = CGFloat.greatestFiniteMagnitude
+      var maxX = -CGFloat.greatestFiniteMagnitude
+      var minY = CGFloat.greatestFiniteMagnitude
+      var maxY = -CGFloat.greatestFiniteMagnitude
+      for b in boxes {
+        minX = min(minX, b.x)
+        maxX = max(maxX, b.x + b.width)
+        minY = min(minY, b.y)
+        maxY = max(maxY, b.y + lh)
+      }
+      let fsz = font.pointSize
+      let px = fsz * 0.6
+      let py = fsz * 0.25
+      let rect = CGRect(
+        x: minX - px, y: minY - py, width: maxX - minX + px * 2, height: maxY - minY + py * 2)
+      ctx.setAlpha(CGFloat(max(0, min(1, age / 0.15))))
+      ctx.translateBy(x: rect.minX, y: rect.maxY)
+      ctx.scaleBy(x: sc, y: sc)
+      ctx.translateBy(x: -rect.minX, y: -rect.maxY)
+      ctx.setShadow(offset: .zero, blur: 16, color: accent.withAlphaComponent(0.5).cgColor)
+      accent.setFill()
+      let r = min(rect.height / 2, fsz * 0.9)
+      // the bottom-left corner stays tucked in, like a speech tail
+      UIBezierPath(
+        roundedRect: rect, byRoundingCorners: [.topLeft, .topRight, .bottomRight],
+        cornerRadii: CGSize(width: r, height: r)
+      ).fill()
+      noShadow()
+      let inkC = PiPEngine.inkOn(accent)
+      let inkDim = inkC.withAlphaComponent(0.5)
+      for b in boxes { put(b.w.text, b.x, b.y, lit(b.w) ? inkC : inkDim) }
     default:
       // depth / minimal: bright and dim (depth adds a soft white halo to the sung words)
       for b in boxes {
@@ -1153,8 +1253,8 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     }
   }
 
-  /// A neighbouring (not sung) line in the effect's look: dimmer with distance in Depth, nearly
-  /// gone in Cinema, out of focus in Focus, faint in Typewriter
+  /// A neighbouring (not sung) line in the effect's look: dimmer with distance in Depth,
+  /// out of focus in Focus, faint in Typewriter, Decode and Handwriting
   private func drawContext(
     _ s: String, _ rect: CGRect, size: CGFloat, align: NSTextAlignment, distance: Int, lines: Int
   ) {
@@ -1167,12 +1267,10 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     case "depth":
       let alphas: [CGFloat] = [0, 0.5, 0.32, 0.2]
       color = UIColor.white.withAlphaComponent(alphas[min(3, d)])
-    case "cinema":
-      color = UIColor.white.withAlphaComponent(d == 1 ? 0.16 : 0.08)
     case "focus":
       color = UIColor.white.withAlphaComponent(d == 1 ? 0.6 : 0.4)
       blur = CGFloat(7 + d * 2)
-    case "typewriter", "rain":
+    case "typewriter", "scramble", "pen", "rain":
       color = UIColor.white.withAlphaComponent(d == 1 ? 0.24 : 0.14)
     default:
       break
@@ -1288,6 +1386,34 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     max(0.12, min(0.45, w.end - w.start))
   }
 
+  /// Handwriting: how long the pen takes over a word (0.92 × its length, 0.16–1.2 s, as the app)
+  static func penS(_ w: PWord) -> Double {
+    max(0.16, min(1.2, (w.end - w.start) * 0.92))
+  }
+
+  /// Sing-along: the hop onto word i (≤ 0.45 s, ending on its start — same as the app)
+  static func hopS(_ words: [PWord], _ i: Int) -> Double {
+    let span = i > 0 ? words[i].start - words[i - 1].start : 0.45
+    return max(0.14, min(0.45, span * 0.85))
+  }
+
+  /// Decode: a look-alike glyph of the same kind (upper / lower / digit); marks stay
+  static func cipherChar(_ c: String, _ seed: Int) -> String {
+    let set: [Character]
+    if c.count == 1, let ch = c.first, ch.isNumber, ch.isASCII {
+      set = Array("0123456789")
+    } else if c != c.lowercased() {
+      set = Array("ABCDEGHKMNOPRSUVXZ")
+    } else if c != c.uppercased() {
+      set = Array("aceimnorsuvxz")
+    } else {
+      return c
+    }
+    let h = sin(Double(seed) * 12.9898 + 78.233) * 43758.5453
+    let i = Int(floor((h - floor(h)) * Double(set.count))) % set.count
+    return String(set[max(0, i)])
+  }
+
   /// Is anything on the sung line moving at lyrics time `t`? (mirrors pipLyricsFx.fxBusy)
   static func fxBusy(_ fx: String, _ words: [PWord], _ lineStart: Double, _ t: Double) -> Bool {
     func within(_ after: Double) -> Bool {
@@ -1302,10 +1428,17 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       return words.contains { t >= $0.start && t < $0.start + fillS($0) + 0.05 }
     case "spectrum":
       return words.contains { t >= $0.start && t < $0.start + max(0.5, fillS($0)) + 0.05 }
-    case "slide": return within(0.26)
-    case "flip": return within(0.29)
-    case "stamp": return within(0.23)
-    case "cinema": return t - lineStart < 0.32
+    case "scramble":
+      return words.contains { t >= $0.start && t < $0.start + max(0.12, $0.end - $0.start) + 0.05 }
+    case "pen":
+      return words.contains { t >= $0.start && t < $0.start + penS($0) + 0.05 }
+    case "ball":
+      // in the air (a hop ends on a word's start) or squashing on landing
+      for (i, w) in words.enumerated() where t >= w.start - hopS(words, i) && t < w.start + 0.16 {
+        return true
+      }
+      return false
+    case "bubble": return t - lineStart < 0.45
     case "wave": return within(0.6)
     case "focus": return within(0.3)
     case "glitch": return within(0.25)

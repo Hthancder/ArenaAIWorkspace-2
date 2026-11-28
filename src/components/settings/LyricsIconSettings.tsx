@@ -203,63 +203,90 @@ const EffectSample: React.FC<{ id: LyricsEffect; accent: string }> = ({ id, acce
           <Text style={[base, { color: 'rgba(255,255,255,0.38)' }]}>nào</Text>
         </View>
       );
-    case 'slide':
+    case 'scramble':
       return (
-        <View style={{ flexDirection: 'row' }}>
-          <Text style={[base, { color: '#FFF' }]}>Hát </Text>
-          <Text style={[base, { color: '#FFF', opacity: 0.7, transform: [{ translateX: 5 }] }]}>
-            lên
-          </Text>
-          <Text style={[base, { color: dim, marginLeft: 5 }]}>nào</Text>
-        </View>
+        <Text style={base}>
+          <Text style={{ color: '#FFF' }}>Hát l</Text>
+          <Text style={{ color: accent, textShadowColor: accent, textShadowRadius: 6 }}>x#n</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.2)' }}>ào</Text>
+        </Text>
       );
-    case 'flip':
+    case 'ball':
       return (
-        <View style={{ flexDirection: 'row' }}>
-          <Text style={[base, { color: '#FFF' }]}>Hát </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingTop: 6 }}>
           <Text
-            style={[
-              base,
-              { color: '#FFF', transform: [{ perspective: 120 }, { rotateX: '-45deg' }] },
-            ]}
+            style={[base, { color: '#FFF', textShadowColor: accent + '99', textShadowRadius: 6 }]}
           >
-            lên
+            Hát{' '}
           </Text>
-          <Text style={[base, { color: dim, marginLeft: 5 }]}>nào</Text>
+          <View>
+            <View
+              style={{
+                position: 'absolute',
+                top: -6,
+                left: '42%',
+                width: 7,
+                height: 7,
+                borderRadius: 4,
+                backgroundColor: accent,
+              }}
+            />
+            <Text style={[base, { color: '#FFF' }]}>lên </Text>
+          </View>
+          <Text style={[base, { color: dim }]}>nào</Text>
         </View>
       );
-    case 'stamp':
+    case 'pen':
       return (
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={[base, { color: '#FFF' }]}>Hát </Text>
-          <Text
-            style={[
-              base,
-              {
-                color: '#FFF',
-                textShadowColor: accent,
-                textShadowRadius: 10,
-                transform: [{ scale: 1.25 }],
-              },
-            ]}
-          >
-            lên
-          </Text>
-          <Text style={[base, { color: dim, marginLeft: 5 }]}>nào</Text>
+          <Text style={[base, { color: '#FFF', fontStyle: 'italic' }]}>Hát lê</Text>
+          <View
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              marginTop: 8,
+              backgroundColor: accent,
+              shadowColor: accent,
+              shadowOpacity: 1,
+              shadowRadius: 4,
+              shadowOffset: { width: 0, height: 0 },
+            }}
+          />
+          <Text style={[base, { color: 'rgba(255,255,255,0.2)', fontStyle: 'italic' }]}>n nào</Text>
         </View>
       );
-    case 'cinema':
+    case 'bubble':
       return (
-        <View style={{ alignItems: 'center' }}>
-          <Text style={[base, { color: '#FFF', fontSize: 11, opacity: 0.14 }]}>Câu trước</Text>
-          <Text
-            style={[
-              base,
-              { color: '#FFF', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 5 },
-            ]}
+        <View style={{ gap: 3, alignSelf: 'stretch', paddingHorizontal: 4 }}>
+          <View
+            style={{
+              alignSelf: 'flex-start',
+              paddingHorizontal: 8,
+              paddingVertical: 2,
+              borderRadius: 10,
+              borderBottomLeftRadius: 3,
+              backgroundColor: 'rgba(255,255,255,0.14)',
+            }}
           >
-            Hát lên nào
-          </Text>
+            <Text style={[base, { fontSize: 10, color: 'rgba(255,255,255,0.8)' }]}>Câu trước</Text>
+          </View>
+          <View
+            style={{
+              alignSelf: 'flex-end',
+              paddingHorizontal: 8,
+              paddingVertical: 2,
+              borderRadius: 10,
+              borderBottomRightRadius: 3,
+              backgroundColor: accent,
+            }}
+          >
+            <Text
+              style={[base, { fontSize: 12, color: luminance(accent) > 0.55 ? '#111116' : '#FFF' }]}
+            >
+              Hát lên nào
+            </Text>
+          </View>
         </View>
       );
     default:

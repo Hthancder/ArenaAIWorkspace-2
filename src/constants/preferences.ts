@@ -37,18 +37,23 @@ export type LyricsEffect =
   | 'spectrum'
   | 'rain'
   | 'lift'
-  // Phase 24 — quick, each its own kind of motion: sideways, a split-flap turn, a stamp, and a
-  // film subtitle (karaoke / neon were too close to Glow, dissolve lagged behind the voice)
-  | 'slide'
-  | 'flip'
-  | 'stamp'
-  | 'cinema';
+  // Phase 25 — each with an idea of its own: letters decoding like a cipher, the sing-along
+  // bouncing ball, a pen writing the line, and the lyrics as a chat conversation
+  | 'scramble'
+  | 'ball'
+  | 'pen'
+  | 'bubble';
 
-/** effects taken out in Phase 24 → the closest one still there (saved settings, PiP choice) */
+/** effects taken out (Phase 24, 25) → the closest one still there (saved settings, PiP choice) */
 const RETIRED_EFFECTS: Record<string, LyricsEffect> = {
-  karaoke: 'lift',
+  karaoke: 'ball',
   neon: 'glow',
   dissolve: 'bloom',
+  // Phase 25: too ordinary — replaced by effects with a concept
+  slide: 'pen',
+  flip: 'scramble',
+  stamp: 'ball',
+  cinema: 'bubble',
 };
 export function liveLyricsEffect<T extends string>(e: T | undefined): T | LyricsEffect | undefined {
   return e && RETIRED_EFFECTS[e] ? RETIRED_EFFECTS[e] : e;

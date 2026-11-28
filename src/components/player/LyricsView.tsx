@@ -793,32 +793,33 @@ export const LYRICS_EFFECTS: {
     descEn: 'Words brighten and rise slightly with the voice, Apple Music style',
   },
   {
-    id: 'slide',
-    vi: 'Trượt vào',
-    en: 'Slide',
-    descVi: 'Chữ lướt nhanh từ bên phải vào chỗ đúng lúc được hát',
-    descEn: 'Each word glides in from the right the moment it is sung',
+    id: 'scramble',
+    vi: 'Giải mã',
+    en: 'Decode',
+    descVi: 'Ký tự nhảy loạn như mật mã rồi khoá lại thành chữ đúng theo giọng hát',
+    descEn: 'Letters flicker through a cipher and lock into the right word with the voice',
   },
   {
-    id: 'flip',
-    vi: 'Lật chữ',
-    en: 'Flip',
-    descVi: 'Chữ lật xuống như bảng chữ ở sân bay khi được hát',
-    descEn: 'Words flip down into place like an airport departure board',
+    id: 'ball',
+    vi: 'Bóng nảy',
+    en: 'Sing-along',
+    descVi: 'Quả bóng nhỏ nảy từ chữ này sang chữ kia, đáp đúng lúc chữ được hát — karaoke xưa',
+    descEn: 'A little ball hops from word to word, landing as each one is sung — classic karaoke',
   },
   {
-    id: 'stamp',
-    vi: 'Đóng dấu',
-    en: 'Stamp',
-    descVi: 'Chữ từ lớn dập xuống đúng nhịp, gọn và mạnh',
-    descEn: 'Words punch down from large onto the beat, crisp and strong',
+    id: 'pen',
+    vi: 'Viết tay',
+    en: 'Handwriting',
+    descVi: 'Ngòi bút sáng chạy theo giọng hát, viết ra từng chữ nghiêng',
+    descEn: 'A glowing pen nib follows the voice, writing the line out in slanted ink',
   },
   {
-    id: 'cinema',
-    vi: 'Phụ đề phim',
-    en: 'Cinema',
-    descVi: 'Chỉ câu đang hát, hiện lên nhẹ như phụ đề — các câu khác ẩn gần hết',
-    descEn: 'Only the sung line, easing in like a film subtitle — the others almost vanish',
+    id: 'bubble',
+    vi: 'Tin nhắn',
+    en: 'Chat',
+    descVi: 'Mỗi câu là một bong bóng chat hai bên xen kẽ; câu đang hát bật lên như tin nhắn mới',
+    descEn:
+      'Each line is a chat bubble, sides alternating; the sung one pops in like a new message',
   },
 ];
 
@@ -846,9 +847,10 @@ const FLOWING: LyricsEffect[] = [
   'spectrum',
   'rain',
   'lift',
-  'slide',
-  'flip',
-  'stamp',
+  'scramble',
+  'ball',
+  'pen',
+  'bubble',
 ];
 
 const SIZES: Record<LyricsSize, { font: number; line: number }> = {
@@ -913,24 +915,37 @@ function lineLook(
         scale: active ? 1 : 0.9,
         opacity: 1,
       };
-    case 'cinema':
-      // a film subtitle: the sung line, crisp with a dark edge; the rest nearly gone
+    case 'scramble':
+      // decoded lines stay readable, lines ahead are still "encrypted" (faint)
       return {
-        text: active
-          ? { color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.75)', textShadowRadius: 6 }
-          : { color: '#FFFFFF' },
+        text: {
+          color: active ? '#FFFFFF' : past ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.22)',
+        },
         scale: 1,
-        opacity: active ? 1 : past ? 0.1 : 0.16,
+        opacity: 1,
       };
-    case 'slide':
-    case 'flip':
-    case 'stamp':
+    case 'ball':
       return {
-        text: active
-          ? { color: '#FFFFFF', textShadowColor: accent + '77', textShadowRadius: 10 }
-          : { color: dim },
+        text: active ? { color: '#FFFFFF' } : { color: dim },
         scale: active ? 1 : 0.92,
         opacity: 1,
+      };
+    case 'pen':
+      // ink on paper: written lines stay, the ones ahead are a faint pencil guide
+      return {
+        text: {
+          fontStyle: 'italic',
+          color: active ? '#FFFFFF' : past ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.2)',
+        },
+        scale: 1,
+        opacity: 1,
+      };
+    case 'bubble':
+      // messages already read stay clear, the ones still to come are faint
+      return {
+        text: { color: past ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.5)' },
+        scale: active ? 1 : 0.94,
+        opacity: past ? 0.85 : 1,
       };
     case 'rain':
       return {
@@ -1031,7 +1046,6 @@ const ActiveLine: React.FC<{
 }> = (p) => {
   const flowing = FLOWING.includes(p.effect);
   const hasWords = !!p.line.words && p.line.words.length > 0;
-  if (p.effect === 'cinema') return <CinemaLine text={p.line.text} textStyle={p.textStyle} />;
   if (!hasWords && !flowing) {
     const look = lineLook(p.effect, p.accent, true, false, 0);
     return <Text style={[p.textStyle, look.text]}>{p.line.text}</Text>;
@@ -1068,6 +1082,78 @@ const ActiveWords: React.FC<React.ComponentProps<typeof ActiveLine>> = ({
         textStyle={textStyle}
         accent={accent}
       />
+    );
+  }
+
+  if (effect === 'scramble') {
+    return (
+      <ScrambleLine
+        words={words}
+        offset={offset}
+        playing={playing}
+        textStyle={textStyle}
+        accent={accent}
+      />
+    );
+  }
+
+  if (effect === 'ball') {
+    return (
+      <BallLine
+        words={words}
+        lit={lit}
+        offset={offset}
+        playing={playing}
+        textStyle={textStyle}
+        accent={accent}
+        align={align}
+        gap={gap}
+      />
+    );
+  }
+
+  if (effect === 'bubble') {
+    const ink = luminance(accent) > 0.55 ? '#111116' : '#FFFFFF';
+    const inkDim = ink === '#FFFFFF' ? 'rgba(255,255,255,0.55)' : 'rgba(17,17,22,0.5)';
+    return (
+      <BubblePop align={align} color={accent}>
+        <Text style={[textStyle, { textAlign: 'left', color: ink, textShadowRadius: 0 }]}>
+          {words.map((w, i) => (
+            <Text key={i} style={{ color: i < lit ? ink : inkDim }}>
+              {w.text}
+              {i < words.length - 1 ? ' ' : ''}
+            </Text>
+          ))}
+        </Text>
+      </BubblePop>
+    );
+  }
+
+  if (effect === 'pen') {
+    return (
+      <View
+        style={[
+          styles.wordRow,
+          {
+            justifyContent:
+              align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+          },
+        ]}
+      >
+        {words.map((w, i) => (
+          <PenWord
+            key={i}
+            text={w.text}
+            lit={i < lit}
+            // the pen writes for as long as the word is sung (a long note: a slow stroke)
+            ms={Math.max(160, Math.min(1200, (w.endSec - w.startSec) * 920))}
+            accent={accent}
+            settled={w.endSec + 0.4 < shownAt}
+            textStyle={textStyle}
+            gap={gap}
+          />
+        ))}
+      </View>
     );
   }
 
@@ -1177,18 +1263,7 @@ const TypeLine: React.FC<{
   );
 };
 
-type FlowFx =
-  | 'wave'
-  | 'focus'
-  | 'marker'
-  | 'glitch'
-  | 'bloom'
-  | 'spectrum'
-  | 'rain'
-  | 'lift'
-  | 'slide'
-  | 'flip'
-  | 'stamp';
+type FlowFx = 'wave' | 'focus' | 'marker' | 'glitch' | 'bloom' | 'spectrum' | 'rain' | 'lift';
 const FLOW_FX = new Set<string>([
   'wave',
   'focus',
@@ -1198,9 +1273,6 @@ const FLOW_FX = new Set<string>([
   'spectrum',
   'rain',
   'lift',
-  'slide',
-  'flip',
-  'stamp',
 ]);
 const isFlowFx = (e: LyricsEffect): e is FlowFx => FLOW_FX.has(e);
 
@@ -1216,12 +1288,6 @@ function litMs(effect: FlowFx, ms: number): number {
     case 'glitch':
       return 220;
     case 'rain':
-      return 200;
-    case 'slide':
-      return 230;
-    case 'flip':
-      return 260;
-    case 'stamp':
       return 200;
     default:
       return 160;
@@ -1239,10 +1305,7 @@ const IN = { inputRange: [0, 1], extrapolate: 'clamp' as const };
  *  bloom     pops open while an accent copy of the word spreads out and fades, like a ripple
  *  spectrum  fills with its own hue of a rainbow that starts at the accent
  *  rain      drops in from above and lands with a little bounce
- *  lift      brightens and rises a hair over its duration (Apple Music style)
- *  slide     glides in from the right (≈ half an em) as it lights
- *  flip      turns down into place around its middle, like a split-flap board
- *  stamp     punches down from 1.6× onto the line */
+ *  lift      brightens and rises a hair over its duration (Apple Music style) */
 const FlowWord: React.FC<{
   text: string;
   lit: boolean;
@@ -1289,10 +1352,7 @@ const FlowWord: React.FC<{
         toValue: 1,
         duration: litMs(effect, ms),
         // the moving entrances decelerate into place (no wobble, done in a quarter second)
-        easing:
-          effect === 'slide' || effect === 'flip' || effect === 'stamp'
-            ? Easing.out(Easing.cubic)
-            : Easing.out(Easing.quad),
+        easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       })
     );
@@ -1383,20 +1443,6 @@ const FlowWord: React.FC<{
         return {
           off,
           scale: v.interpolate({ ...IN, outputRange: [calm ? 1 : 0.96, 1] }),
-        };
-      case 'slide':
-        return { off, dx: v.interpolate({ ...IN, outputRange: [calm ? 0 : fs * 0.5, 0] }) };
-      case 'flip':
-        return {
-          off,
-          turn: v.interpolate({ ...IN, outputRange: [calm ? '0deg' : '-88deg', '0deg'] }),
-        };
-      case 'stamp':
-        return {
-          off,
-          press: v.interpolate({ ...IN, outputRange: [calm ? 1 : 1.6, 1] }),
-          // the lit copy is fully there a little before it lands
-          ink: v.interpolate({ inputRange: [0, 0.6], outputRange: [0, 1], extrapolate: 'clamp' }),
         };
       case 'wave':
         return {
@@ -1560,39 +1606,6 @@ const FlowWord: React.FC<{
     );
   }
 
-  if (effect === 'slide' || effect === 'flip' || effect === 'stamp') {
-    const move =
-      effect === 'slide'
-        ? { opacity: v, transform: [{ translateX: n.dx }] }
-        : effect === 'flip'
-          ? { opacity: v, transform: [{ perspective: fs * 14 }, { rotateX: n.turn }] }
-          : { opacity: n.ink, transform: [{ scale: n.press }] };
-    return (
-      <View style={{ marginRight: gap }}>
-        <Animated.Text
-          style={[textStyle, styles.wordText, { color: 'rgba(255,255,255,0.4)', opacity: n.off }]}
-        >
-          {text}
-        </Animated.Text>
-        <Animated.Text
-          style={[
-            textStyle,
-            styles.wordText,
-            styles.wordLit,
-            {
-              color: '#FFFFFF',
-              textShadowColor: effect === 'stamp' ? accent + 'CC' : accent + '88',
-              textShadowRadius: effect === 'stamp' ? 12 : 10,
-            },
-            move,
-          ]}
-        >
-          {text}
-        </Animated.Text>
-      </View>
-    );
-  }
-
   const litColor = effect === 'spectrum' ? tint : '#FFFFFF';
   const glow =
     effect === 'spectrum'
@@ -1637,36 +1650,451 @@ const FlowWord: React.FC<{
   );
 });
 
-/** Cinema: the sung line eases in like a film subtitle (a short fade and rise, once, when it
- *  becomes the line) — word timing is ignored on purpose, a subtitle shows whole. */
-const CinemaLine: React.FC<{ text: string; textStyle: any }> = ({ text, textStyle }) => {
-  const a = useAnim(0);
+// ---------------------------------------------------------------- Phase 25 effects
+
+/** letters typed so far at lyrics time `t` (each word over the time it is sung) */
+function typedChars(words: LyricWord[], t: number, len: number): number {
+  let shown = 0;
+  let pos = 0;
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const span = Math.max(0.12, w.endSec - w.startSec);
+    const f = Math.max(0, Math.min(1, (t - w.startSec) / span));
+    if (f <= 0) break;
+    shown = pos + Math.ceil(w.text.length * f);
+    pos += w.text.length + 1;
+    if (f < 1) break;
+    shown = Math.min(len, pos);
+  }
+  return shown;
+}
+
+// look-alike glyphs of about the same width as what they stand in for (the tail barely moves)
+const CIPHER_LOWER = 'aceimnorsuvxz';
+const CIPHER_UPPER = 'ABCDEGHKMNOPRSUVXZ';
+const CIPHER_DIGIT = '0123456789';
+
+/** a stand-in glyph for `c` — the same kind (upper / lower / digit); spaces & marks stay */
+export function cipherChar(c: string, seed: number): string {
+  const set = /[0-9]/.test(c)
+    ? CIPHER_DIGIT
+    : c !== c.toLowerCase()
+      ? CIPHER_UPPER
+      : c !== c.toUpperCase()
+        ? CIPHER_LOWER
+        : null;
+  if (!set) return c;
+  const h = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return set.charAt(Math.floor((h - Math.floor(h)) * set.length) % set.length);
+}
+
+/** Decode: the sung part of the line resolves letter by letter into white; the few letters just
+ *  ahead of the voice flicker through look-alike glyphs in the accent colour — a cipher being
+ *  cracked — and the rest waits faint. Only the active line re-renders (~14×/s while a word is
+ *  being sung, never once the line is decoded). */
+const ScrambleLine: React.FC<{
+  words: LyricWord[];
+  offset: number;
+  playing: boolean;
+  textStyle: any;
+  accent: string;
+}> = ({ words, offset, playing, textStyle, accent }) => {
+  perfCount('render:ScrambleLine');
+  const full = useMemo(() => words.map((w) => w.text).join(' '), [words]);
+  const read = useCallback(() => {
+    const now = PlaybackClock.now(playing);
+    const shown = typedChars(words, now - offset + 0.08, full.length);
+    // the glyphs change ~14×/s; a decoded line (or a paused one) holds still
+    const tick = playing && shown < full.length && !calm ? Math.floor(now * 14) : 0;
+    return { shown, tick };
+  }, [words, offset, playing, full]);
+  const [st, setSt] = useState(read);
   useEffect(() => {
-    const anim = Animated.timing(a, {
-      toValue: 1,
-      duration: 280,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    });
-    anim.start();
-    return () => anim.stop();
-  }, [a]);
-  const rise = useMemo(() => a.interpolate({ ...IN, outputRange: [calm ? 0 : 10, 0] }), [a]);
+    const update = () => {
+      if (!AppActivity.isActive()) return;
+      const n = read();
+      setSt((p) => (p.shown === n.shown && p.tick === n.tick ? p : n));
+    };
+    update();
+    const unsub = PlaybackClock.subscribe(update);
+    if (!playing) return unsub;
+    const id = setInterval(update, 50);
+    return () => {
+      clearInterval(id);
+      unsub();
+    };
+  }, [read, playing]);
+  const { shown, tick } = st;
+  const done = shown >= full.length;
+  const win = done ? 0 : calm ? 0 : 4;
+  let cipher = '';
+  for (let i = shown; i < Math.min(full.length, shown + win); i++) {
+    cipher += cipherChar(full.charAt(i), tick * 31 + i * 7);
+  }
   return (
-    <Animated.Text
-      style={[
-        textStyle,
+    <Text style={textStyle}>
+      <Text style={{ color: '#FFFFFF' }}>{full.slice(0, shown)}</Text>
+      {!!cipher && (
+        <Text style={{ color: accent, textShadowColor: accent, textShadowRadius: 8 }}>
+          {cipher}
+        </Text>
+      )}
+      {!done && (
+        <Text style={{ color: 'rgba(255,255,255,0.2)' }}>{full.slice(shown + cipher.length)}</Text>
+      )}
+    </Text>
+  );
+};
+
+/** Sing-along: the karaoke bouncing ball. The words sit in a row; the ball hops from the word
+ *  being sung to the next one and lands on it the moment it is sung (the hop — ≤ 0.45 s — is
+ *  timed to end on the next word's start), squashing a little on landing. Sung words light up.
+ *  Everything moving is native-driven: x, y, an arc and a squash per hop. */
+const BallLine: React.FC<{
+  words: LyricWord[];
+  lit: number;
+  offset: number;
+  playing: boolean;
+  textStyle: any;
+  accent: string;
+  align: 'left' | 'center' | 'right';
+  gap: number;
+}> = ({ words, lit, offset, playing, textStyle, accent, align, gap }) => {
+  const flat = StyleSheet.flatten(textStyle) || {};
+  const fs: number = (flat.fontSize as number) || 25;
+  const lh: number = (flat.lineHeight as number) || fs * 1.36;
+  const R = Math.max(7, Math.round(fs * 0.3));
+  const boxes = useRef<({ x: number; y: number; w: number } | undefined)[]>([]);
+  const [layoutSeq, setLayoutSeq] = useState(0);
+  const bx = useAnim(0);
+  const by = useAnim(0);
+  const arc = useAnim(0);
+  const squash = useAnim(0);
+  const shown = useAnim(0);
+  const heading = useRef(-1);
+  const hopAnim = useRef<Animated.CompositeAnimation | null>(null);
+  const placed = useRef(false);
+
+  const spot = useCallback(
+    (i: number) => {
+      const b = boxes.current[i];
+      if (!b) return null;
+      return { x: b.x + b.w / 2 - R / 2, y: b.y + Math.max(0, (lh - fs) * 0.5) - R + 1 };
+    },
+    [R, lh, fs]
+  );
+
+  const onWord = useCallback(
+    (i: number, x: number, y: number, w: number) => {
+      const o = boxes.current[i];
+      if (o && Math.abs(o.x - x) < 0.5 && Math.abs(o.y - y) < 0.5 && Math.abs(o.w - w) < 0.5)
+        return;
+      boxes.current[i] = { x, y, w };
+      if (boxes.current.filter(Boolean).length >= words.length) setLayoutSeq((n) => n + 1);
+    },
+    [words.length]
+  );
+
+  useEffect(() => {
+    if (!layoutSeq) return;
+    const cur = Math.max(0, lit - 1); // the word being sung (or the first one, waiting)
+    const here = spot(cur);
+    if (!here) return;
+    if (!placed.current) {
+      placed.current = true;
+      Animated.timing(shown, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+    }
+    // a hop already on its way to this word lands by itself; anything else snaps there
+    if (heading.current !== cur || !playing) {
+      hopAnim.current?.stop();
+      bx.setValue(here.x);
+      by.setValue(here.y);
+      arc.setValue(0);
+    }
+    heading.current = -1;
+    if (lit > 0 && !calm) {
+      squash.setValue(1);
+      Animated.spring(squash, {
+        toValue: 0,
+        useNativeDriver: true,
+        speed: 22,
+        bounciness: 8,
+      }).start();
+    }
+    const nextI = lit;
+    if (!playing || calm || nextI >= words.length) return;
+    const to = spot(nextI);
+    if (!to) return;
+    const until = words[nextI].startSec - (PlaybackClock.now(true) - offset + 0.08);
+    const span = nextI > 0 ? words[nextI].startSec - words[nextI - 1].startSec : until;
+    const hop = Math.max(0.14, Math.min(0.45, span * 0.85, Math.max(0.14, until)));
+    const wait = Math.max(0, until - hop);
+    heading.current = nextI;
+    const ms = hop * 1000;
+    const a = Animated.sequence([
+      Animated.delay(wait * 1000),
+      Animated.timing(arc, { toValue: 0, duration: 0, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.timing(bx, {
+          toValue: to.x,
+          duration: ms,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(by, {
+          toValue: to.y,
+          duration: ms,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(arc, {
+          toValue: 1,
+          duration: ms,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]);
+    hopAnim.current = a;
+    a.start();
+    // not stopped on the next word: a hop on its way lands by itself (see above)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lit, playing, layoutSeq, offset, words]);
+  useEffect(() => () => hopAnim.current?.stop(), []);
+
+  const H = Math.max(lh * 0.45, fs * 0.65);
+  const ballStyle = useMemo(
+    () => ({
+      opacity: shown,
+      transform: [
+        { translateX: bx },
         {
-          color: '#FFFFFF',
-          textShadowColor: 'rgba(0,0,0,0.75)',
-          textShadowRadius: 6,
-          opacity: a,
-          transform: [{ translateY: rise }],
+          translateY: Animated.add(
+            by,
+            // a parabola, sampled
+            arc.interpolate({
+              inputRange: [0, 0.25, 0.5, 0.75, 1],
+              outputRange: [0, -H * 0.75, -H, -H * 0.75, 0],
+            })
+          ),
+        },
+        { scaleX: squash.interpolate({ inputRange: [0, 1], outputRange: [1, 1.35] }) },
+        { scaleY: squash.interpolate({ inputRange: [0, 1], outputRange: [1, 0.68] }) },
+      ],
+    }),
+    [shown, bx, by, arc, squash, H]
+  );
+
+  return (
+    <View
+      style={[
+        styles.wordRow,
+        {
+          paddingTop: R + 4,
+          justifyContent:
+            align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
         },
       ]}
     >
-      {text}
-    </Animated.Text>
+      {words.map((w, i) => (
+        <View
+          key={i}
+          style={{ marginRight: gap }}
+          onLayout={(e) => {
+            const l = e.nativeEvent.layout;
+            onWord(i, l.x, l.y, l.width);
+          }}
+        >
+          <Text
+            style={[
+              textStyle,
+              styles.wordText,
+              i < lit
+                ? { color: '#FFFFFF', textShadowColor: accent + '99', textShadowRadius: 10 }
+                : { color: 'rgba(255,255,255,0.42)' },
+            ]}
+          >
+            {w.text}
+          </Text>
+        </View>
+      ))}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.ball,
+          {
+            width: R,
+            height: R,
+            borderRadius: R / 2,
+            backgroundColor: accent,
+            shadowColor: accent,
+          },
+          ballStyle,
+        ]}
+      />
+    </View>
+  );
+};
+
+/** Handwriting: a pen writes the word — its ink is uncovered left to right over the time the word
+ *  is sung (a long note, a slow stroke) and a glowing nib rides the edge. Set in italics; what
+ *  is not written yet waits as a faint pencil guide. The wipe is two opposite translations
+ *  (native driver), the word measured once. */
+const PenWord: React.FC<{
+  text: string;
+  lit: boolean;
+  ms: number;
+  accent: string;
+  settled: boolean;
+  textStyle: any;
+  gap: number;
+}> = React.memo(({ text, lit, ms, accent, settled, textStyle, gap }) => {
+  const done = settled && lit;
+  const v = useAnim(done ? 1 : 0);
+  const [w, setW] = useState(0);
+  const flat = StyleSheet.flatten(textStyle) || {};
+  const fs: number = (flat.fontSize as number) || 25;
+  const lh: number = (flat.lineHeight as number) || fs * 1.36;
+  const fresh = useRef(true);
+  const doneRef = useRef(done);
+  useEffect(() => {
+    if (fresh.current) {
+      fresh.current = false;
+      if (doneRef.current) return;
+    }
+    const a = lit
+      ? Animated.timing(v, {
+          toValue: 1,
+          duration: ms,
+          easing: Easing.bezier(0.3, 0.1, 0.4, 1),
+          useNativeDriver: true,
+        })
+      : Animated.timing(v, { toValue: 0, duration: 140, useNativeDriver: true });
+    a.start();
+    return () => a.stop();
+  }, [lit, ms, v]);
+  // italics lean past the measured box: the ink layer gets a little room on the right
+  const pad = Math.round(fs * 0.3);
+  const W = w + pad;
+  const n = useMemo(
+    () => ({
+      outer: v.interpolate({ ...IN, outputRange: [-W, 0] }),
+      inner: v.interpolate({ ...IN, outputRange: [W, 0] }),
+      nibX: v.interpolate({ ...IN, outputRange: [0, Math.max(0, W - pad * 0.7)] }),
+      nibOp: v.interpolate({
+        inputRange: [0, 0.03, 0.96, 1],
+        outputRange: [0, 1, 1, 0],
+        extrapolate: 'clamp',
+      }),
+    }),
+    [v, W, pad]
+  );
+  const nib = Math.max(5, Math.round(fs * 0.2));
+  return (
+    <View style={{ marginRight: gap }}>
+      <Text
+        onLayout={(e) => {
+          const nw = e.nativeEvent.layout.width;
+          if (Math.abs(nw - w) > 0.5) setW(nw);
+        }}
+        style={[
+          textStyle,
+          styles.wordText,
+          { color: 'rgba(255,255,255,0.18)', fontStyle: 'italic' },
+        ]}
+      >
+        {text}
+      </Text>
+      {w > 0 && (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.penClip, { width: W, transform: [{ translateX: n.outer }] }]}
+        >
+          <Animated.Text
+            numberOfLines={1}
+            style={[
+              textStyle,
+              styles.wordText,
+              {
+                width: W,
+                color: '#FFFFFF',
+                fontStyle: 'italic',
+                textShadowColor: accent + '88',
+                textShadowRadius: 8,
+                transform: [{ translateX: n.inner }],
+              },
+            ]}
+          >
+            {text}
+          </Animated.Text>
+        </Animated.View>
+      )}
+      {w > 0 && !calm && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.nib,
+            {
+              width: nib,
+              height: nib,
+              borderRadius: nib / 2,
+              top: Math.max(0, (lh - fs) * 0.5) + fs * 0.86 - nib / 2,
+              backgroundColor: accent,
+              shadowColor: accent,
+              opacity: n.nibOp,
+              transform: [{ translateX: n.nibX }],
+            },
+          ]}
+        />
+      )}
+    </View>
+  );
+});
+
+/** Chat: the sung line arrives as a message bubble in the accent colour — a little spring from
+ *  its corner, like a new message — and its words fill as they are sung. */
+const BubblePop: React.FC<{
+  align: 'left' | 'center' | 'right';
+  color: string;
+  children: React.ReactNode;
+}> = ({ align, color, children }) => {
+  const a = useAnim(0);
+  useEffect(() => {
+    const anim = calm
+      ? Animated.timing(a, { toValue: 1, duration: 160, useNativeDriver: true })
+      : Animated.spring(a, { toValue: 1, useNativeDriver: true, speed: 16, bounciness: 9 });
+    anim.start();
+    return () => anim.stop();
+  }, [a]);
+  const n = useMemo(
+    () => ({
+      op: a.interpolate({ inputRange: [0, 0.35], outputRange: [0, 1], extrapolate: 'clamp' }),
+      scale: a.interpolate({ inputRange: [0, 1], outputRange: [calm ? 1 : 0.55, 1] }),
+      rise: a.interpolate({ inputRange: [0, 1], outputRange: [calm ? 0 : 12, 0] }),
+    }),
+    [a]
+  );
+  return (
+    <Animated.View
+      style={[
+        styles.bubble,
+        align === 'right' ? styles.bubbleR : align === 'center' ? styles.bubbleC : styles.bubbleL,
+        {
+          backgroundColor: color,
+          shadowColor: color,
+          opacity: n.op,
+          transformOrigin:
+            align === 'right'
+              ? 'right bottom'
+              : align === 'center'
+                ? 'center bottom'
+                : 'left bottom',
+          transform: [{ translateY: n.rise }, { scale: n.scale }],
+        },
+      ]}
+    >
+      {children}
+    </Animated.View>
   );
 };
 
@@ -1710,7 +2138,18 @@ const LyricRow: React.FC<{
     onRowPress,
   }) => {
     const isDuetV2 = line.agent && line.agent.toLowerCase().includes('2');
-    const textAlign = line.isBackground ? 'center' : isDuetV2 ? 'right' : baseAlign;
+    // Chat: a conversation — duet voices keep their sides, otherwise the lines take turns
+    const bubble = effect === 'bubble';
+    const side: 'left' | 'center' | 'right' = line.isBackground
+      ? 'center'
+      : isDuetV2
+        ? 'right'
+        : line.agent
+          ? 'left'
+          : idx % 2
+            ? 'right'
+            : 'left';
+    const textAlign = bubble ? side : line.isBackground ? 'center' : isDuetV2 ? 'right' : baseAlign;
     const look = lineLook(effect, accent, isActive, isPast, dist);
     const textStyle: TextStyle = line.isBackground
       ? styles.bgLineText
@@ -1741,7 +2180,26 @@ const LyricRow: React.FC<{
           opacity={look.opacity}
           origin={textAlign === 'center' ? 'center' : textAlign === 'right' ? 'right' : 'left'}
         >
-          {isActive && !line.isBackground ? (
+          {bubble && !(isActive && !line.isBackground) ? (
+            <View
+              style={[
+                styles.bubble,
+                side === 'right'
+                  ? styles.bubbleR
+                  : side === 'center'
+                    ? styles.bubbleC
+                    : styles.bubbleL,
+                {
+                  backgroundColor: isPast ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.07)',
+                  shadowOpacity: 0,
+                },
+              ]}
+            >
+              <Text style={[textStyle, look.text, { textAlign: 'left', fontFamily }]}>
+                {line.text}
+              </Text>
+            </View>
+          ) : isActive && !line.isBackground ? (
             <ActiveLine
               line={line}
               endSec={endSec}
@@ -1932,6 +2390,37 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   wordRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  // Sing-along: the ball (positioned by its transform)
+  ball: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  // Handwriting: the wipe over the ink, and the pen nib riding its edge
+  penClip: { position: 'absolute', left: 0, top: 0, bottom: 0, overflow: 'hidden' },
+  nib: {
+    position: 'absolute',
+    left: 0,
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  // Chat: a message bubble; the corner on its own side is tucked in, like a speech tail
+  bubble: {
+    maxWidth: '88%',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 22,
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  bubbleL: { alignSelf: 'flex-start', borderBottomLeftRadius: 6 },
+  bubbleR: { alignSelf: 'flex-end', borderBottomRightRadius: 6 },
+  bubbleC: { alignSelf: 'center' },
   // the word box sizes to the word; lines keep their height
   wordText: { textAlign: 'left' },
   wordLit: { position: 'absolute', left: 0, top: 0 },
