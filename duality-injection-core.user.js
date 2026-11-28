@@ -122,7 +122,7 @@
     },
     addTicker(fn, priority = 0) {
       if (!alive || !app || typeof fn !== 'function' || !Number.isFinite(priority)) return null;
-      const ticker = app.pixi.ticker; ticker.add(fn, null, priority);
+      const ticker = app.pixi.ticker || app.pixi._ticker; ticker.add(fn, null, priority);
       let active = true;
       return addCleanup(() => { if (active) { active = false; ticker.remove(fn, null); } });
     },
