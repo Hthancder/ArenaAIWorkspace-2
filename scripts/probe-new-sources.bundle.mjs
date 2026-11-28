@@ -786,7 +786,7 @@ async function getJson(url, ms = 5e3) {
 }
 function parseDirectory(list) {
   if (!Array.isArray(list)) return [];
-  return list.map((row) => Array.isArray(row) ? row[1] : null).filter((i) => i && i.type === "https" && i.api === true && typeof i.uri === "string").filter((i) => Platform.OS !== "web" || i.cors !== false).map((i) => String(i.uri).replace(/\/+$/, "")).slice(0, 8);
+  return list.map((row) => Array.isArray(row) ? row[1] : null).filter((i) => i && i.type === "https" && i.api !== false && typeof i.uri === "string").filter((i) => Platform.OS !== "web" || i.cors !== false).map((i) => String(i.uri).replace(/\/+$/, "")).slice(0, 8);
 }
 function loadDirectory() {
   if (discovered && Date.now() - discoveredAt < DAY) return Promise.resolve();
@@ -860,15 +860,21 @@ async function searchInvidiousVideos(q, limit = 12) {
   }
   return [];
 }
-async function serves(url, clen) {
+async function servedAt(url, clen) {
   const at = clen && clen > 1 ? Math.min(clen - 1, 1048576) : 1048576;
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 5e3);
+  const t = setTimeout(() => ctrl.abort(), 6e3);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, headers: { Range: `bytes=${at}-${at}` } });
-    return res.status === 206 || res.ok;
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      redirect: "follow",
+      headers: { Range: `bytes=${at}-${at}` }
+    });
+    const type = res.headers.get("content-type") || "";
+    if (!(res.status === 206 || res.ok) || !/^(audio|video)\/|octet-stream/.test(type)) return null;
+    return res.url || url;
   } catch {
-    return false;
+    return null;
   } finally {
     clearTimeout(t);
   }
@@ -879,17 +885,34 @@ async function invidiousAudio(videoId) {
     const fmts = Array.isArray(data?.adaptiveFormats) ? data.adaptiveFormats : [];
     const audio = fmts.filter((f) => f?.url && /^audio\//.test(String(f.type || ""))).sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
     const m4a = audio.filter((f) => /audio\/mp4/.test(String(f.type)));
-    const picks = Platform.OS === "web" ? [...m4a, ...audio] : m4a;
-    for (const f of picks.slice(0, 2)) {
-      const url = invidiousAbs(base, String(f.url));
-      if (!await serves(url, Number(f.clen) || void 0)) continue;
-      markInvidiousGood(base);
+    const picks = (Platform.OS === "web" ? [...m4a, ...audio] : m4a).slice(0, 2);
+    const tries = [];
+    for (const f of picks) {
       const kbps = Math.round((Number(f.bitrate) || 128e3) / 1e3);
       const aac = /mp4/.test(String(f.type));
+      if (f.itag)
+        tries.push({
+          url: `${base}/latest_version?id=${videoId}&itag=${f.itag}&local=true`,
+          clen: Number(f.clen) || void 0,
+          kbps,
+          aac
+        });
+      tries.push({ url: invidiousAbs(base, String(f.url)), clen: Number(f.clen) || void 0, kbps, aac });
+    }
+    if (!picks.length)
+      tries.push({
+        url: `${base}/latest_version?id=${videoId}&itag=140&local=true`,
+        kbps: 128,
+        aac: true
+      });
+    for (const x of tries) {
+      const url = await servedAt(x.url, x.clen);
+      if (!url) continue;
+      markInvidiousGood(base);
       return {
         url,
-        qualityLabel: `${aac ? "AAC" : "Opus"} ${kbps} kbps \xB7 Invidious`,
-        codec: aac ? "AAC" : "Opus",
+        qualityLabel: `${x.aac ? "AAC" : "Opus"} ${x.kbps} kbps \xB7 Invidious`,
+        codec: x.aac ? "AAC" : "Opus",
         instance: base.replace(/^https?:\/\//, "")
       };
     }
