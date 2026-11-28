@@ -1,5 +1,5 @@
-// Live preview for Settings › Motion effects: a small cover that turns and catches the light
-// exactly as the player's will. Holds the sensor only while it is on screen.
+// Live preview for Settings › Motion effects: a small cover that turns, shows its edge and
+// floats over its shadow exactly as the player's will. Holds the sensor only while it is on screen.
 
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
@@ -7,11 +7,14 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
 import { T as UI } from '../../theme/ui';
 import { ArtworkImage } from '../ArtworkImage';
-import { CoverSheen, TiltCard, useTilt } from './TiltLayers';
+import { TiltCard, useTilt } from './TiltLayers';
 
 const SIZE = 132;
 
-export const MotionPreview: React.FC<{ cover: boolean }> = ({ cover }) => {
+export const MotionPreview: React.FC<{ cover: boolean; edge?: boolean }> = ({
+  cover,
+  edge = true,
+}) => {
   const { currentTrack, palette, prefs } = useHolySic();
   const vi = prefs.language === 'vi';
   const tilt = useTilt(true);
@@ -22,7 +25,7 @@ export const MotionPreview: React.FC<{ cover: boolean }> = ({ cover }) => {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      <TiltCard on={on} maxDeg={11} float={4}>
+      <TiltCard on={on} maxDeg={11} float={4} depth={edge ? 5 : 0} radius={18} crisp>
         <View style={styles.card}>
           {currentTrack?.artworkUrl ? (
             <ArtworkImage
@@ -38,7 +41,6 @@ export const MotionPreview: React.FC<{ cover: boolean }> = ({ cover }) => {
               style={StyleSheet.absoluteFill}
             />
           )}
-          <CoverSheen on={on} size={SIZE} />
         </View>
       </TiltCard>
       <Text style={[styles.hint, { color: UI.text3 }]}>

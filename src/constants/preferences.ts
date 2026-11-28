@@ -284,8 +284,18 @@ export interface HolySicPreferences {
   // ── Motion effects (gyroscope) ──
   /** strength of the tilt effects; 'off' never starts the motion sensor */
   motionFx: 'off' | 'low' | 'medium' | 'high';
-  /** the player's cover turns in 3D with the phone and catches a sliding light */
+  /** the player's cover turns in 3D with the phone */
   motionCover: boolean;
+  /** the 3D cover has a thickness (its edge shows as it turns) and floats over a soft shadow */
+  motionCoverEdge: boolean;
+  /** a depth scene behind each tab (Home · Search · Library · HolySic), only the one on screen */
+  motionTabs: boolean;
+  /** which tabs get their scene */
+  motionTabScenes: Record<MainTab, boolean>;
+  /** how strong the tab scenes are drawn */
+  motionTabLevel: 'low' | 'medium' | 'high';
+  /** lyrics page: the sung line floats in front of the others */
+  motionLyrics: boolean;
   /** backgrounds drift with the tilt (player backdrop, your photo / GIF / video background) */
   motionBackdrop: boolean;
   /** vinyl depth: the Turntable deck tilts and its grooves catch a light that follows the angle */
@@ -427,6 +437,11 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   downloadMv: false,
   motionFx: 'medium',
   motionCover: true,
+  motionCoverEdge: true,
+  motionTabs: true,
+  motionTabScenes: { home: true, search: true, library: true, settings: true },
+  motionTabLevel: 'medium',
+  motionLyrics: true,
   motionBackdrop: true,
   motionVinyl: true,
   motionDust: true,

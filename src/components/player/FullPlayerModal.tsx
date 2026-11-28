@@ -275,6 +275,17 @@ export const FullPlayerModal: React.FC = () => {
   const coverX = useRef(new Animated.Value(0)).current;
   // the cover settles back a little on pause and springs forward on play (Apple Music)
   const coverScale = useRef(new Animated.Value(isPlaying ? 1 : 0.94)).current;
+  // the cover's own movement (swipe + its lean + the pause scale) — the 3D edge follows it too
+  const coverFollow = useRef([
+    { translateX: coverX },
+    {
+      rotate: coverX.interpolate({
+        inputRange: [-400, 0, 400],
+        outputRange: ['-6deg', '0deg', '6deg'],
+      }),
+    },
+    { scale: coverScale },
+  ]).current;
   const coverPan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) =>
@@ -969,6 +980,10 @@ export const FullPlayerModal: React.FC = () => {
                 <TiltCard
                   on={coverTilt.on && !showVideo}
                   maxDeg={prefs.playerStyle === 'POSTER' ? 8 : 9}
+                  depth={prefs.motionCoverEdge !== false ? 7 : 0}
+                  radius={prefs.playerStyle === 'POSTER' ? 30 : 26}
+                  crisp
+                  follow={coverFollow}
                 >
                   {/* swipe the cover ← next · → previous */}
                   <Animated.View
@@ -987,18 +1002,7 @@ export const FullPlayerModal: React.FC = () => {
                         // antialiased rim peeks out around the clipped video as a ragged fringe
                         borderWidth: 0,
                       },
-                      {
-                        transform: [
-                          { translateX: coverX },
-                          {
-                            rotate: coverX.interpolate({
-                              inputRange: [-400, 0, 400],
-                              outputRange: ['-6deg', '0deg', '6deg'],
-                            }),
-                          },
-                          { scale: coverScale },
-                        ],
-                      },
+                      { transform: coverFollow },
                     ]}
                   >
                     {showVideo ? (

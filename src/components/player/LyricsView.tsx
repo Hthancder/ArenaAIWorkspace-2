@@ -33,6 +33,8 @@ import { luminance, spectrumColor } from '../../theme/colorMath';
 import { Tap } from '../ui/Tap';
 import { perfCount } from '../../services/perfProbe';
 import { useActiveLyricIndex } from '../../services/lyrics/lyricClock';
+import { Tilt } from '../../services/motion/tilt';
+import { useTilt } from '../motion/TiltLayers';
 
 // a fresh key per lyrics object (re-fetched lyrics re-mount the list, so every line re-measures)
 const lyricsKeys = new WeakMap<object, string>();
@@ -68,6 +70,8 @@ export const LyricsView: React.FC = () => {
   const clockIndex = useActiveLyricIndex();
   const vi = prefs.language === 'vi';
   const effect = effectOf(prefs.lyricsEffect);
+  // depth on the lyrics page: the sung line floats in front (Settings › Motion effects)
+  const lyricsTilt = useTilt(prefs.motionLyrics !== false && !!lyrics?.synced);
   useStoredLyrics();
   const stored = storedLyricsInfo(currentTrack);
   const openEditor = (tab?: 'search' | 'write') => {
@@ -470,6 +474,7 @@ export const LyricsView: React.FC = () => {
               lineH={size.line}
               onRowLayout={onRowLayout}
               onRowPress={onRowPress}
+              tilt={lyricsTilt.on}
             />
           );
         })}
@@ -2118,6 +2123,8 @@ const LyricRow: React.FC<{
   lineH: number;
   onRowLayout: (id: string, idx: number, y: number) => void;
   onRowPress: (line: LyricLine) => void;
+  /** Settings › Motion › Lyrics depth: the sung line floats in front of the others */
+  tilt?: boolean;
 }> = React.memo(
   ({
     line,
@@ -2136,6 +2143,7 @@ const LyricRow: React.FC<{
     lineH,
     onRowLayout,
     onRowPress,
+    tilt,
   }) => {
     const isDuetV2 = line.agent && line.agent.toLowerCase().includes('2');
     // Chat: a conversation — duet voices keep their sides, otherwise the lines take turns
@@ -2179,6 +2187,7 @@ const LyricRow: React.FC<{
           scale={look.scale}
           opacity={look.opacity}
           origin={textAlign === 'center' ? 'center' : textAlign === 'right' ? 'right' : 'left'}
+          depth={tilt ? (isActive ? -7 : 3) : 0}
         >
           {bubble && !(isActive && !line.isBackground) ? (
             <View
@@ -2224,10 +2233,23 @@ const LineScale: React.FC<{
   scale: number;
   opacity: number;
   origin: 'left' | 'center' | 'right';
+  /** points this line slides with the tilt: < 0 in front of the page (against the eye), > 0
+   *  behind it (with the eye) — the sung line floats over the rest */
+  depth?: number;
   children: React.ReactNode;
-}> = ({ scale, opacity, origin, children }) => {
+}> = ({ scale, opacity, origin, depth = 0, children }) => {
   const s = useAnim(scale);
   const o = useAnim(opacity);
+  const shift = useMemo(
+    () =>
+      depth
+        ? [
+            { translateX: Animated.multiply(Tilt.x, depth) },
+            { translateY: Animated.multiply(Tilt.y, depth * 0.7) },
+          ]
+        : [],
+    [depth]
+  );
   useEffect(() => {
     Animated.parallel([
       Animated.spring(s, { toValue: scale, useNativeDriver: true, speed: 20, bounciness: 3 }),
@@ -2240,7 +2262,9 @@ const LineScale: React.FC<{
     ]).start();
   }, [scale, opacity, s, o]);
   return (
-    <Animated.View style={{ transformOrigin: origin, opacity: o, transform: [{ scale: s }] }}>
+    <Animated.View
+      style={{ transformOrigin: origin, opacity: o, transform: [...shift, { scale: s }] }}
+    >
       {children}
     </Animated.View>
   );

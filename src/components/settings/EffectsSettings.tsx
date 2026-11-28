@@ -20,6 +20,7 @@ import {
   BackdropVisualizer,
   DockVisualizer,
   HolySicPreferences,
+  DEFAULT_PREFERENCES,
 } from '../../constants/preferences';
 import { HOLYSIC_COLORS } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
@@ -537,7 +538,10 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
                 : 'Uses the gyroscope: the cover and backgrounds gain 3D depth as you tilt your phone.'}
             </Text>
             {motionFx !== 'off' && !motionBlocked && (
-              <MotionPreview cover={prefs.motionCover !== false} />
+              <MotionPreview
+                cover={prefs.motionCover !== false}
+                edge={prefs.motionCoverEdge !== false}
+              />
             )}
             <Text
               style={[
@@ -575,13 +579,108 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
                 {row(
                   vi ? 'Bìa nghiêng 3D' : '3D cover',
                   vi
-                    ? 'Bìa xoay theo tay cầm và bắt một vệt sáng lướt qua như mặt kính (kiểu Flagship & Poster).'
-                    : 'The cover turns with your hand and catches a sliding light, like glass (Flagship & Poster).',
+                    ? 'Bìa xoay theo tay cầm (kiểu Flagship & Poster). MV đang phát thì đứng yên cho nét.'
+                    : 'The cover turns with your hand (Flagship & Poster). A playing video holds still, so it stays sharp.',
                   sw(
                     prefs.motionCover !== false,
                     (v) => set({ motionCover: v }),
                     vi ? 'Bìa nghiêng 3D' : '3D cover'
                   )
+                )}
+                {prefs.motionCover !== false &&
+                  row(
+                    vi ? 'Bìa có độ dày' : 'Cover thickness',
+                    vi
+                      ? 'Bìa là một khối thật: nghiêng sang đâu thấy cạnh bên đó, và nổi trên một bóng đổ mềm.'
+                      : 'The cover is a real slab: its edge shows on the side you lean toward, floating over a soft shadow.',
+                    sw(
+                      prefs.motionCoverEdge !== false,
+                      (v) => set({ motionCoverEdge: v }),
+                      vi ? 'Bìa có độ dày' : 'Cover thickness'
+                    )
+                  )}
+                {row(
+                  vi ? 'Lời nổi khối' : 'Lyrics depth',
+                  vi
+                    ? 'Trang lời: câu đang hát nổi lên phía trước, các câu khác lùi ra sau khi nghiêng máy.'
+                    : 'Lyrics page: the sung line floats in front, the others sit further back as you tilt.',
+                  sw(
+                    prefs.motionLyrics !== false,
+                    (v) => set({ motionLyrics: v }),
+                    vi ? 'Lời nổi khối' : 'Lyrics depth'
+                  )
+                )}
+                {row(
+                  vi ? 'Cảnh nền chiều sâu ở các tab' : 'Tab depth scenes',
+                  vi
+                    ? 'Mỗi tab một cảnh ba lớp xa – giữa – gần trôi theo tay: Trang chủ cực quang, Tìm kiếm bầu sao, Thư viện đĩa nhạc, HolySic hình học. Chỉ tab đang mở được tải.'
+                    : 'Each tab gets a three-plane scene that moves with your hand: aurora on Home, stars on Search, records on Library, geometry on HolySic. Only the open tab’s scene loads.',
+                  sw(
+                    prefs.motionTabs !== false,
+                    (v) => set({ motionTabs: v }),
+                    vi ? 'Cảnh nền chiều sâu ở các tab' : 'Tab depth scenes'
+                  )
+                )}
+                {prefs.motionTabs !== false && (
+                  <View style={{ paddingBottom: 10 }}>
+                    <Text style={styles.subLabel}>{vi ? 'Tab có cảnh' : 'Tabs with a scene'}</Text>
+                    <View style={styles.tabChips}>
+                      {(
+                        [
+                          ['home', vi ? 'Trang chủ' : 'Home', 'home-outline'],
+                          ['search', vi ? 'Tìm kiếm' : 'Search', 'search-outline'],
+                          ['library', vi ? 'Thư viện' : 'Library', 'albums-outline'],
+                          ['settings', 'HolySic', 'musical-notes-outline'],
+                        ] as const
+                      ).map(([id, label, icon]) => {
+                        const scenes = {
+                          ...DEFAULT_PREFERENCES.motionTabScenes,
+                          ...(prefs.motionTabScenes || {}),
+                        };
+                        const on = scenes[id] !== false;
+                        return (
+                          <Tap
+                            key={id}
+                            onPress={() => set({ motionTabScenes: { ...scenes, [id]: !on } })}
+                            style={[
+                              styles.tabChip,
+                              on
+                                ? { backgroundColor: palette.accent, borderColor: palette.accent }
+                                : { borderColor: UI.fg(0.16) },
+                            ]}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: on }}
+                            accessibilityLabel={label}
+                          >
+                            <Ionicons
+                              name={icon}
+                              size={13}
+                              color={on ? palette.onAccent : UI.fg(0.75)}
+                            />
+                            <Text
+                              style={[
+                                styles.tabChipText,
+                                { color: on ? palette.onAccent : UI.fg(0.85) },
+                              ]}
+                            >
+                              {label}
+                            </Text>
+                          </Tap>
+                        );
+                      })}
+                    </View>
+                    <Text style={styles.subLabel}>{vi ? 'Độ đậm của cảnh' : 'Scene strength'}</Text>
+                    {segments(
+                      prefs.motionTabLevel || 'medium',
+                      [
+                        ['low', vi ? 'Nhạt' : 'Faint'],
+                        ['medium', vi ? 'Vừa' : 'Medium'],
+                        ['high', vi ? 'Đậm' : 'Vivid'],
+                      ] as const,
+                      (v) => set({ motionTabLevel: v }),
+                      vi ? 'Độ đậm của cảnh nền' : 'Scene strength'
+                    )}
+                  </View>
                 )}
                 {row(
                   vi ? 'Đĩa than có chiều sâu' : 'Vinyl depth',
@@ -763,6 +862,17 @@ const styles = themedSheet(() => ({
   rowTitle: { color: UI.text, fontSize: 14.5, fontWeight: '700' },
   rowDesc: { color: UI.text2, fontSize: 12, lineHeight: 17, marginTop: 2 },
   subLabel: { color: UI.fg(0.88), fontSize: 13, fontWeight: '700', marginBottom: 8 },
+  tabChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+  tabChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 99,
+    borderWidth: 1,
+  },
+  tabChipText: { fontSize: 12.5, fontWeight: '700' },
   note: { color: HOLYSIC_COLORS.aacAmber, fontSize: 12, lineHeight: 17, marginTop: 10 },
   switchRow: {
     flexDirection: 'row',

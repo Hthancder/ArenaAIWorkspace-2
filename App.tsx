@@ -20,6 +20,7 @@ import {
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OfflineBanner } from './src/components/OfflineBanner';
 import { AppBackdrop } from './src/components/ambient/AppBackdrop';
+import { TabDepthScene } from './src/components/motion/TabDepthScene';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { TabBar, TabDef } from './src/components/TabBar';
 import { FullPlayerModal } from './src/components/player/FullPlayerModal';
@@ -207,6 +208,8 @@ const HolySicShell: React.FC = () => {
             whenHidden={prefs.videoAmbientWhenHidden !== false}
           />
         )}
+        {/* Settings › Motion effects › Tab scenes: the depth scene of the tab on screen only */}
+        <TabDepthScene hidden={localOpen} />
         <Perf id="tabs">
           <View style={{ flex: 1 }}>
             {/* tabs stay alive once visited (scroll position, search text, open filters survive a
