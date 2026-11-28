@@ -113,6 +113,11 @@ export const VideoLive = {
     };
   },
   get: () => live > 0,
+  /** a view re-attached to the shared player (e.g. after a rotation): have the host seek it so
+   *  every layer draws a fresh frame */
+  nudge() {
+    if (live > 0) dropSubs.forEach((f) => f());
+  },
   onDrop(f: () => void) {
     dropSubs.add(f);
     return () => {

@@ -1420,10 +1420,10 @@ export const FullPlayerModal: React.FC = () => {
               drift={backTilt.on ? 18 : 0}
             />
           )}
-          {/* the music video's scenes light the player (moves with the picture) */}
-          {videoAmbientOn && !mvFull && (
-            <VideoAmbient live={!ambient.reduceMotion} level={prefs.videoAmbientLevel} />
-          )}
+          {/* the music video's scenes light the player (moves with the picture — also with Reduce
+              Motion and while the camera button hides the picture: the video is content, not a
+              decorative animation) */}
+          {videoAmbientOn && !mvFull && <VideoAmbient live level={prefs.videoAmbientLevel} />}
           <DustField on={dustTilt.on && !mvFull} colors={ambientColors.corners} energy={energy} />
           {twoCol ? (
             // landscape: the picture (or the open pane) on the left, everything you press on the

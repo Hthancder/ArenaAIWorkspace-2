@@ -16,6 +16,7 @@ import {
   StyleProp,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   ViewStyle,
 } from 'react-native';
@@ -103,6 +104,25 @@ export const MusicVideoStage: React.FC<{
               }
             : null;
   useLive(ready);
+  // after a rotation the picture's layer can come back black on iOS (re-attached to the shared
+  // player while the old layout's view is torn down): once the rotation settles, mount a fresh
+  // view and have the host seek so it draws a frame
+  const win = useWindowDimensions();
+  const landscape = win.width > win.height;
+  const [layerKey, setLayerKey] = useState(0);
+  const firstOrientation = useRef(true);
+  useEffect(() => {
+    if (firstOrientation.current) {
+      firstOrientation.current = false;
+      return;
+    }
+    if (Platform.OS === 'web') return;
+    const t = setTimeout(() => {
+      setLayerKey((k) => k + 1);
+      VideoLive.nudge();
+    }, 450);
+    return () => clearTimeout(t);
+  }, [landscape]);
   const aspect = Math.max(0.5, Math.min(2.4, st.aspect || 16 / 9));
   const h = Math.round(width / aspect);
   // the picture fades in on its first frame (no black flash while the layer attaches)
@@ -152,6 +172,7 @@ export const MusicVideoStage: React.FC<{
       {ready ? (
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: shown }]}>
           <VideoView
+            key={layerKey}
             player={VideoStore.player!}
             style={styles.fill}
             contentFit="cover"
