@@ -60,3 +60,9 @@ Các hook che `Function.prototype.toString` và che bộ font trong payload cũ 
 ### KXS Chat
 
 Từ bản 0.1.6, phần chat KXS và nút Chat trong menu KXS đã bị vô hiệu hóa: không tạo khung chat, không đăng ký phím Enter hay các timer của chat. Voice Chat không bị thay đổi. File gốc `duality_client.js` vẫn được giữ nguyên; thay đổi áp dụng khi build bản Reborn.
+
+## Nghiên cứu auto-grenade (chưa tích hợp)
+
+`src/grenade/planner.js` là **prototype tính toán độc lập**, chưa được nạp vào userscript, chưa có nút bật hay điều khiển ném/cứu bom. Do đó bản 0.1.6 không có auto-grenade. Dự kiến kích hoạt bằng giữ nút bắn khi đang cầm bom, không tự bắt đầu nếu chưa thao tác.
+
+Prototype dựa trên source Survev ở commit nêu trên: `throwableDefs.ts`, `server/src/game/weaponManager.ts` và `server/src/game/objects/projectile.ts`. Nó mô phỏng phóng trong môi trường khô, trọng lực, lực cản mặt đất và vận tốc người ném, từ chối đường đi khi callback kiểm tra va chạm không xác nhận an toàn; ưu tiên giữ khoảng cách khỏi bản thân và đồng đội. Không mô phỏng nảy, nước, cầu thang, địa hình cao, lag hay các loại bom đặc biệt/perk. Tick mặc định 100 Hz theo cấu hình source công khai, không đảm bảo khớp server đang chạy. Cần một adapter đáng tin cậy cho object/collider, team, perk và thời gian ngòi thực tế, cùng kiểm thử server thật, trước khi kết nối điều khiển hoặc đưa ra cảnh báo an toàn. `world.complete` chỉ là khẳng định của caller, không chứng minh bản đồ được đồng bộ đầy đủ. Không có bảo đảm ném trúng hoặc tránh tự sát/đồng đội.
