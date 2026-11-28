@@ -2395,6 +2395,10 @@ const Lt = 0.001,
           })(e, n));
       },
     });
+    // InputHandler.mousePos starts as {x, y}; preserve those values before
+    // replacing them with getters that read the backing _x/_y fields.
+    r._x = It.We.x;
+    r._y = It.We.y;
     (Object.defineProperty(r, "x", o("x")),
       Object.defineProperty(r, "y", o("y")),
       n.add(() => Jt()),
@@ -4255,7 +4259,7 @@ const yo = { Cr: !1, Nr: !1, jr: !1, Or: !1, Rr: 0 },
           ((e) =>
             new Promise((n) => {
               function t(e) {
-                if (!e || "object" != typeof e || e instanceof Array)
+                if (!e || "object" != typeof e || Array.isArray(e))
                   return null;
                 let n = { p: 0, m: 0, _: 0, k: 0, M: 0 };
                 return (

@@ -32,7 +32,7 @@ Các test dùng mock kiểm tra capture, replay, sender, ticker, cleanup và bui
 
 ### Chẩn đoán ESP / X-ray / aimbot
 
-Sau khi cài bản 0.1.2, vào một trận, bật các tính năng cần thử và chờ vài giây. Trong Console chạy:
+Sau khi cài bản 0.1.3, vào một trận, bật các tính năng cần thử và chờ vài giây. Trong Console chạy:
 
 ```js
 JSON.stringify(window[Symbol.for('duality.reborn.diagnostics.v1')]?.status(), null, 2)
