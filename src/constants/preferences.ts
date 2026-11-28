@@ -233,12 +233,9 @@ export interface HolySicPreferences {
   motionFx: 'off' | 'low' | 'medium' | 'high';
   /** the player's cover turns in 3D with the phone and catches a sliding light */
   motionCover: boolean;
-  /** holographic foil on the cover: never / liked songs only / every song */
-  motionHolo: 'off' | 'liked' | 'all';
   /** backgrounds drift with the tilt (player backdrop, your photo / GIF / video background) */
   motionBackdrop: boolean;
-  /** vinyl depth: the record peeks out behind the Flagship cover; the turntable deck tilts and
-   *  its grooves catch a light that follows the angle */
+  /** vinyl depth: the Turntable deck tilts and its grooves catch a light that follows the angle */
   motionVinyl: boolean;
   /** floating dust in the player, on three depths, glinting with the bass */
   motionDust: boolean;
@@ -356,7 +353,6 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   downloadMv: false,
   motionFx: 'medium',
   motionCover: true,
-  motionHolo: 'liked',
   motionBackdrop: true,
   motionVinyl: true,
   motionDust: true,

@@ -111,8 +111,6 @@ const KEYWORDS: Record<SettingsPageId, string[]> = {
     'tilt',
     'parallax',
     '3d',
-    'hologram',
-    'holo',
     'đĩa than',
     'vinyl',
     'hạt bụi',

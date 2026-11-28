@@ -5,16 +5,15 @@
 //  • TiltCard     — a surface that turns in 3D to face the eye (world-stable, like a card held
 //                   under glass) and drifts a few points in front of the page.
 //  • CoverSheen   — the light on that surface: a soft specular glare that slides against the
-//                   tilt (tvOS focus style) and an optional holographic foil that shifts its
-//                   rainbow with the angle (trading-card holo).
+//                   tilt (tvOS focus style).
 //  (backgrounds drift through their own `drift` / `parallax` props: AmbientLight, MediaBackdrop)
 
-import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, StyleSheet, View, ViewStyle } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useHolySic } from '../../context/HolySicContext';
 import { Tilt, TILT_GAIN } from '../../services/motion/tilt';
+import { LowRes } from '../ui/LowRes';
 
 // ---------------------------------------------------------------- gating
 
@@ -93,41 +92,27 @@ export const TiltCard: React.FC<{
     ],
     [maxDeg, float]
   );
-  // always the same element: toggling the effect (Low Power, Reduce Motion…) must not remount
-  // the cover underneath — a music video in it would restart
-  return <Animated.View style={[style, on ? { transform } : null]}>{children}</Animated.View>;
+  // The turning layer gets a wrapper of its own (`collapsable={false}`: a real native view, never
+  // flattened away). On iOS, Core Animation depth-sorts sibling layers in one shared 3D space:
+  // half of a turned card sits behind z = 0, so the glow drawn next to it (CoverGlow) cut across
+  // the cover in a hard diagonal and tinted that half. A plain parent flattens its sublayers into
+  // its own plane, so inside the wrapper the card has nothing to intersect.
+  // Always the same elements: toggling the effect (Low Power, Reduce Motion…) must not remount
+  // the cover underneath — a music video in it would restart.
+  return (
+    <View collapsable={false} style={style}>
+      <Animated.View style={on ? { transform } : null}>{children}</Animated.View>
+    </View>
+  );
 };
 
 // ---------------------------------------------------------------- CoverSheen
-
-const GLARE_SCALE = 4;
-
-const HOLO = [
-  '#ff7773',
-  '#ffed5f',
-  '#a8ff5f',
-  '#83fff7',
-  '#7894ff',
-  '#d875ff',
-  '#ff7773',
-  '#ffed5f',
-  '#a8ff5f',
-  '#83fff7',
-  '#7894ff',
-  '#d875ff',
-  '#ff7773',
-] as const;
 
 /**
  * Light on the cover. Put it as the LAST child inside the cover's clipping view (the one with
  * the border radius + overflow hidden) so it is clipped to the artwork.
  */
-export const CoverSheen: React.FC<{
-  on: boolean;
-  size: number;
-  glare?: boolean;
-  holo?: boolean;
-}> = ({ on, size, glare = true, holo = false }) => {
+export const CoverSheen: React.FC<{ on: boolean; size: number }> = ({ on, size }) => {
   const id = useSvgId('hs-glare-');
   const mag = useMagnitude();
   const S = size;
@@ -148,73 +133,28 @@ export const CoverSheen: React.FC<{
       ],
     };
   }, [S, mag]);
-  const glareInner = useMemo(() => {
-    const G = S * 1.9;
-    const g = G / GLARE_SCALE;
-    return {
-      position: 'absolute' as const,
-      width: g,
-      height: g,
-      left: (G - g) / 2,
-      top: (G - g) / 2,
-      transform: [{ scale: GLARE_SCALE }],
-    };
-  }, [S]);
-  const holoStyle = useMemo(
-    () => ({
-      position: 'absolute' as const,
-      width: S * 3,
-      height: S * 3,
-      left: -S,
-      top: -S,
-      opacity: mag.interpolate({ inputRange: [0, 1], outputRange: [0.16, 0.5] }),
-      transform: [
-        // the foil shifts with the eye (faster than the glare, the other way) so its colours
-        // sweep across the cover as it turns
-        { translateX: Animated.multiply(Tilt.x, S * 0.75) },
-        { translateY: Animated.multiply(Tilt.y, S * 0.6) },
-      ],
-      // blend modes need the new architecture (iOS) or CSS (web); elsewhere it is a plain tint
-      mixBlendMode: 'overlay',
-    }),
-    [S, mag]
-  );
-  if (!on || (!glare && !holo)) return null;
+  if (!on) return null;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
-      {holo && (
-        <Animated.View style={holoStyle as any}>
-          <LinearGradient
-            colors={HOLO}
-            start={{ x: 0, y: 0.1 }}
-            end={{ x: 1, y: 0.9 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </Animated.View>
-      )}
-      {glare && (
-        <Animated.View style={glareStyle}>
-          {/* a soft blob: drawn at 1/GLARE_SCALE size and scaled up — an SVG is a bitmap of its
-              size × screen scale², and full size would cost ~12 MB for no visible gain */}
-          <View style={glareInner}>
-            <Svg width="100%" height="100%">
-              <Defs>
-                <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%">
-                  <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.42} />
-                  <Stop offset="0.28" stopColor="#FFFFFF" stopOpacity={0.14} />
-                  <Stop offset="0.62" stopColor="#FFFFFF" stopOpacity={0} />
-                </RadialGradient>
-              </Defs>
-              <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
-            </Svg>
-          </View>
-        </Animated.View>
-      )}
+      <Animated.View style={glareStyle}>
+        {/* a soft blob — drawn at low resolution (full size would be ~12 MB of bitmap) */}
+        <LowRes>
+          <Svg width="100%" height="100%">
+            <Defs>
+              <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%">
+                <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.42} />
+                <Stop offset="0.28" stopColor="#FFFFFF" stopOpacity={0.14} />
+                <Stop offset="0.62" stopColor="#FFFFFF" stopOpacity={0} />
+              </RadialGradient>
+            </Defs>
+            <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+          </Svg>
+        </LowRes>
+      </Animated.View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  // no `isolation` here: the foil must blend with the artwork underneath (a sibling)
   clip: { overflow: 'hidden' },
 });

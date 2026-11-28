@@ -5,6 +5,7 @@ import React, { useMemo } from 'react';
 import { Text, View } from 'react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { T as UI, themedSheet } from '../../theme/ui';
+import { LowRes } from '../ui/LowRes';
 
 export const HALO_GOLD = '#FCD34D';
 let seq = 0;
@@ -20,21 +21,24 @@ export const HaloGlow: React.FC<{ color: string; height?: number; intensity?: nu
   const b = useGradId('hgB');
   return (
     <View pointerEvents="none" style={[styles.glow, { height }]}>
-      <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <Defs>
-          <RadialGradient id={a} cx="50%" cy="0%" rx="75%" ry="95%" fx="50%" fy="0%">
-            <Stop offset="0" stopColor={color} stopOpacity={0.3 * intensity} />
-            <Stop offset="0.55" stopColor={color} stopOpacity={0.08 * intensity} />
-            <Stop offset="1" stopColor={color} stopOpacity={0} />
-          </RadialGradient>
-          <RadialGradient id={b} cx="50%" cy="10%" rx="35%" ry="28%" fx="50%" fy="10%">
-            <Stop offset="0" stopColor={HALO_GOLD} stopOpacity={0.14 * intensity} />
-            <Stop offset="1" stopColor={HALO_GOLD} stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-        <Ellipse cx="50" cy="0" rx="100" ry="100" fill={`url(#${a})`} />
-        <Ellipse cx="50" cy="10" rx="50" ry="30" fill={`url(#${b})`} />
-      </Svg>
+      {/* a soft gradient: drawn at low resolution and scaled up */}
+      <LowRes>
+        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <Defs>
+            <RadialGradient id={a} cx="50%" cy="0%" rx="75%" ry="95%" fx="50%" fy="0%">
+              <Stop offset="0" stopColor={color} stopOpacity={0.3 * intensity} />
+              <Stop offset="0.55" stopColor={color} stopOpacity={0.08 * intensity} />
+              <Stop offset="1" stopColor={color} stopOpacity={0} />
+            </RadialGradient>
+            <RadialGradient id={b} cx="50%" cy="10%" rx="35%" ry="28%" fx="50%" fy="10%">
+              <Stop offset="0" stopColor={HALO_GOLD} stopOpacity={0.14 * intensity} />
+              <Stop offset="1" stopColor={HALO_GOLD} stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Ellipse cx="50" cy="0" rx="100" ry="100" fill={`url(#${a})`} />
+          <Ellipse cx="50" cy="10" rx="50" ry="30" fill={`url(#${b})`} />
+        </Svg>
+      </LowRes>
     </View>
   );
 };

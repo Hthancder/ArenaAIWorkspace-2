@@ -14,6 +14,7 @@ import { audioEngine } from '../../services/audio/audioEngine';
 import { useHolySic } from '../../context/HolySicContext';
 import { getUi } from '../../theme/ui';
 import { Tilt } from '../../services/motion/tilt';
+import { LowRes } from '../ui/LowRes';
 
 export interface AmbientColors {
   primary: string;
@@ -154,21 +155,24 @@ export const Lobes: React.FC<{ colors: AmbientColors; strength: number; spread?:
       </RadialGradient>
     );
     const r = 34 * spread;
+    // pure gradients: drawn at low resolution and scaled up (1/16 of the bitmap memory)
     return (
-      <Svg width="100%" height="100%" viewBox="-25 -25 150 150" preserveAspectRatio="none">
-        <Defs>
-          {lobe(ids[0], colors.primary, 0.75)}
-          {lobe(ids[1], tl, 0.9)}
-          {lobe(ids[2], tr, 0.9)}
-          {lobe(ids[3], bl, 0.9)}
-          {lobe(ids[4], br, 0.9)}
-        </Defs>
-        <Ellipse cx="50" cy="50" rx={r * 1.25} ry={r * 1.25} fill={`url(#${ids[0]})`} />
-        <Ellipse cx="30" cy="30" rx={r} ry={r} fill={`url(#${ids[1]})`} />
-        <Ellipse cx="70" cy="30" rx={r} ry={r} fill={`url(#${ids[2]})`} />
-        <Ellipse cx="30" cy="70" rx={r} ry={r} fill={`url(#${ids[3]})`} />
-        <Ellipse cx="70" cy="70" rx={r} ry={r} fill={`url(#${ids[4]})`} />
-      </Svg>
+      <LowRes>
+        <Svg width="100%" height="100%" viewBox="-25 -25 150 150" preserveAspectRatio="none">
+          <Defs>
+            {lobe(ids[0], colors.primary, 0.75)}
+            {lobe(ids[1], tl, 0.9)}
+            {lobe(ids[2], tr, 0.9)}
+            {lobe(ids[3], bl, 0.9)}
+            {lobe(ids[4], br, 0.9)}
+          </Defs>
+          <Ellipse cx="50" cy="50" rx={r * 1.25} ry={r * 1.25} fill={`url(#${ids[0]})`} />
+          <Ellipse cx="30" cy="30" rx={r} ry={r} fill={`url(#${ids[1]})`} />
+          <Ellipse cx="70" cy="30" rx={r} ry={r} fill={`url(#${ids[2]})`} />
+          <Ellipse cx="30" cy="70" rx={r} ry={r} fill={`url(#${ids[3]})`} />
+          <Ellipse cx="70" cy="70" rx={r} ry={r} fill={`url(#${ids[4]})`} />
+        </Svg>
+      </LowRes>
     );
   });
 
@@ -300,26 +304,30 @@ export const CoverGlow: React.FC<{
 const Band: React.FC<{ colors: AmbientColors; level: number }> = ({ colors, level }) => {
   const ids = useIds(4);
   return (
-    <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-      <Defs>
-        {colors.corners.map((c, i) => (
-          <RadialGradient key={i} id={ids[i]} cx="50%" cy="50%" rx="50%" ry="50%">
-            <Stop offset="0" stopColor={c} stopOpacity={0.75 * level} />
-            <Stop offset="1" stopColor={c} stopOpacity={0} />
-          </RadialGradient>
-        ))}
-      </Defs>
-      {[colors.corners[0], colors.corners[2], colors.corners[1], colors.corners[3]].map((_, i) => (
-        <Ellipse
-          key={i}
-          cx={[14, 38, 62, 86][i]}
-          cy={50}
-          rx={30}
-          ry={50}
-          fill={`url(#${ids[[0, 2, 1, 3][i]]})`}
-        />
-      ))}
-    </Svg>
+    <LowRes>
+      <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <Defs>
+          {colors.corners.map((c, i) => (
+            <RadialGradient key={i} id={ids[i]} cx="50%" cy="50%" rx="50%" ry="50%">
+              <Stop offset="0" stopColor={c} stopOpacity={0.75 * level} />
+              <Stop offset="1" stopColor={c} stopOpacity={0} />
+            </RadialGradient>
+          ))}
+        </Defs>
+        {[colors.corners[0], colors.corners[2], colors.corners[1], colors.corners[3]].map(
+          (_, i) => (
+            <Ellipse
+              key={i}
+              cx={[14, 38, 62, 86][i]}
+              cy={50}
+              rx={30}
+              ry={50}
+              fill={`url(#${ids[[0, 2, 1, 3][i]]})`}
+            />
+          )
+        )}
+      </Svg>
+    </LowRes>
   );
 };
 
@@ -331,16 +339,18 @@ const Wash: React.FC<{ colors: AmbientColors; level: number }> = ({ colors, leve
   return (
     <>
       <Lobes colors={colors} strength={(ui.scheme === 'light' ? 0.42 : 0.6) * level} spread={1.5} />
-      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-        <Defs>
-          <RadialGradient id={ids[0]} cx="50%" cy="0%" rx="85%" ry="100%">
-            <Stop offset="0" stopColor={fade} stopOpacity={0} />
-            <Stop offset="0.7" stopColor={fade} stopOpacity={0.6} />
-            <Stop offset="1" stopColor={fade} stopOpacity={1} />
-          </RadialGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${ids[0]})`} />
-      </Svg>
+      <LowRes>
+        <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+          <Defs>
+            <RadialGradient id={ids[0]} cx="50%" cy="0%" rx="85%" ry="100%">
+              <Stop offset="0" stopColor={fade} stopOpacity={0} />
+              <Stop offset="0.7" stopColor={fade} stopOpacity={0.6} />
+              <Stop offset="1" stopColor={fade} stopOpacity={1} />
+            </RadialGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${ids[0]})`} />
+        </Svg>
+      </LowRes>
     </>
   );
 };

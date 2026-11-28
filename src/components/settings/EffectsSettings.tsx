@@ -537,10 +537,7 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
                 : 'Uses the gyroscope: the cover and backgrounds gain 3D depth as you tilt your phone.'}
             </Text>
             {motionFx !== 'off' && !motionBlocked && (
-              <MotionPreview
-                cover={prefs.motionCover !== false}
-                holo={prefs.motionHolo !== 'off'}
-              />
+              <MotionPreview cover={prefs.motionCover !== false} />
             )}
             <Text
               style={[
@@ -586,31 +583,11 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
                     vi ? 'Bìa nghiêng 3D' : '3D cover'
                   )
                 )}
-                {prefs.motionCover !== false && (
-                  <View style={{ paddingVertical: 10 }}>
-                    <Text style={styles.rowTitle}>{vi ? 'Lớp hologram' : 'Holographic foil'}</Text>
-                    <Text style={[styles.rowDesc, { marginBottom: 8 }]}>
-                      {vi
-                        ? 'Ánh cầu vồng đổi màu theo góc nghiêng, như thẻ bài hiếm.'
-                        : 'A rainbow sheen that shifts with the angle, like a rare trading card.'}
-                    </Text>
-                    {segments(
-                      prefs.motionHolo || 'liked',
-                      [
-                        ['off', vi ? 'Tắt' : 'Off'],
-                        ['liked', vi ? 'Bài đã thích' : 'Liked songs'],
-                        ['all', vi ? 'Mọi bài' : 'Every song'],
-                      ] as const,
-                      (v) => set({ motionHolo: v }),
-                      vi ? 'Lớp hologram' : 'Holographic foil'
-                    )}
-                  </View>
-                )}
                 {row(
                   vi ? 'Đĩa than có chiều sâu' : 'Vinyl depth',
                   vi
-                    ? 'Đĩa than nhô ra sau bìa (Flagship) và quay theo nhạc; kiểu Đĩa than thì cả mâm nghiêng, rãnh đĩa bắt sáng theo góc cầm máy.'
-                    : 'A record peeks out behind the cover (Flagship) and spins with the music; the Turntable deck tilts and its grooves catch the light.',
+                    ? 'Kiểu Đĩa than: cả mâm nghiêng theo tay, rãnh đĩa bắt sáng theo góc cầm máy.'
+                    : 'Turntable style: the deck tilts with your hand and its grooves catch the light.',
                   sw(
                     prefs.motionVinyl !== false,
                     (v) => set({ motionVinyl: v }),

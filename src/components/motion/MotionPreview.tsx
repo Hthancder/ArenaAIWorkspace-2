@@ -1,5 +1,5 @@
-// Live preview for Settings › Motion effects: a small cover that turns, catches the light and
-// shows the foil exactly as the player will. Holds the sensor only while it is on screen.
+// Live preview for Settings › Motion effects: a small cover that turns and catches the light
+// exactly as the player's will. Holds the sensor only while it is on screen.
 
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
@@ -11,7 +11,7 @@ import { CoverSheen, TiltCard, useTilt } from './TiltLayers';
 
 const SIZE = 132;
 
-export const MotionPreview: React.FC<{ holo: boolean; cover: boolean }> = ({ holo, cover }) => {
+export const MotionPreview: React.FC<{ cover: boolean }> = ({ cover }) => {
   const { currentTrack, palette, prefs } = useHolySic();
   const vi = prefs.language === 'vi';
   const tilt = useTilt(true);
@@ -38,7 +38,7 @@ export const MotionPreview: React.FC<{ holo: boolean; cover: boolean }> = ({ hol
               style={StyleSheet.absoluteFill}
             />
           )}
-          <CoverSheen on={on} size={SIZE} holo={holo} />
+          <CoverSheen on={on} size={SIZE} />
         </View>
       </TiltCard>
       <Text style={[styles.hint, { color: UI.text3 }]}>

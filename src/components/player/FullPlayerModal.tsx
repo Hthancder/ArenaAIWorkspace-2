@@ -59,7 +59,6 @@ import { useVideoState, videoWanted, VideoStore } from '../../services/video/vid
 import { openMvOptions } from '../video/MvOptionsSheet';
 import { perfCount } from '../../services/perfProbe';
 import { CoverSheen, TiltCard, useTilt } from '../motion/TiltLayers';
-import { VinylPeek } from '../motion/VinylDepth';
 import { DustField } from '../motion/DustField';
 import { openLyricsEditor } from './LyricsEditor';
 import { PipButton } from './PipButton';
@@ -925,19 +924,6 @@ export const FullPlayerModal: React.FC = () => {
                   >
                     {/* turns with the phone (outside the swipe view: the two never share a node) */}
                     <TiltCard on={coverTilt.on} maxDeg={prefs.playerStyle === 'POSTER' ? 8 : 9}>
-                      {/* the LP half out of its sleeve (drawn first = behind the cover) */}
-                      {coverTilt.on &&
-                        prefs.motionVinyl !== false &&
-                        prefs.playerStyle === 'FLAGSHIP' &&
-                        !showVideo && (
-                          <VinylPeek
-                            size={300}
-                            artworkUrl={currentTrack.artworkUrl}
-                            seed={currentTrack.title}
-                            accent={palette.accent}
-                            playing={isPlaying}
-                          />
-                        )}
                       {/* swipe the cover ← next · → previous */}
                       <Animated.View
                         {...coverPan.panHandlers}
@@ -983,9 +969,6 @@ export const FullPlayerModal: React.FC = () => {
                           <CoverSheen
                             on={coverTilt.on}
                             size={prefs.playerStyle === 'POSTER' ? 270 : 300}
-                            holo={
-                              prefs.motionHolo === 'all' || (prefs.motionHolo === 'liked' && liked)
-                            }
                           />
                         )}
                       </Animated.View>
