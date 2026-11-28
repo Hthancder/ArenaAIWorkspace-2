@@ -1,0 +1,28 @@
+name: Probe Zing MP3 / Invidious
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'arena/af5aae1b-arenaaiworkspace-2'
+    paths:
+      - 'scripts/probe-new-sources.bundle.mjs'
+      - '.github/workflows/probe-new-sources.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Probe (the app's own provider code, bundled)
+        run: |
+          node scripts/probe-new-sources.bundle.mjs 2>&1 | tee probe.txt
+          split -l 30 probe.txt part_
+          for f in part_*; do
+            msg=$(sed -e 's/%/%25/g' "$f" | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::notice title=probe ${f}::${msg}"
+          done
