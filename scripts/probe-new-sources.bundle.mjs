@@ -1018,6 +1018,46 @@ async function invidious() {
         log("     range", await rangeProbe(u, 1048576), "clen", m4a.clen);
       }
       if (!j) log("     body", txt.slice(0, 160).replace(/\s+/g, " "));
+      if (af.length) {
+        const variants = [
+          `${base}/latest_version?id=${vid}&itag=140&local=true`,
+          `${base}/latest_version?id=${vid}&itag=140`,
+          m4a ? String(m4a.url).startsWith("http") ? String(m4a.url) : base + m4a.url : ""
+        ].filter(Boolean);
+        for (const v of variants) {
+          for (const range of ["bytes=0-1", "bytes=1048576-1048577"]) {
+            try {
+              const r2 = await fetch(v, { headers: { Range: range, "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1" }, redirect: "follow", signal: AbortSignal.timeout(8e3) });
+              log(`     ${v.replace(base, "").slice(0, 60)} ${range} -> ${r2.status} ${r2.headers.get("content-type")} final=${r2.url.slice(0, 70)}`);
+            } catch (e) {
+              log(`     ${v.slice(0, 60)} ERR ${e?.cause?.code || e?.name}`);
+            }
+          }
+        }
+        if (j?.hlsUrl) {
+          try {
+            const hu = String(j.hlsUrl).startsWith("http") ? String(j.hlsUrl) : base + j.hlsUrl;
+            const h = await fetch(hu, { signal: AbortSignal.timeout(8e3) });
+            const ht = await h.text();
+            log(`     hls ${h.status} ${hu.slice(0, 80)} lines=${ht.split("\n").length} audio=${(ht.match(/TYPE=AUDIO/g) || []).length} head=${ht.slice(0, 120).replace(/\s+/g, " ")}`);
+          } catch (e) {
+            log(`     hls ERR ${e?.cause?.code || e?.name}`);
+          }
+        }
+        try {
+          const d = await fetch(`${base}/api/manifest/dash/id/${vid}?local=true`, { signal: AbortSignal.timeout(8e3) });
+          const dt = await d.text();
+          const bu = (dt.match(/<BaseURL>([^<]+)<\/BaseURL>/) || [])[1] || "";
+          log(`     dash ${d.status} len=${dt.length} baseurl=${bu.slice(0, 80)}`);
+          if (bu) {
+            const u2 = (bu.startsWith("http") ? bu : base + bu).replace(/&amp;/g, "&");
+            const r3 = await fetch(u2, { headers: { Range: "bytes=0-1" }, signal: AbortSignal.timeout(8e3) });
+            log(`     dash seg ${r3.status} ${r3.headers.get("content-type")}`);
+          }
+        } catch (e) {
+          log(`     dash ERR ${e?.cause?.code || e?.name}`);
+        }
+      }
     } catch (e) {
       log(`  ${base} videos ERR ${e?.cause?.code || e?.name}`);
     }
