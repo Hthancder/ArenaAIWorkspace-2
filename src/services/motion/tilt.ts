@@ -60,7 +60,9 @@ let visualRefs = 0;
 let gain = 1;
 let sensorSub: Sub | null = null;
 let appSub: Sub | null = null;
-let appActive = AppState.currentState === 'active' || AppState.currentState == null;
+/** 'unknown' (launch) counts as in front; only background / inactive stop the sensor */
+const isFront = (st: string | null | undefined) => st !== 'background' && st !== 'inactive';
+let appActive = isFront(AppState.currentState);
 let angX = 0; // eye-right, degrees
 let angY = 0; // eye-down, degrees
 let lastT = 0;
@@ -217,7 +219,7 @@ function stopPointer() {
 // ---------------------------------------------------------------- lifecycle
 
 function onAppState(s: AppStateStatus) {
-  const active = s === 'active';
+  const active = isFront(s);
   if (active === appActive) return;
   appActive = active;
   // backgrounded / Control Centre / call: the sensor stops; it resumes on return
@@ -229,7 +231,7 @@ function retain() {
   refs += 1;
   if (refs === 1) {
     appSub = AppState.addEventListener('change', onAppState) as unknown as Sub;
-    appActive = AppState.currentState === 'active' || AppState.currentState == null;
+    appActive = isFront(AppState.currentState);
     startSensor();
   }
 }

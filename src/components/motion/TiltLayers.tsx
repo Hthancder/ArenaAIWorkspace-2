@@ -7,13 +7,11 @@
 //  • CoverSheen   — the light on that surface: a soft specular glare that slides against the
 //                   tilt (tvOS focus style) and an optional holographic foil that shifts its
 //                   rainbow with the angle (trading-card holo).
-//  • ParallaxLayer — a background that drifts with the eye, so it reads as being far behind
-//                   the content (iOS "Perspective Zoom"). It is scaled just enough that its
-//                   edges never show.
+//  (backgrounds drift through their own `drift` / `parallax` props: AmbientLight, MediaBackdrop)
 
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Animated, StyleSheet, useWindowDimensions, View, ViewStyle } from 'react-native';
+import { Animated, StyleSheet, View, ViewStyle } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useHolySic } from '../../context/HolySicContext';
 import { Tilt, TILT_GAIN } from '../../services/motion/tilt';
@@ -95,11 +93,14 @@ export const TiltCard: React.FC<{
     ],
     [maxDeg, float]
   );
-  if (!on) return <View style={style}>{children}</View>;
-  return <Animated.View style={[style, { transform }]}>{children}</Animated.View>;
+  // always the same element: toggling the effect (Low Power, Reduce Motion…) must not remount
+  // the cover underneath — a music video in it would restart
+  return <Animated.View style={[style, on ? { transform } : null]}>{children}</Animated.View>;
 };
 
 // ---------------------------------------------------------------- CoverSheen
+
+const GLARE_SCALE = 4;
 
 const HOLO = [
   '#ff7773',
@@ -147,6 +148,18 @@ export const CoverSheen: React.FC<{
       ],
     };
   }, [S, mag]);
+  const glareInner = useMemo(() => {
+    const G = S * 1.9;
+    const g = G / GLARE_SCALE;
+    return {
+      position: 'absolute' as const,
+      width: g,
+      height: g,
+      left: (G - g) / 2,
+      top: (G - g) / 2,
+      transform: [{ scale: GLARE_SCALE }],
+    };
+  }, [S]);
   const holoStyle = useMemo(
     () => ({
       position: 'absolute' as const,
@@ -181,51 +194,23 @@ export const CoverSheen: React.FC<{
       )}
       {glare && (
         <Animated.View style={glareStyle}>
-          <Svg width="100%" height="100%">
-            <Defs>
-              <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%">
-                <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.42} />
-                <Stop offset="0.28" stopColor="#FFFFFF" stopOpacity={0.14} />
-                <Stop offset="0.62" stopColor="#FFFFFF" stopOpacity={0} />
-              </RadialGradient>
-            </Defs>
-            <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
-          </Svg>
+          {/* a soft blob: drawn at 1/GLARE_SCALE size and scaled up — an SVG is a bitmap of its
+              size × screen scale², and full size would cost ~12 MB for no visible gain */}
+          <View style={glareInner}>
+            <Svg width="100%" height="100%">
+              <Defs>
+                <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%">
+                  <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.42} />
+                  <Stop offset="0.28" stopColor="#FFFFFF" stopOpacity={0.14} />
+                  <Stop offset="0.62" stopColor="#FFFFFF" stopOpacity={0} />
+                </RadialGradient>
+              </Defs>
+              <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+            </Svg>
+          </View>
         </Animated.View>
       )}
     </View>
-  );
-};
-
-// ---------------------------------------------------------------- ParallaxLayer
-
-/**
- * A full-bleed background that drifts with the eye. `amount` = points at full tilt.
- * `cover` scales the layer up so the drift never reveals an edge (for pictures that exactly
- * fill the screen; oversized layers such as the blurred ambient flood don't need it).
- */
-export const ParallaxLayer: React.FC<{
-  on: boolean;
-  amount?: number;
-  cover?: boolean;
-  style?: ViewStyle;
-  children: React.ReactNode;
-}> = ({ on, amount = 16, cover = false, style, children }) => {
-  const { width, height } = useWindowDimensions();
-  const transform = useMemo(() => {
-    const t: any[] = [
-      { translateX: Animated.multiply(Tilt.x, amount) },
-      { translateY: Animated.multiply(Tilt.y, amount) },
-    ];
-    // gain can reach 1.45 → room for 1.5 × amount on each side
-    if (cover) t.push({ scale: 1 + (3 * amount) / Math.max(1, Math.min(width, height)) });
-    return t;
-  }, [amount, cover, width, height]);
-  if (!on) return <View style={[StyleSheet.absoluteFill, style]}>{children}</View>;
-  return (
-    <Animated.View style={[StyleSheet.absoluteFill, style, { transform }]}>
-      {children}
-    </Animated.View>
   );
 };
 

@@ -2,13 +2,13 @@
 // bass, and separating in depth when the phone tilts (far specks drift with the eye, near ones
 // against it — the same parallax rule as the cover and the backdrop).
 //
-// Cost: each layer is ONE static SVG drawn once (two screen-heights tall, so the climb loops
-// seamlessly); everything that moves is a transform / opacity on the native driver. Nothing is
+// Cost: each speck is a tiny round View (no bitmap — a two-screen-tall SVG per layer would be
+// ~26 MB of backing store at 3×), laid out once over two screen-heights so the climb loops
+// seamlessly; everything that moves is a transform / opacity on the native driver. Nothing is
 // drawn when it's off, under Reduce Motion, in Low Power Mode, or while the app is hidden.
 
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
 import { Tilt } from '../../services/motion/tilt';
 
 interface Layer {
@@ -113,24 +113,38 @@ const DustLayer: React.FC<{
             styles3.climb,
           ]}
         >
-          <Svg width={w + 2 * m} height={2 * h}>
-            {[0, h].map((dy) =>
-              specks.map((s, i) => (
-                <React.Fragment key={`${dy}-${i}`}>
-                  {layer.halo && (
-                    <Circle
-                      cx={s.x + m}
-                      cy={s.y + dy}
-                      r={s.r * 3.2}
-                      fill={s.c}
-                      opacity={0.08 * s.o}
-                    />
-                  )}
-                  <Circle cx={s.x + m} cy={s.y + dy} r={s.r} fill={s.c} opacity={s.o} />
-                </React.Fragment>
-              ))
-            )}
-          </Svg>
+          {[0, h].map((dy) =>
+            specks.map((sp, i) => (
+              <React.Fragment key={`${dy}-${i}`}>
+                {layer.halo && (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      left: sp.x + m - sp.r * 3.2,
+                      top: sp.y + dy - sp.r * 3.2,
+                      width: sp.r * 6.4,
+                      height: sp.r * 6.4,
+                      borderRadius: sp.r * 3.2,
+                      backgroundColor: sp.c,
+                      opacity: 0.08 * sp.o,
+                    }}
+                  />
+                )}
+                <View
+                  style={{
+                    position: 'absolute',
+                    left: sp.x + m - sp.r,
+                    top: sp.y + dy - sp.r,
+                    width: sp.r * 2,
+                    height: sp.r * 2,
+                    borderRadius: sp.r,
+                    backgroundColor: sp.c,
+                    opacity: sp.o,
+                  }}
+                />
+              </React.Fragment>
+            ))
+          )}
         </Animated.View>
       </Animated.View>
     </Animated.View>

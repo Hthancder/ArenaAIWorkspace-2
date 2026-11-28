@@ -3,7 +3,7 @@
 // Ignored while typing (iOS uses shaking for "Undo Typing" there).
 
 import { useEffect, useRef } from 'react';
-import { TextInput } from 'react-native';
+import { Platform, TextInput } from 'react-native';
 import { useHolySic } from '../../context/HolySicContext';
 import { useAppActive } from '../../services/appActivity';
 import { createShakeDetector } from '../../services/motion/shake';
@@ -12,7 +12,8 @@ import { Tilt } from '../../services/motion/tilt';
 export const ShakeToSkip: React.FC = () => {
   const { prefs, currentTrack, playNext, haptic, showToast } = useHolySic();
   const appActive = useAppActive();
-  const on = !!prefs.shakeSkip && appActive && !!currentTrack;
+  // no accelerometer on the web preview (the switch is hidden there too)
+  const on = Platform.OS !== 'web' && !!prefs.shakeSkip && appActive && !!currentTrack;
   // latest callbacks without restarting the sensor on every render
   const act = useRef({ playNext, haptic, showToast, vi: prefs.language === 'vi' });
   act.current = { playNext, haptic, showToast, vi: prefs.language === 'vi' };
