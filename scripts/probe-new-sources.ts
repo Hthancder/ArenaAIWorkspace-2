@@ -140,6 +140,17 @@ async function invidious() {
       log(`  ${base} videos ERR ${e?.cause?.code || e?.name}`);
     }
   }
+  for (const base of inst) {
+    for (const path of ['/latest_version', '/companion/latest_version']) {
+      try {
+        const u = `${base}${path}?id=${vid}&itag=140&local=true`;
+        const r = await fetch(u, { headers: { Range: 'bytes=1048576-1048577' }, redirect: 'follow', signal: AbortSignal.timeout(8000) });
+        log(`  ${base}${path} -> ${r.status} ${r.headers.get('content-type')} range=${r.headers.get('content-range')} final=${r.url.replace(base, '').slice(0, 60)}`);
+      } catch (e: any) {
+        log(`  ${base}${path} ERR ${e?.cause?.code || e?.name}`);
+      }
+    }
+  }
   const a = await invidiousAudio(vid);
   log('audio ->', a ? `${a.qualityLabel} @${a.instance} ${a.url.slice(0, 100)}` : 'null');
   if (a) log('   range 3MiB', await rangeProbe(a.url, 3 * 1_048_576));
