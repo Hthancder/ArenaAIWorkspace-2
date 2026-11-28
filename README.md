@@ -32,7 +32,7 @@ Các test dùng mock kiểm tra capture, replay, sender, ticker, cleanup và bui
 
 ### Chẩn đoán ESP / X-ray / aimbot
 
-Sau khi cài bản 0.1.5, vào một trận, bật các tính năng cần thử và chờ vài giây. Trong Console chạy:
+Sau khi cài bản 0.1.6, vào một trận, bật các tính năng cần thử và chờ vài giây. Trong Console chạy:
 
 ```js
 JSON.stringify(window[Symbol.for('duality.reborn.diagnostics.v1')]?.status(), null, 2)
@@ -56,3 +56,7 @@ So với source ở commit trên, core chặn sender có một lệnh gọi tr�
 Các hook che `Function.prototype.toString` và che bộ font trong payload cũ đã bị loại bỏ. Hook method do payload tạo được đăng ký khôi phục khi core dispose nếu chưa bị script khác thay thế. Dispose vẫn không gỡ toàn bộ DOM, event listeners và các hook khác của client gốc; tải lại trang để dọn sạch.
 
 **Không có antiban được bảo đảm.** Source công khai có các nhãn liên quan anti-cheat trong [`shared/net/net.ts`](https://github.com/survev/survev/blob/cf49d323a763115b33d486b31c84ea70761da33d/shared/net/net.ts), xử lý gói lỗi trong [`server/src/game/client.ts`](https://github.com/survev/survev/blob/cf49d323a763115b33d486b31c84ea70761da33d/server/src/game/client.ts), và các chức năng quản lý ban. Source công khai không cho biết toàn bộ cách triển khai, chính sách hoặc kiểm duyệt của máy chủ thực tế; aimbot/X-ray và các tính năng sửa input có thể vi phạm quy định và dẫn đến khóa tài khoản. Muốn tránh rủi ro đó, không sử dụng chúng trên máy chủ không cho phép.
+
+### KXS Chat
+
+Từ bản 0.1.6, phần chat KXS và nút Chat trong menu KXS đã bị vô hiệu hóa: không tạo khung chat, không đăng ký phím Enter hay các timer của chat. Voice Chat không bị thay đổi. File gốc `duality_client.js` vẫn được giữ nguyên; thay đổi áp dụng khi build bản Reborn.

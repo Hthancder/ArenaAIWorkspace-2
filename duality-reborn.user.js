@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Duality Reborn (experimental)
 // @namespace    arena.survev.duality-reborn
-// @version      0.1.5
+// @version      0.1.6
 // @description  Duality Client connected to Injection Core
 // @match        https://survev.io/*
 // @match        https://*.survev.io/*
@@ -3891,18 +3891,6 @@ class KxsClientSecondaryMenu {
                         this.kxsClient.voiceChat.toggleVoiceChat();
                     },
                 },
-                {
-                    label: "Chat",
-                    value: this.kxsClient.isKxsChatEnabled,
-                    icon: '<svg fill="#000000" version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <g> <g> <path d="M232.727,238.545v186.182H281.6l-13.964,69.818l97.745-69.818H512V238.545H232.727z M477.091,389.818H365.382h-11.187 l-9.103,6.502l-25.912,18.508l5.003-25.01H281.6h-13.964V273.455h209.455V389.818z"></path> </g> </g> <g> <g> <path d="M279.273,17.455H0v186.182h65.164l97.745,69.818l-13.964-69.818h130.327V17.455z M244.364,168.727h-95.418h-42.582 l5.003,25.01L85.455,175.23l-9.104-6.502H65.164H34.909V52.364h209.455V168.727z"></path> </g> </g> <g> <g> <rect x="180.364" y="93.091" width="34.909" height="34.909"></rect> </g> </g> <g> <g> <rect x="122.182" y="93.091" width="34.909" height="34.909"></rect> </g> </g> <g> <g> <rect x="64" y="93.091" width="34.909" height="34.909"></rect> </g> </g> <g> <g> <rect x="413.091" y="314.182" width="34.909" height="34.909"></rect> </g> </g> <g> <g> <rect x="354.909" y="314.182" width="34.909" height="34.909"></rect> </g> </g> <g> <g> <rect x="296.727" y="314.182" width="34.909" height="34.909"></rect> </g> </g> </g></svg>',
-                    category: "SERVER",
-                    type: "toggle",
-                    onChange: () => {
-                        this.kxsClient.isKxsChatEnabled = !this.kxsClient.isKxsChatEnabled;
-                        this.kxsClient.updateLocalStorage();
-                        this.kxsClient.chat.toggleChat();
-                    },
-                }
             ],
         });
         this.addOption(MISC, {
@@ -9216,7 +9204,7 @@ class KxsClient {
         this.discordRPC.connect();
         this.hud = new KxsClientHUD(this);
         this.discordTracker = new DiscordTracking(this, this.discordWebhookUrl);
-        this.chat = new KxsChat(this);
+        this.chat = { addChatMessage() {}, addSystemMessage() {}, toggleChat() {} };
         this.voiceChat = new KxsVoiceChat(this, this.kxsNetwork);
         if (this.isSpotifyPlayerEnabled) {
             this.createSimpleSpotifyPlayer();

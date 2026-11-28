@@ -3,19 +3,20 @@
 // the injection core and the adapted (unpacked) iframe payload.
 const fs = require('node:fs');
 const path = require('node:path');
+const removeKxsChat = require('./patch-legacy.js');
 const root = path.join(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const upstream = read('duality_client.js');
 const bundleStart = upstream.indexOf('/******/ (() => { // webpackBootstrap');
 const bundleEnd = upstream.indexOf('\n!function() {', bundleStart);
 if (bundleStart < 0 || bundleEnd < 0) throw new Error('Upstream bundle layout changed');
-const bundle = upstream.slice(bundleStart, bundleEnd);
+const bundle = removeKxsChat(upstream.slice(bundleStart, bundleEnd));
 const core = read('duality-injection-core.user.js').replace(/^\/\/ ==UserScript==[\s\S]*?\/\/ ==\/UserScript==\s*/, '');
 const payload = read('src/duality-payload.js');
 const header = `// ==UserScript==
 // @name         Duality Reborn (experimental)
 // @namespace    arena.survev.duality-reborn
-// @version      0.1.5
+// @version      0.1.6
 // @description  Duality Client connected to Injection Core
 // @match        https://survev.io/*
 // @match        https://*.survev.io/*
