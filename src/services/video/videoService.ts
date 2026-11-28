@@ -19,6 +19,12 @@ import {
   searchYouTubeVideos,
   YouTubeVideoHit,
 } from '../providers/innertubeProvider';
+import {
+  invidiousAbs,
+  invidiousInstances,
+  markInvidiousGood,
+  servedAt,
+} from '../providers/invidiousProvider';
 
 export interface VideoStream {
   url: string;
@@ -31,7 +37,6 @@ export interface VideoStream {
   bytes?: number;
 }
 
-const INVIDIOUS_INSTANCES = ['https://inv.nadeko.net', 'https://invidious.nerdvpn.de'];
 const CACHE_KEY = '@holysic/mv_ids_v1';
 const NONE_TTL = 3 * 24 * 3600 * 1000;
 
@@ -213,26 +218,38 @@ async function fromPiped(videoId: string, maxH: number): Promise<VideoStream | n
 }
 
 async function fromInvidious(videoId: string, maxH: number): Promise<VideoStream | null> {
-  for (const base of INVIDIOUS_INSTANCES) {
+  for (const base of await invidiousInstances()) {
     try {
       const res = await fetchTimeout(`${base}/api/v1/videos/${videoId}?local=true`, {}, 4000);
       if (!res.ok) continue;
       const data = await res.json();
       const h = (v: any) =>
         Number(String(v?.resolution || v?.qualityLabel || '').match(/(\d+)p/)?.[1]) || 0;
-      const abs = (u: string) => (u.startsWith('http') ? u : base + u);
+      const abs = (u: string) => invidiousAbs(base, u);
       const adaptive = ((data?.adaptiveFormats || []) as any[])
         .filter((v) => v?.url && isAvc(String(v.type || '')) && h(v) > 0 && h(v) <= maxH)
         .sort((a, b) => h(b) - h(a));
       const muxed = ((data?.formatStreams || []) as any[]).filter((v) => v?.url);
-      const pick = adaptive[0] || muxed[muxed.length - 1];
-      if (pick)
-        return {
-          url: abs(pick.url),
-          height: h(pick) || 360,
-          label: `${h(pick) || 360}p · Invidious`,
-          isHls: false,
-        };
+      // the player route first (reaches invidious-companion), then the API's proxied link
+      for (const pick of [adaptive[0], muxed[muxed.length - 1]].filter(Boolean)) {
+        const tries = [
+          ...(pick.itag
+            ? [`${base}/latest_version?id=${videoId}&itag=${pick.itag}&local=true`]
+            : []),
+          abs(pick.url),
+        ];
+        for (const u of tries) {
+          const url = await servedAt(u, Number(pick.clen) || undefined);
+          if (!url) continue;
+          markInvidiousGood(base);
+          return {
+            url,
+            height: h(pick) || 360,
+            label: `${h(pick) || 360}p · Invidious`,
+            isHls: false,
+          };
+        }
+      }
     } catch {
       // next instance
     }

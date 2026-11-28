@@ -38,6 +38,7 @@ const SOURCE_FILTERS: { id: SearchFilter; vi: string; en: string }[] = [
   { id: 'video', vi: 'Video MV', en: 'Music videos' },
   { id: 'innertube', vi: 'YouTube Music', en: 'YouTube Music' },
   { id: 'monochrome', vi: 'Lossless FLAC', en: 'Lossless FLAC' },
+  { id: 'zing', vi: 'Zing MP3', en: 'Zing MP3' },
   { id: 'jiosaavn', vi: 'JioSaavn', en: 'JioSaavn' },
   { id: 'itunes', vi: 'Apple Music', en: 'Apple Music' },
   { id: 'soundcloud', vi: 'SoundCloud', en: 'SoundCloud' },
@@ -48,7 +49,7 @@ const SOURCE_FILTERS: { id: SearchFilter; vi: string; en: string }[] = [
 ];
 
 /** sources that send no CORS headers: they answer in the iPhone app only */
-const NATIVE_ONLY: SearchFilter[] = ['soundcloud', 'bandcamp', 'deezer'];
+const NATIVE_ONLY: SearchFilter[] = ['soundcloud', 'bandcamp', 'deezer', 'zing'];
 
 const FEATURED_ARTISTS = [
   { name: 'tlinh', tag: 'V-Pop / R&B' },

@@ -75,12 +75,16 @@ async function writeJson<T>(key: string, value: T): Promise<void> {
 export const StorageService = {
   loadPreferences: async (): Promise<HolySicPreferences> => {
     const saved = await readJson<Partial<HolySicPreferences>>(KEYS.PREFS, {});
-    // modules added in an update join the saved order just before the Apple previews
+    // modules added in an update join the saved order right after the module they follow in the
+    // default order (Zing MP3 after JioSaavn, Invidious after YouTube Music), else before the
+    // Apple previews
     const known = DEFAULT_PREFERENCES.moduleOrder;
     let order = (saved.moduleOrder || known).filter((m) => known.includes(m));
     for (const m of known) {
       if (order.includes(m)) continue;
-      const at = order.indexOf('itunes');
+      const prev = known[known.indexOf(m) - 1];
+      const after = prev ? order.indexOf(prev) : -1;
+      const at = after >= 0 ? after + 1 : order.indexOf('itunes');
       order = at >= 0 ? [...order.slice(0, at), m, ...order.slice(at)] : [...order, m];
     }
     return {

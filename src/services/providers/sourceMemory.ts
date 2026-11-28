@@ -84,12 +84,15 @@ export function trackMemoryKey(track: Pick<Track, 'title' | 'artist' | 'artists'
   return `${norm(track.title)}|${norm(artist)}`;
 }
 
-/** googlevideo links carry `expire=<epoch seconds>`; SoundCloud / Bandcamp stream links are
- *  short-lived signed tokens, so they are never reused (the module asks again, which is quick) */
+/** googlevideo links (also through Invidious) carry `expire=<epoch seconds>`; SoundCloud /
+ *  Bandcamp / Zing MP3 stream links are short-lived signed tokens, so they are never reused (the
+ *  module asks again, which is quick) */
 function expiryFromUrl(url: string): number | undefined {
   const m = url.match(/[?&]expire=(\d{9,11})/);
   if (m) return Number(m[1]) * 1000;
-  if (/sndcdn\.com|soundcloud\.cloud|bcbits\.com|bandcamp\.com\/stream_redirect/.test(url))
+  if (
+    /sndcdn\.com|soundcloud\.cloud|bcbits\.com|bandcamp\.com\/stream_redirect|zmdcdn\.me/.test(url)
+  )
     return Date.now();
   return undefined;
 }

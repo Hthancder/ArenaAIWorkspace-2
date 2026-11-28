@@ -66,6 +66,8 @@ import {
   searchSoundCloudTracks,
 } from '../services/providers/soundcloudProvider';
 import { fetchBandcampLink, searchBandcampTracks } from '../services/providers/bandcampProvider';
+import { fetchZingLink, searchZingTracks } from '../services/providers/zingProvider';
+import { setCustomInvidious } from '../services/providers/invidiousProvider';
 import { fetchDeezerLink, searchDeezerTracks } from '../services/providers/deezerProvider';
 import { exportDownloadToFiles, shareTrack as shareTrackSheet } from '../services/share/shareTools';
 import { AUTO_EQ_PRESETS, OFFLINE_SHOWCASE_TRACKS } from '../data/curatedCatalog';
@@ -646,6 +648,11 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       cancelled = true;
     };
   }, [currentTrack?.artworkUrl]);
+
+  // the user's own Invidious instance (Settings › Sources) is asked before the public ones
+  useEffect(() => {
+    setCustomInvidious(prefs.invidiousInstance || '');
+  }, [prefs.invidiousInstance]);
 
   // Low Power Mode dims the ambient light; Reduce Motion only removes zooming. Each flag is read
   // strictly (=== true) so an unknown / undefined answer never claims battery saver is on.
@@ -1987,6 +1994,13 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ) {
         tasks.push(searchInnerTubeTracks(q, 10));
       }
+      // Zing MP3: the Vietnamese catalogue (iPhone app only — no CORS in the browser)
+      if (
+        (sourceFilter === 'all' && prefs.enabledModules.zing && Platform.OS !== 'web') ||
+        sourceFilter === 'zing'
+      ) {
+        tasks.push(searchZingTracks(q, sourceFilter === 'zing' ? 30 : 8).catch(() => []));
+      }
       // Catalog-only extras: Audius (artist uploads) and live radio stations
       if (sourceFilter === 'audius') tasks.push(searchAudiusTracks(q, 25));
       // SoundCloud (free streams) / Bandcamp (artist streams) / Deezer (catalog, plays elsewhere)
@@ -2493,16 +2507,26 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return { kind: 'none', message: isVi ? 'Không nhận ra liên kết này' : 'Unrecognised link' };
       // SoundCloud / Bandcamp (played from there) and Deezer (catalog: plays through the other
       // sources, by ISRC or title + artist + length) give their tracks directly — no re-matching
-      if (link.kind === 'soundcloud' || link.kind === 'bandcamp' || link.kind === 'deezer') {
-        const name = { soundcloud: 'SoundCloud', bandcamp: 'Bandcamp', deezer: 'Deezer' }[
-          link.kind
-        ];
+      if (
+        link.kind === 'soundcloud' ||
+        link.kind === 'bandcamp' ||
+        link.kind === 'deezer' ||
+        link.kind === 'zing'
+      ) {
+        const name = {
+          soundcloud: 'SoundCloud',
+          bandcamp: 'Bandcamp',
+          deezer: 'Deezer',
+          zing: 'Zing MP3',
+        }[link.kind];
         const res =
           link.kind === 'soundcloud'
             ? await fetchSoundCloudLink(link.url)
             : link.kind === 'bandcamp'
               ? await fetchBandcampLink(link.url)
-              : await fetchDeezerLink(link.url);
+              : link.kind === 'zing'
+                ? await fetchZingLink(link.url)
+                : await fetchDeezerLink(link.url);
         const tracks = res ? filterBlacklisted(res.tracks, prefsRef.current.blacklist) : [];
         if (!res || tracks.length === 0) {
           return {
@@ -2514,7 +2538,9 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
                   ? 'Không đọc được liên kết SoundCloud (riêng tư, bị chặn ở khu vực này, hoặc chỉ có cho Go+)'
                   : link.kind === 'bandcamp'
                     ? 'Không đọc được trang Bandcamp (cần liên kết bài hoặc album)'
-                    : 'Không đọc được liên kết Deezer (playlist phải công khai)'
+                    : link.kind === 'zing'
+                      ? 'Không đọc được liên kết Zing MP3 (cần liên kết bài, album hoặc playlist)'
+                      : 'Không đọc được liên kết Deezer (playlist phải công khai)'
               : `Could not read this ${name} link`,
           };
         }
@@ -2621,8 +2647,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return {
         kind: 'none',
         message: isVi
-          ? 'Hỗ trợ: YouTube / YouTube Music, Spotify (bài, playlist, album, nghệ sĩ), Apple Music, SoundCloud, Deezer, Bandcamp'
-          : 'Supported: YouTube / YouTube Music, Spotify, Apple Music, SoundCloud, Deezer and Bandcamp links',
+          ? 'Hỗ trợ: YouTube / YouTube Music, Spotify (bài, playlist, album, nghệ sĩ), Apple Music, SoundCloud, Deezer, Bandcamp, Zing MP3'
+          : 'Supported: YouTube / YouTube Music, Spotify, Apple Music, SoundCloud, Deezer, Bandcamp and Zing MP3 links',
       };
     },
     [matchSongList, playTrack, savePlaylistFromTracks]

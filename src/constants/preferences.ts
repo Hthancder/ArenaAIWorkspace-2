@@ -82,7 +82,14 @@ export type JioSaavnQuality = '320' | '160' | '96';
 
 /** Playback source modules, in the user's priority order (itunes = Apple 30 s previews, last) */
 export type ModuleId =
-  'monochrome' | 'jiosaavn' | 'innertube' | 'soundcloud' | 'bandcamp' | 'itunes';
+  | 'monochrome'
+  | 'jiosaavn'
+  | 'zing'
+  | 'innertube'
+  | 'invidious'
+  | 'soundcloud'
+  | 'bandcamp'
+  | 'itunes';
 
 export type HomeSectionId =
   | 'greeting'
@@ -178,6 +185,8 @@ export interface HolySicPreferences {
   moduleOrder: ModuleId[];
   /** Fall back to Apple's 30-second preview when no full-length source plays (off = never) */
   allowPreviewFallback: boolean;
+  /** an Invidious instance of the user's own choice (asked before the public ones); '' = none */
+  invidiousInstance: string;
   /** Remember the source that played each song and try it first next time */
   rememberSources: boolean;
   /** iOS: prefer sources that start instantly; Monochrome FLAC (needs a one-time download) goes after them */
@@ -347,14 +356,26 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   crossfadeCurve: 'equalPower',
   bitPerfect: false,
   preferredJioSaavnQuality: '320',
-  moduleOrder: ['monochrome', 'jiosaavn', 'innertube', 'soundcloud', 'bandcamp', 'itunes'],
+  moduleOrder: [
+    'monochrome',
+    'jiosaavn',
+    'zing',
+    'innertube',
+    'invidious',
+    'soundcloud',
+    'bandcamp',
+    'itunes',
+  ],
   allowPreviewFallback: false,
+  invidiousInstance: '',
   rememberSources: true,
   preferInstantStart: true,
   enabledModules: {
     monochrome: true,
     jiosaavn: true,
+    zing: true,
     innertube: true,
+    invidious: true,
     soundcloud: true,
     bandcamp: true,
     itunes: true,

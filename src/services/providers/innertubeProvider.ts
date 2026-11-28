@@ -4,6 +4,7 @@
 import { Platform } from 'react-native';
 import { DiagnosticStep, Track } from '../../types/music';
 import { CatalogCandidate, coreTitle, rankCandidates, TrackQueryInput } from '../trackMatcher';
+import { searchInvidiousVideos } from './invidiousProvider';
 
 export const PIPED_INSTANCES = ['https://pipedapi.kavin.rocks', 'https://api.piped.private.coffee'];
 
@@ -709,7 +710,7 @@ const parseClock = (t: string) => {
     : 0;
 };
 
-/** YouTube video search (music videos first). Native: InnerTube WEB; web/fallback: Piped. */
+/** YouTube video search (music videos first). Native: InnerTube WEB; then Piped, then Invidious. */
 export async function searchYouTubeVideos(query: string, limit = 12): Promise<YouTubeVideoHit[]> {
   const q = query.trim();
   if (!q) return [];
@@ -797,5 +798,15 @@ export async function searchYouTubeVideos(query: string, limit = 12): Promise<Yo
       }
     }
   }
-  return [];
+  // last road: an Invidious instance
+  const inv = await searchInvidiousVideos(q, limit).catch(() => []);
+  return inv
+    .filter((v) => v.lengthSeconds > 0)
+    .map((v) => ({
+      videoId: v.videoId,
+      title: v.title,
+      channel: v.author.replace(/ - Topic$/i, '').replace(/VEVO$/i, ''),
+      durationSec: v.lengthSeconds,
+      thumbnail: v.thumbnail || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+    }));
 }

@@ -4,6 +4,7 @@
 //   LRCLib      open LRC database — exact lookup first, then a scored search
 //   NetEase     NetEase Cloud Music: huge synced catalogue (V-Pop, C/K/J-Pop, US-UK)
 //   Kugou       Kugou lyrics: synced, strong for Asian releases
+//   Zing MP3    Vietnamese catalogue, often word-timed (iPhone app only — no CORS on the web)
 //   Lyrics.ovh  plain lyrics (last resort)
 //
 // Every candidate is scored against the song (title words, artist words, duration); anything
@@ -19,8 +20,9 @@ import {
   lyricsFromText,
   tryYouLyPlusLyrics,
 } from './lyricsService';
+import { searchZingSongs, zingLyricsById } from '../providers/zingProvider';
 
-export type LyricsSourceId = 'youlyplus' | 'lrclib' | 'netease' | 'kugou' | 'lyricsovh';
+export type LyricsSourceId = 'youlyplus' | 'zing' | 'lrclib' | 'netease' | 'kugou' | 'lyricsovh';
 
 export const LYRICS_SOURCES: {
   id: LyricsSourceId;
@@ -33,6 +35,12 @@ export const LYRICS_SOURCES: {
     name: 'YouLyPlus',
     vi: 'Theo từng chữ (Apple / Musixmatch)',
     en: 'Word-timed (Apple / Musixmatch)',
+  },
+  {
+    id: 'zing',
+    name: 'Zing MP3',
+    vi: 'Zing MP3 · nhạc Việt, nhiều bài theo từng chữ',
+    en: 'Zing MP3 · Vietnamese, often word-timed',
   },
   {
     id: 'lrclib',
@@ -62,6 +70,7 @@ export const LYRICS_SOURCES: {
 
 export const DEFAULT_LYRICS_SOURCES: Record<LyricsSourceId, boolean> = {
   youlyplus: true,
+  zing: true,
   lrclib: true,
   netease: true,
   kugou: true,
@@ -73,6 +82,8 @@ export interface LyricsQuery {
   artist: string;
   album?: string;
   durationSec?: number;
+  /** the song is a Zing MP3 track: its own lyrics are asked for directly */
+  zingId?: string;
 }
 
 export interface LyricsCandidate {
@@ -453,6 +464,41 @@ async function lyricsOvh(q: LyricsQuery): Promise<LyricsData | null> {
   }
 }
 
+// ── Zing MP3 ──
+
+async function zingLyrics(id: string, durationSec: number): Promise<LyricsData | null> {
+  const r = await zingLyricsById(id).catch(() => null);
+  if (!r) return null;
+  if (r.lines.length)
+    return {
+      trackId: '',
+      provider: 'Zing MP3',
+      synced: true,
+      wordSynced: r.wordSynced,
+      lines: r.lines,
+    };
+  return r.lrc ? fromLrc(r.lrc, durationSec, 'Zing MP3') : null;
+}
+
+async function zingSearch(q: LyricsQuery, free?: string): Promise<LyricsCandidate[]> {
+  const s =
+    free ||
+    `${lyricsTitle(q.title)} ${UNKNOWN_ARTIST.test(q.artist) ? '' : cleanLyricsArtist(q.artist)}`.trim();
+  const songs = await searchZingSongs(s, 8).catch(() => []);
+  return songs.map((song) => {
+    const c = { title: song.title, artist: song.artist, durationSec: song.durationSec };
+    return {
+      key: `zing-${song.id}`,
+      source: 'zing' as const,
+      ...c,
+      album: song.album,
+      synced: true, // unknown until loaded; Zing's lyrics are timed
+      score: scoreLyricsMatch(q, c),
+      load: () => zingLyrics(song.id, q.durationSec || c.durationSec || 200),
+    };
+  });
+}
+
 // ── public ──
 
 export const queryOf = (t: Track): LyricsQuery => ({
@@ -460,6 +506,7 @@ export const queryOf = (t: Track): LyricsQuery => ({
   artist: t.artists?.length ? t.artists.join(', ') : t.artist,
   album: t.album,
   durationSec: t.durationSec,
+  zingId: t.source === 'zing' && t.id.startsWith('zing-') ? t.id.slice(5) : undefined,
 });
 
 /**
@@ -474,6 +521,12 @@ export async function fetchOnlineLyrics(
   const dur = q.durationSec || 200;
   const artist = cleanLyricsArtist(q.artist);
   const title = lyricsTitle(q.title);
+
+  // a Zing MP3 song: its own lyrics (word-timed for many V-Pop songs) are the exact match
+  if (on('zing') && q.zingId) {
+    const own = await zingLyrics(q.zingId, dur).catch(() => null);
+    if (own?.synced) return own;
+  }
 
   // round 1: word-timed + exact LRCLib, in parallel
   const [ylp, exact] = await Promise.all([
@@ -490,6 +543,7 @@ export async function fetchOnlineLyrics(
     on('lrclib') ? lrclibSearch(q) : Promise.resolve([] as LyricsCandidate[]),
     on('netease') ? neteaseSearch(q) : Promise.resolve([] as LyricsCandidate[]),
     on('kugou') ? kugouSearch(q) : Promise.resolve([] as LyricsCandidate[]),
+    on('zing') ? zingSearch(q) : Promise.resolve([] as LyricsCandidate[]),
   ]);
   const ranked = lists
     .flat()
@@ -520,6 +574,7 @@ export async function searchLyricsCandidates(
     on('lrclib') ? lrclibSearch(q, free) : Promise.resolve([] as LyricsCandidate[]),
     on('netease') ? neteaseSearch(q, free) : Promise.resolve([] as LyricsCandidate[]),
     on('kugou') ? kugouSearch(q, free) : Promise.resolve([] as LyricsCandidate[]),
+    on('zing') ? zingSearch(q, free) : Promise.resolve([] as LyricsCandidate[]),
   ]);
   const extra: LyricsCandidate[] = [];
   if (!free && on('youlyplus')) {

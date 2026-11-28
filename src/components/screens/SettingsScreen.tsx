@@ -72,6 +72,7 @@ export const SettingsScreen: React.FC = () => {
   const scrollY = useRef(new Animated.Value(0)).current;
 
   const [newServerUrl, setNewServerUrl] = useState('');
+  const [invDraft, setInvDraft] = useState<string | null>(null);
   const [newServerKind, setNewServerKind] = useState<'streamer' | 'relay'>('relay');
   const [verifying, setVerifying] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -611,6 +612,12 @@ export const SettingsScreen: React.FC = () => {
                     bandcamp: vi
                       ? 'Bandcamp · nghệ sĩ indie (MP3 128)'
                       : 'Bandcamp · indie artists (MP3 128)',
+                    zing: vi
+                      ? 'Zing MP3 · nhạc Việt, lời karaoke (MP3 128)'
+                      : 'Zing MP3 · Vietnamese catalogue, synced lyrics (MP3 128)',
+                    invidious: vi
+                      ? 'Invidious · YouTube qua máy chủ trung gian'
+                      : 'Invidious · YouTube through public relays',
                   };
                   return (
                     <View key={modId} style={styles.moduleRow}>
@@ -639,9 +646,57 @@ export const SettingsScreen: React.FC = () => {
 
                 <Text style={[styles.rowDesc, { marginTop: 8 }]}>
                   {vi
-                    ? 'Spotify, Apple Music, Tidal và bản đầy đủ của Deezer được khoá DRM (mã hoá cho tài khoản trả phí), nên HolySic không phát trực tiếp từ đó: dán liên kết bài / playlist / album (Thư viện › Nhập) để nhập danh sách, rồi bài hát được phát từ các nguồn trên. SoundCloud và Bandcamp chỉ phát bản mà chính họ cho nghe miễn phí.'
-                    : 'Spotify, Apple Music, Tidal and Deezer’s full streams are DRM-locked (encrypted for subscribers), so HolySic doesn’t play from them: paste a song / playlist / album link (Library › Import) to bring the list in, and the songs play from the sources above. SoundCloud and Bandcamp only play what they themselves stream for free.'}
+                    ? 'Spotify, Apple Music, Tidal và bản đầy đủ của Deezer được khoá DRM (mã hoá cho tài khoản trả phí), nên HolySic không phát trực tiếp từ đó: dán liên kết bài / playlist / album (Thư viện › Nhập) để nhập danh sách, rồi bài hát được phát từ các nguồn trên. SoundCloud, Bandcamp và Zing MP3 chỉ phát bản mà chính họ cho nghe miễn phí (bài VIP của Zing được tìm ở nguồn khác).'
+                    : 'Spotify, Apple Music, Tidal and Deezer’s full streams are DRM-locked (encrypted for subscribers), so HolySic doesn’t play from them: paste a song / playlist / album link (Library › Import) to bring the list in, and the songs play from the sources above. SoundCloud, Bandcamp and Zing MP3 only play what they themselves stream for free (Zing’s VIP songs are found elsewhere).'}
                 </Text>
+
+                {/* Invidious: the user's own instance, asked before the public ones */}
+                {prefs.enabledModules.invidious && (
+                  <View style={{ marginTop: 10 }}>
+                    <Text style={styles.rowTitle}>
+                      {vi ? 'Máy chủ Invidious riêng' : 'Your Invidious instance'}
+                    </Text>
+                    <Text style={styles.rowDesc}>
+                      {vi
+                        ? 'Không bắt buộc. Máy chủ công khai hay chặn hoặc quá tải; điền một máy chủ chạy tốt với bạn (hoặc tự dựng) để HolySic hỏi nó trước.'
+                        : 'Optional. Public instances are often blocked or busy; enter one that works for you (or your own) and HolySic asks it first.'}
+                    </Text>
+                    <View style={[styles.addSrvRow, { marginTop: 6, alignItems: 'center' }]}>
+                      <TextInput
+                        value={invDraft ?? prefs.invidiousInstance}
+                        onChangeText={setInvDraft}
+                        onEndEditing={() => {
+                          if (invDraft == null) return;
+                          updatePrefs({ invidiousInstance: invDraft.trim() });
+                          setInvDraft(null);
+                        }}
+                        onSubmitEditing={() => {
+                          if (invDraft == null) return;
+                          updatePrefs({ invidiousInstance: invDraft.trim() });
+                          setInvDraft(null);
+                        }}
+                        placeholder="https://invidious.example.org"
+                        placeholderTextColor={UI.text3}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="url"
+                        returnKeyType="done"
+                        style={styles.srvInput}
+                      />
+                      {!!(invDraft ?? prefs.invidiousInstance) && (
+                        <Tap
+                          onPress={() => {
+                            setInvDraft(null);
+                            updatePrefs({ invidiousInstance: '' });
+                          }}
+                          accessibilityLabel={vi ? 'Xoá máy chủ' : 'Clear instance'}
+                        >
+                          <Ionicons name="close-circle" size={18} color={UI.text3} />
+                        </Tap>
+                      )}
+                    </View>
+                  </View>
+                )}
 
                 {/* Playback source behaviour */}
                 <View style={[styles.switchRow, { marginTop: 10 }]}>

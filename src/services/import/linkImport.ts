@@ -16,7 +16,7 @@ export type ParsedLink =
   /** spotify.link/… share links: the real link is behind a redirect */
   | { kind: 'spotify-short'; url: string }
   | { kind: 'apple'; type: 'song' | 'album' | 'playlist'; id: string; url: string }
-  | { kind: 'deezer' | 'soundcloud' | 'bandcamp' | 'other'; url: string };
+  | { kind: 'deezer' | 'soundcloud' | 'bandcamp' | 'zing' | 'other'; url: string };
 
 export type SpotifyType = 'track' | 'playlist' | 'album' | 'artist';
 
@@ -83,6 +83,7 @@ export function parseMusicLink(raw: string): ParsedLink | null {
   if (host.endsWith('soundcloud.com') || host === 'soundcloud.app.goo.gl')
     return { kind: 'soundcloud', url: href };
   if (host.endsWith('bandcamp.com')) return { kind: 'bandcamp', url: href };
+  if (host === 'zingmp3.vn' || host === 'mp3.zing.vn') return { kind: 'zing', url: href };
   return { kind: 'other', url: href };
 }
 

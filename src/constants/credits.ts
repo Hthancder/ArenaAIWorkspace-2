@@ -60,6 +60,22 @@ export const UPSTREAM_CREDITS: CreditProject[] = [
     url: 'https://bandcamp.com',
   },
   {
+    name: 'Zing MP3',
+    author: 'Zing MP3 (VNG) & các nghệ sĩ',
+    roleVi:
+      'Kho nhạc Việt và lời theo từng chữ; chỉ phát bản Zing cho nghe miễn phí (bài VIP được tìm ở nguồn khác)',
+    roleEn:
+      'Vietnamese catalogue and word-timed lyrics; only what Zing streams for free (VIP songs play elsewhere)',
+    url: 'https://zingmp3.vn',
+  },
+  {
+    name: 'Invidious',
+    author: 'The Invidious project & instance hosts',
+    roleVi: 'Đường dự phòng tới âm thanh và MV YouTube qua các máy chủ Invidious công khai',
+    roleEn: 'A backup road to YouTube audio and music videos through public Invidious instances',
+    url: 'https://invidious.io',
+  },
+  {
     name: 'Deezer API',
     author: 'Deezer',
     roleVi:

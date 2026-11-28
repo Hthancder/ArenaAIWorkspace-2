@@ -12,6 +12,10 @@ export type MusicSourceId =
   | 'radio'
   | 'soundcloud'
   | 'bandcamp'
+  /** Zing MP3 (Vietnam): plays from Zing */
+  | 'zing'
+  /** YouTube audio through an Invidious instance */
+  | 'invidious'
   /** catalog only (search / links): plays through the other sources */
   | 'deezer';
 
@@ -150,6 +154,7 @@ export interface LyricsData {
     | 'BetterLyrics'
     | 'NetEase'
     | 'Kugou'
+    | 'Zing MP3'
     | 'Lyrics.ovh'
     | 'Built-in'
     | 'Local'

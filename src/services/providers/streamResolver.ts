@@ -25,6 +25,8 @@ import {
   soundCloudStreamsById,
 } from './soundcloudProvider';
 import { BandcampStream, bandcampStreamById, resolveBandcampStream } from './bandcampProvider';
+import { resolveZingStream, ZingStream, zingStreamById } from './zingProvider';
+import { InvidiousStream, invidiousAudio, resolveInvidiousStream } from './invidiousProvider';
 import { StreamFileCache } from '../audio/streamFileCache';
 
 const GRACE_MS = 1300;
@@ -44,6 +46,20 @@ const bcCandidate = (s: BandcampStream): Candidate => ({
   sourceLabel: 'Bandcamp',
   qualityLabel: s.qualityLabel,
   codec: 'MP3',
+});
+const zingCandidate = (s: ZingStream): Candidate => ({
+  url: s.url,
+  source: 'zing',
+  sourceLabel: 'Zing MP3',
+  qualityLabel: s.qualityLabel,
+  codec: 'MP3',
+});
+const invCandidate = (s: InvidiousStream, label = 'YouTube · Invidious'): Candidate => ({
+  url: s.url,
+  source: 'invidious',
+  sourceLabel: label,
+  qualityLabel: s.qualityLabel,
+  codec: s.codec,
 });
 
 export interface StreamCandidateQueue {
@@ -171,6 +187,17 @@ export function createStreamCandidateQueue(
     );
     return makeQueue(producers, diagnostics, prefs);
   }
+  // Zing MP3 catalog tracks: that song from Zing first; a VIP-only song (no free stream) still
+  // plays — the other modules below look for it by title / artist / length
+  let zingExact = false;
+  if (track.source === 'zing' && track.id.startsWith('zing-')) {
+    zingExact = true;
+    producers.push(
+      zingStreamById(track.id, pushStep)
+        .then((list) => list.map(zingCandidate))
+        .catch(() => [])
+    );
+  }
 
   // 2c. Music video mode with "audio from the video": the sound comes from the very video that is
   // on screen, so picture and sound line up exactly (instead of a different cut of the song)
@@ -205,6 +232,18 @@ export function createStreamCandidateQueue(
               }) as Candidate
           )
         )
+        // the direct clients didn't give it: the same video through an Invidious instance
+        .then(async (list) => {
+          if (list.length || prefs.enabledModules.invidious === false || !track.mvId) return list;
+          const inv = await invidiousAudio(track.mvId).catch(() => null);
+          pushStep({
+            module: 'Invidious',
+            step: 'Audio from the video',
+            ok: !!inv,
+            detail: inv ? `${inv.qualityLabel} · ${inv.instance}` : 'No instance served it',
+          });
+          return inv ? [invCandidate(inv, 'YouTube MV · Invidious')] : [];
+        })
         .catch(() => [])
     );
   }
@@ -379,6 +418,21 @@ export function createStreamCandidateQueue(
     if (modId === 'bandcamp') {
       producers.push(
         safe(resolveBandcampStream(query, pushStep).then((list) => list.map(bcCandidate)))
+      );
+    }
+
+    // (a Zing track already asked Zing for its own song above)
+    if (modId === 'zing' && !zingExact) {
+      producers.push(
+        safe(resolveZingStream(query, pushStep).then((list) => list.map(zingCandidate)))
+      );
+    }
+
+    if (modId === 'invidious') {
+      producers.push(
+        safe(
+          resolveInvidiousStream(query, pushStep).then((list) => list.map((x) => invCandidate(x)))
+        )
       );
     }
 
