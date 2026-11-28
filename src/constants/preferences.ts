@@ -228,6 +228,16 @@ export interface HolySicPreferences {
   /** downloads bring the music video along (kept for offline viewing) */
   downloadMv: boolean;
 
+  // ── Motion effects (gyroscope) ──
+  /** strength of the tilt effects; 'off' never starts the motion sensor */
+  motionFx: 'off' | 'low' | 'medium' | 'high';
+  /** the player's cover turns in 3D with the phone and catches a sliding light */
+  motionCover: boolean;
+  /** holographic foil on the cover: never / liked songs only / every song */
+  motionHolo: 'off' | 'liked' | 'all';
+  /** backgrounds drift with the tilt (player backdrop, your photo / GIF / video background) */
+  motionBackdrop: boolean;
+
   // ── Library ──
   /** how the playlists list is ordered (pinned ones always stay on top) */
   playlistSort: PlaylistSort;
@@ -337,6 +347,10 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   downloadAsk: true,
   downloadLyrics: true,
   downloadMv: false,
+  motionFx: 'medium',
+  motionCover: true,
+  motionHolo: 'liked',
+  motionBackdrop: true,
   playlistSort: 'custom',
   playlistView: 'list',
   playlistCreator: '',

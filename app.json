@@ -31,7 +31,9 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
-        "NSUserActivityTypes": ["com.holysic.music.listen"],
+        "NSUserActivityTypes": [
+          "com.holysic.music.listen"
+        ],
         "NSMicrophoneUsageDescription": "HolySic only requests audio access when optional visualizer sampling is enabled."
       },
       "entitlements": {
@@ -72,6 +74,12 @@
           "photosPermission": "HolySic uses your photos only when you pick a cover image for a music folder.",
           "cameraPermission": false,
           "microphonePermission": "Allow HolySic to analyze audio for optional visualizers."
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "HolySic reads device tilt only for its optional motion effects. Nothing is recorded or leaves your device."
         }
       ],
       [

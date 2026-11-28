@@ -29,6 +29,7 @@ import {
 } from './AmbientLight';
 import { SpectrumBars, useSpectrumBars } from './SpectrumBars';
 import { MediaBackdrop } from './MediaBackdrop';
+import { useTilt } from '../motion/TiltLayers';
 import { perfCount } from '../../services/perfProbe';
 import { useAppActive } from '../../services/appActivity';
 
@@ -80,6 +81,11 @@ export const AppBackdrop: React.FC = () => {
     30
   );
 
+  // motion effects: your picture drifts behind the tabs like an iOS "Perspective" wallpaper
+  const tilt = useTilt(
+    mediaSeen && !ambient.reduceMotion && prefs.motionBackdrop !== false && mode === 'media'
+  );
+
   if (mode === 'plain') return null;
 
   if (mode === 'media') {
@@ -94,6 +100,7 @@ export const AppBackdrop: React.FC = () => {
         energy={energy}
         isPlaying={isPlaying}
         reduceMotion={ambient.reduceMotion}
+        parallax={tilt.on ? 14 : 0}
       />
     );
   }

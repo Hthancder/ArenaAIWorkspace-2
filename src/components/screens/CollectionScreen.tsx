@@ -39,6 +39,7 @@ import { GlassSurface } from '../GlassSurface';
 import { NativeMenu, nativeMenuAvailable, MenuItem } from '../ui/NativeMenu';
 import { Progressive } from '../../hooks/useProgressive';
 import { MediaBackdrop } from '../ambient/MediaBackdrop';
+import { useTilt } from '../motion/TiltLayers';
 import { openBackdropEditor } from '../backdrop/BackdropEditor';
 import { pageBgKey } from '../../services/backdrop/backdropMedia';
 import { useAppActive } from '../../services/appActivity';
@@ -209,6 +210,22 @@ export const CollectionModal: React.FC = () => {
       cancelled = true;
     };
   }, [collectionTarget, loadAlbumFull, loadArtistFull, reloadTick]);
+
+  // motion effects: the page's picture drifts behind the list (hook before the early return)
+  const hasPageBg =
+    !!collectionTarget &&
+    !!(
+      (prefs.pageBackdrops || {})[pageBgKey(collectionTarget as any)] ??
+      (prefs.pagesUseAppBg && prefs.appBackdrop === 'media' ? prefs.appBgMedia : null)
+    );
+  const pageTilt = useTilt(
+    hasPageBg &&
+      appActive &&
+      !isPlayerOpen &&
+      !ambient.reduceMotion &&
+      !ambient.lowPower &&
+      prefs.motionBackdrop !== false
+  );
 
   if (!collectionTarget) return null;
   const vi = prefs.language === 'vi';
@@ -610,6 +627,7 @@ export const CollectionModal: React.FC = () => {
             accent={palette.accent}
             isPlaying={isPlaying}
             reduceMotion={ambient.reduceMotion}
+            parallax={pageTilt.on ? 14 : 0}
           />
         )}
         <Animated.ScrollView

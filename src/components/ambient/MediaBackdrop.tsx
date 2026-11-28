@@ -23,6 +23,7 @@ import {
 } from '../../services/backdrop/backdropMedia';
 import { withAlpha } from '../../theme/colorMath';
 import type { UiScheme } from '../../theme/ui';
+import { Tilt } from '../../services/motion/tilt';
 
 interface Props {
   media: BgMedia;
@@ -40,6 +41,8 @@ interface Props {
   previewScale?: number;
   /** report a size measured on first draw (editor stores it) */
   onMeasured?: (w: number, h: number) => void;
+  /** motion effects: points the picture drifts with the tilt (0 / undefined = fixed) */
+  parallax?: number;
 }
 
 export const MediaBackdrop: React.FC<Props> = React.memo((props) => {
@@ -95,6 +98,7 @@ const Stage: React.FC<Props & { uri: string; box: { w: number; h: number } }> = 
   previewScale = 1,
   scheme,
   onMeasured,
+  parallax = 0,
 }) => {
   const fit = effectiveFit(media);
   const rect = frameFor(media, box.w, box.h, previewScale);
@@ -126,6 +130,23 @@ const Stage: React.FC<Props & { uri: string; box: { w: number; h: number } }> = 
   // dreamy: a touch larger so the soft edges never show
   const extra = dreamy ? [{ scale: 1.08 }] : [];
 
+  // tilt parallax: the picture sits far behind the page and drifts with the eye; it is scaled
+  // just enough (gain ≤ 1.5 × amount per side) that its edges never come into view
+  const minSide = Math.max(1, Math.min(box.w, box.h));
+  const parallaxStyle = useMemo(
+    () =>
+      parallax > 0
+        ? {
+            transform: [
+              { translateX: Animated.multiply(Tilt.x, parallax) },
+              { translateY: Animated.multiply(Tilt.y, parallax) },
+              { scale: 1 + (3 * parallax) / minSide },
+            ],
+          }
+        : null,
+    [parallax, minSide]
+  );
+
   const playVideo = active && (!media.pauseWithMusic || !!isPlaying);
   const blurOverlay = !still && blurPx > 0.5;
 
@@ -155,59 +176,61 @@ const Stage: React.FC<Props & { uri: string; box: { w: number; h: number } }> = 
 
   return (
     <Animated.View style={[StyleSheet.absoluteFill, { opacity: shown }]}>
-      <Animated.View
-        style={[
-          StyleSheet.absoluteFill,
-          motionStyle,
-          { transform: [...(motionStyle.transform || []), ...extra] },
-        ]}
-      >
-        {/* "Fit": the whole picture over a blurred, darker copy of itself (like iOS wallpapers) */}
-        {fit === 'fit' && (
-          <>
-            {picture(
-              frameFor({ ...media, fit: 'fill', zoom: 1, fx: 0.5, fy: 0.5 }, box.w, box.h),
-              'back',
-              Math.max(blurPx, 30 * previewScale),
-              true
-            )}
-            {!still && (
-              <BlurView
-                intensity={70}
-                tint={scheme === 'light' ? 'light' : 'dark'}
-                style={StyleSheet.absoluteFill}
+      <Animated.View style={[StyleSheet.absoluteFill, parallaxStyle]}>
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            motionStyle,
+            { transform: [...(motionStyle.transform || []), ...extra] },
+          ]}
+        >
+          {/* "Fit": the whole picture over a blurred, darker copy of itself (like iOS wallpapers) */}
+          {fit === 'fit' && (
+            <>
+              {picture(
+                frameFor({ ...media, fit: 'fill', zoom: 1, fx: 0.5, fy: 0.5 }, box.w, box.h),
+                'back',
+                Math.max(blurPx, 30 * previewScale),
+                true
+              )}
+              {!still && (
+                <BlurView
+                  intensity={70}
+                  tint={scheme === 'light' ? 'light' : 'dark'}
+                  style={StyleSheet.absoluteFill}
+                />
+              )}
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor:
+                      scheme === 'light' ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.3)',
+                  },
+                ]}
               />
-            )}
+            </>
+          )}
+          {picture(rect, 'main', blurPx)}
+          {blurOverlay && (
+            <BlurView
+              intensity={Math.min(100, media.blur * 100)}
+              tint={frost ? (scheme === 'light' ? 'light' : 'dark') : 'default'}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
+          {frost && still && (
             <View
               style={[
                 StyleSheet.absoluteFill,
                 {
                   backgroundColor:
-                    scheme === 'light' ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.3)',
+                    scheme === 'light' ? 'rgba(255,255,255,0.32)' : 'rgba(30,30,40,0.38)',
                 },
               ]}
             />
-          </>
-        )}
-        {picture(rect, 'main', blurPx)}
-        {blurOverlay && (
-          <BlurView
-            intensity={Math.min(100, media.blur * 100)}
-            tint={frost ? (scheme === 'light' ? 'light' : 'dark') : 'default'}
-            style={StyleSheet.absoluteFill}
-          />
-        )}
-        {frost && still && (
-          <View
-            style={[
-              StyleSheet.absoluteFill,
-              {
-                backgroundColor:
-                  scheme === 'light' ? 'rgba(255,255,255,0.32)' : 'rgba(30,30,40,0.38)',
-              },
-            ]}
-          />
-        )}
+          )}
+        </Animated.View>
       </Animated.View>
     </Animated.View>
   );

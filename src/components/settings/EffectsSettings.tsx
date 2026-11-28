@@ -3,7 +3,16 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import {
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   AppBackdrop as BackdropMode,
@@ -20,6 +29,7 @@ import { useAmbientColors } from '../ambient/AmbientLight';
 import { resolveBackdropColor } from '../ambient/AppBackdrop';
 import { Tap } from '../ui/Tap';
 import { openBackdropEditor } from '../backdrop/BackdropEditor';
+import { MotionPreview } from '../motion/MotionPreview';
 import { resolveBgUri, styleMeta, sweepBackdropFiles } from '../../services/backdrop/backdropMedia';
 
 type Opt<T> = readonly (readonly [T, string])[];
@@ -148,6 +158,8 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
   };
 
   const off = prefs.pureBlack;
+  const motionFx = prefs.motionFx || 'medium';
+  const motionBlocked = ambient.reduceMotion || ambient.lowPower;
 
   return (
     <>
@@ -511,6 +523,111 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
               ] as const,
               (v) => set({ dockVisualizer: v }),
               vi ? 'Visualizer trên thanh tab' : 'Tab bar visualizer'
+            )}
+          </View>
+
+          {/* ───────── Motion effects (gyroscope) ───────── */}
+          <Text style={[styles.sectionTitle, { fontFamily }]}>
+            {vi ? 'Hiệu ứng chuyển động' : 'Motion effects'}
+          </Text>
+          <View style={styles.card}>
+            <Text style={styles.rowDesc}>
+              {vi
+                ? 'Dùng con quay hồi chuyển: bìa và nền có chiều sâu 3D khi bạn nghiêng máy.'
+                : 'Uses the gyroscope: the cover and backgrounds gain 3D depth as you tilt your phone.'}
+            </Text>
+            {motionFx !== 'off' && !motionBlocked && (
+              <MotionPreview
+                cover={prefs.motionCover !== false}
+                holo={prefs.motionHolo !== 'off'}
+              />
+            )}
+            <Text
+              style={[
+                styles.subLabel,
+                { marginTop: motionFx !== 'off' && !motionBlocked ? 0 : 12 },
+              ]}
+            >
+              {vi ? 'Cường độ' : 'Strength'}
+            </Text>
+            {segments(
+              motionFx,
+              [
+                ['off', vi ? 'Tắt' : 'Off'],
+                ['low', vi ? 'Nhẹ' : 'Subtle'],
+                ['medium', vi ? 'Vừa' : 'Medium'],
+                ['high', vi ? 'Mạnh' : 'Strong'],
+              ] as const,
+              (v) => set({ motionFx: v }),
+              vi ? 'Cường độ hiệu ứng chuyển động' : 'Motion effect strength'
+            )}
+            {motionBlocked && motionFx !== 'off' && (
+              <Text style={styles.note}>
+                {ambient.reduceMotion
+                  ? vi
+                    ? 'Đang tắt vì bạn bật “Giảm chuyển động” trong Cài đặt iPhone › Trợ năng.'
+                    : 'Paused because Reduce Motion is on (iPhone Settings › Accessibility).'
+                  : vi
+                    ? '⚡ Đang tắt vì bật Nguồn điện thấp, để tiết kiệm pin.'
+                    : '⚡ Paused in Low Power Mode to save battery.'}
+              </Text>
+            )}
+            {motionFx !== 'off' && (
+              <>
+                <View style={{ height: 8 }} />
+                {row(
+                  vi ? 'Bìa nghiêng 3D' : '3D cover',
+                  vi
+                    ? 'Bìa xoay theo tay cầm và bắt một vệt sáng lướt qua như mặt kính (kiểu Flagship & Poster).'
+                    : 'The cover turns with your hand and catches a sliding light, like glass (Flagship & Poster).',
+                  sw(
+                    prefs.motionCover !== false,
+                    (v) => set({ motionCover: v }),
+                    vi ? 'Bìa nghiêng 3D' : '3D cover'
+                  )
+                )}
+                {prefs.motionCover !== false && (
+                  <View style={{ paddingVertical: 10 }}>
+                    <Text style={styles.rowTitle}>{vi ? 'Lớp hologram' : 'Holographic foil'}</Text>
+                    <Text style={[styles.rowDesc, { marginBottom: 8 }]}>
+                      {vi
+                        ? 'Ánh cầu vồng đổi màu theo góc nghiêng, như thẻ bài hiếm.'
+                        : 'A rainbow sheen that shifts with the angle, like a rare trading card.'}
+                    </Text>
+                    {segments(
+                      prefs.motionHolo || 'liked',
+                      [
+                        ['off', vi ? 'Tắt' : 'Off'],
+                        ['liked', vi ? 'Bài đã thích' : 'Liked songs'],
+                        ['all', vi ? 'Mọi bài' : 'Every song'],
+                      ] as const,
+                      (v) => set({ motionHolo: v }),
+                      vi ? 'Lớp hologram' : 'Holographic foil'
+                    )}
+                  </View>
+                )}
+                {row(
+                  vi ? 'Nền có chiều sâu' : 'Background depth',
+                  vi
+                    ? 'Nền trình phát và ảnh / GIF / video nền trôi nhẹ ngược với bìa, như hình nền iPhone.'
+                    : 'The player backdrop and your photo / GIF / video background drift behind the content, like an iPhone wallpaper.',
+                  sw(
+                    prefs.motionBackdrop !== false,
+                    (v) => set({ motionBackdrop: v }),
+                    vi ? 'Nền có chiều sâu' : 'Background depth'
+                  ),
+                  true
+                )}
+                <Text style={styles.rowDesc}>
+                  {Platform.OS === 'web'
+                    ? vi
+                      ? 'Bản web: di chuột để xem trước (không có con quay).'
+                      : 'Web preview: move the mouse (there is no gyroscope).'
+                    : vi
+                      ? 'Hiệu ứng tự canh tâm theo cách bạn đang cầm máy. Cảm biến chỉ chạy khi hiệu ứng đang hiện và tắt khi app chạy nền.'
+                      : 'It re-centres on however you hold the phone. The sensor runs only while an effect is on screen and stops in the background.'}
+                </Text>
+              </>
             )}
           </View>
         </>

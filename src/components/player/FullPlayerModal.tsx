@@ -58,6 +58,7 @@ import { MusicVideoStage, VideoAmbient } from '../video/VideoSurfaces';
 import { useVideoState, videoWanted, VideoStore } from '../../services/video/videoStore';
 import { openMvOptions } from '../video/MvOptionsSheet';
 import { perfCount } from '../../services/perfProbe';
+import { CoverSheen, TiltCard, useTilt } from '../motion/TiltLayers';
 import { openLyricsEditor } from './LyricsEditor';
 import { PipButton } from './PipButton';
 
@@ -177,6 +178,20 @@ export const FullPlayerModal: React.FC = () => {
   useEffect(() => {
     audioEngine.setSpectrumFps(bigBars ? prefs.visualizerFps || 60 : 30);
   }, [bigBars, prefs.visualizerFps]);
+  // motion effects: the sensor runs only while the cover / backdrop that uses it is on screen
+  const coverTilt = useTilt(
+    isPlayerOpen &&
+      pane === 'artwork' &&
+      prefs.motionCover !== false &&
+      (prefs.playerStyle === 'FLAGSHIP' || prefs.playerStyle === 'POSTER')
+  );
+  const backTilt = useTilt(
+    isPlayerOpen &&
+      prefs.motionBackdrop !== false &&
+      ambientOn &&
+      prefs.playerBackground === 'AMBIENT' &&
+      prefs.playerStyle !== 'IPOD'
+  );
   // Settings › keep the screen on while reading lyrics
   const keepAwake = isPlayerOpen && pane === 'lyrics' && !!prefs.keepAwakeLyrics;
   useEffect(() => {
@@ -409,6 +424,7 @@ export const FullPlayerModal: React.FC = () => {
               level={ambient.level}
               energy={energy}
               still={ambient.reduceMotion}
+              drift={backTilt.on ? 18 : 0}
             />
           )}
           {/* the music video's scenes light the player (moves with the picture) */}
@@ -890,47 +906,62 @@ export const FullPlayerModal: React.FC = () => {
                     energy={energy}
                     still={ambient.reduceMotion}
                     size={prefs.playerStyle === 'POSTER' ? 270 : 300}
+                    drift={coverTilt.on ? 12 : 0}
                   >
-                    {/* swipe the cover ← next · → previous */}
-                    <Animated.View
-                      {...coverPan.panHandlers}
-                      accessibilityHint={
-                        vi ? 'Vuốt trái / phải để chuyển bài' : 'Swipe left or right to change song'
-                      }
-                      style={[
-                        styles.coverShadowWrap,
-                        prefs.playerStyle === 'POSTER' && styles.posterCoverWrap,
-                        showVideo && { width: videoW, height: videoH, borderRadius: 20 },
-                        {
-                          transform: [
-                            { translateX: coverX },
-                            {
-                              rotate: coverX.interpolate({
-                                inputRange: [-400, 0, 400],
-                                outputRange: ['-6deg', '0deg', '6deg'],
-                              }),
-                            },
-                            { scale: coverScale },
-                          ],
-                        },
-                      ]}
-                    >
-                      {showVideo ? (
-                        <MusicVideoStage
-                          width={videoW}
-                          accent={palette.accent}
-                          vi={vi}
-                          style={styles.videoInCard}
-                          onBadgePress={() => openMvOptions(currentTrack)}
-                        />
-                      ) : (
-                        <ArtworkImage
-                          source={{ uri: currentTrack.artworkUrl }}
-                          fallbackSeed={currentTrack.title}
-                          style={styles.coverImage}
-                        />
-                      )}
-                    </Animated.View>
+                    {/* turns with the phone (outside the swipe view: the two never share a node) */}
+                    <TiltCard on={coverTilt.on} maxDeg={prefs.playerStyle === 'POSTER' ? 8 : 9}>
+                      {/* swipe the cover ← next · → previous */}
+                      <Animated.View
+                        {...coverPan.panHandlers}
+                        accessibilityHint={
+                          vi
+                            ? 'Vuốt trái / phải để chuyển bài'
+                            : 'Swipe left or right to change song'
+                        }
+                        style={[
+                          styles.coverShadowWrap,
+                          prefs.playerStyle === 'POSTER' && styles.posterCoverWrap,
+                          showVideo && { width: videoW, height: videoH, borderRadius: 20 },
+                          {
+                            transform: [
+                              { translateX: coverX },
+                              {
+                                rotate: coverX.interpolate({
+                                  inputRange: [-400, 0, 400],
+                                  outputRange: ['-6deg', '0deg', '6deg'],
+                                }),
+                              },
+                              { scale: coverScale },
+                            ],
+                          },
+                        ]}
+                      >
+                        {showVideo ? (
+                          <MusicVideoStage
+                            width={videoW}
+                            accent={palette.accent}
+                            vi={vi}
+                            style={styles.videoInCard}
+                            onBadgePress={() => openMvOptions(currentTrack)}
+                          />
+                        ) : (
+                          <ArtworkImage
+                            source={{ uri: currentTrack.artworkUrl }}
+                            fallbackSeed={currentTrack.title}
+                            style={styles.coverImage}
+                          />
+                        )}
+                        {!showVideo && (
+                          <CoverSheen
+                            on={coverTilt.on}
+                            size={prefs.playerStyle === 'POSTER' ? 270 : 300}
+                            holo={
+                              prefs.motionHolo === 'all' || (prefs.motionHolo === 'liked' && liked)
+                            }
+                          />
+                        )}
+                      </Animated.View>
+                    </TiltCard>
                   </CoverGlow>
                   {/* Poster: a real 32-band spectrum of what's playing (FFT of the actual PCM) */}
                   {prefs.playerStyle === 'POSTER' && (

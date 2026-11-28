@@ -13,6 +13,7 @@ import { useAppActive } from '../../services/appActivity';
 import { audioEngine } from '../../services/audio/audioEngine';
 import { useHolySic } from '../../context/HolySicContext';
 import { getUi } from '../../theme/ui';
+import { Tilt } from '../../services/motion/tilt';
 
 export interface AmbientColors {
   primary: string;
@@ -171,6 +172,24 @@ export const Lobes: React.FC<{ colors: AmbientColors; strength: number; spread?:
     );
   });
 
+// ---------------------------------------------------------------- tilt drift
+
+/** translate with the motion-effect tilt (its own node, never mixed with the energy values) */
+function useDrift(amount: number) {
+  return useMemo(
+    () =>
+      amount
+        ? {
+            transform: [
+              { translateX: Animated.multiply(Tilt.x, amount) },
+              { translateY: Animated.multiply(Tilt.y, amount) },
+            ],
+          }
+        : null,
+    [amount]
+  );
+}
+
 // ---------------------------------------------------------------- full-screen backdrop
 
 /** Full-screen ambient backdrop for the player: blurred cover flood + colour lobes + scrim. */
@@ -181,7 +200,9 @@ export const AmbientBackdrop: React.FC<{
   energy: Animated.Value;
   /** Reduce Motion: breathe with opacity only, never zoom */
   still?: boolean;
-}> = React.memo(({ artworkUrl, colors, level, energy, still }) => {
+  /** motion effects: points the light drifts with the tilt (0 = fixed) */
+  drift?: number;
+}> = React.memo(({ artworkUrl, colors, level, energy, still, drift = 0 }) => {
   const uri = normalizeArtworkUrl(artworkUrl);
   const layers = useCrossfade(`${uri}|${colors.primary}|${colors.corners.join()}`, {
     uri,
@@ -189,6 +210,7 @@ export const AmbientBackdrop: React.FC<{
   });
   const breathe = energy.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] });
   const scale = still ? 1 : energy.interpolate({ inputRange: [0, 1], outputRange: [1, 1.07] });
+  const driftStyle = useDrift(drift);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {layers.map((l) => (
@@ -199,20 +221,24 @@ export const AmbientBackdrop: React.FC<{
             end={{ x: 0.8, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
-          {canShowImage(l.value.uri) && (
-            <Image
-              source={{ uri: l.value.uri }}
-              blurRadius={Platform.OS === 'web' ? 80 : 70}
-              resizeMode="cover"
-              style={[styles.flood, { opacity: 0.62 * level }]}
-            />
-          )}
-          <Animated.View
-            style={[StyleSheet.absoluteFill, { opacity: breathe, transform: [{ scale }] }]}
-          >
-            <View style={styles.lobesTop}>
-              <Lobes colors={l.value.colors} strength={0.9 * level} spread={1.6} />
-            </View>
+          {/* the light is far behind the cover: it drifts with the eye. Only the oversized
+              flood and lobes move — the base gradient and the scrim stay put (no edges) */}
+          <Animated.View style={[StyleSheet.absoluteFill, driftStyle]}>
+            {canShowImage(l.value.uri) && (
+              <Image
+                source={{ uri: l.value.uri }}
+                blurRadius={Platform.OS === 'web' ? 80 : 70}
+                resizeMode="cover"
+                style={[styles.flood, { opacity: 0.62 * level }]}
+              />
+            )}
+            <Animated.View
+              style={[StyleSheet.absoluteFill, { opacity: breathe, transform: [{ scale }] }]}
+            >
+              <View style={styles.lobesTop}>
+                <Lobes colors={l.value.colors} strength={0.9 * level} spread={1.6} />
+              </View>
+            </Animated.View>
           </Animated.View>
         </Animated.View>
       ))}
@@ -237,8 +263,11 @@ export const CoverGlow: React.FC<{
   children: React.ReactNode;
   style?: ViewStyle;
   still?: boolean;
-}> = ({ colors, level, energy, size, children, style, still }) => {
+  /** motion effects: points the glow drifts with the tilt — it sits behind the cover */
+  drift?: number;
+}> = ({ colors, level, energy, size, children, style, still, drift = 0 }) => {
   const layers = useCrossfade(`${colors.primary}|${colors.corners.join()}`, colors);
+  const driftStyle = useDrift(drift);
   const pad = size * 0.55;
   const opacity = energy.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] });
   const scale = still ? 1 : energy.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.1] });
@@ -247,21 +276,18 @@ export const CoverGlow: React.FC<{
       {level > 0 && (
         <Animated.View
           pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: -pad,
-            top: -pad,
-            right: -pad,
-            bottom: -pad,
-            opacity,
-            transform: [{ scale }],
-          }}
+          style={[
+            { position: 'absolute', left: -pad, top: -pad, right: -pad, bottom: -pad },
+            driftStyle,
+          ]}
         >
-          {layers.map((l) => (
-            <Animated.View key={l.key} style={[StyleSheet.absoluteFill, { opacity: l.op }]}>
-              <Lobes colors={l.value} strength={level} spread={1.3} />
-            </Animated.View>
-          ))}
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity, transform: [{ scale }] }]}>
+            {layers.map((l) => (
+              <Animated.View key={l.key} style={[StyleSheet.absoluteFill, { opacity: l.op }]}>
+                <Lobes colors={l.value} strength={level} spread={1.3} />
+              </Animated.View>
+            ))}
+          </Animated.View>
         </Animated.View>
       )}
       {children}
