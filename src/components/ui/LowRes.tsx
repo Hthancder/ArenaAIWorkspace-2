@@ -8,37 +8,48 @@
 //
 // Use only for soft content (gradients, glows) — never for text, icons or sharp edges.
 // Fills its parent; the web draws vectors natively, so there it is a plain fill.
+//
+// `opacity` (e.g. a light breathing with the bass) belongs here rather than on a container
+// above: on iOS a view with opacity < 1 that has subviews is composited in an offscreen pass
+// the size of that view. Applied to the small, pre-scale box, that pass is 1/16 of the area.
 
 import React from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Animated, Platform, StyleSheet, View } from 'react-native';
 
-export const LowRes: React.FC<{ factor?: number; children: React.ReactNode }> = ({
+type Op = number | Animated.Value | Animated.AnimatedInterpolation<number>;
+
+export const LowRes: React.FC<{ factor?: number; opacity?: Op; children: React.ReactNode }> = ({
   factor = 4,
+  opacity,
   children,
 }) => {
   const f = Platform.OS === 'web' ? 1 : factor;
+  const op = opacity == null ? null : { opacity };
   if (f <= 1) {
     return (
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, op]}>
         {children}
-      </View>
+      </Animated.View>
     );
   }
   const k = 100 / f;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <View
-        style={{
-          position: 'absolute',
-          width: `${k}%`,
-          height: `${k}%`,
-          left: `${50 - k / 2}%`,
-          top: `${50 - k / 2}%`,
-          transform: [{ scale: f }],
-        }}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            width: `${k}%`,
+            height: `${k}%`,
+            left: `${50 - k / 2}%`,
+            top: `${50 - k / 2}%`,
+            transform: [{ scale: f }],
+          },
+          op,
+        ]}
       >
         {children}
-      </View>
+      </Animated.View>
     </View>
   );
 };

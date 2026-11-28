@@ -17,10 +17,19 @@
 //  • expo-sensors' iOS module reports rotationRate.beta = Y axis and .gamma = X axis (the W3C
 //    event used on web has them the other way round). Both are mapped here.
 //
+//  • Only real movement crosses to the UI thread. Every tilt-bound layer (cover, light,
+//    backdrop, glow, dust) is re-composited when the values change — and under a music video's
+//    ambient blur that means a full-screen blur pass. A phone held still (or lying on a table)
+//    still reports gyro noise and a slowly leaking angle, which used to cost a frame update at
+//    60 Hz forever. Now rates under the gyro's noise floor count as zero, and a value is only
+//    pushed when it moved by more than ~a quarter of a point on the largest layer; once it has
+//    settled near the centre it snaps to 0 and stays quiet.
+//
 // Web (preview): there is no gyroscope on a desktop, so the pointer position stands in for
 // the eye, eased toward on each animation frame.
 
 import { Animated, AppState, AppStateStatus, Platform } from 'react-native';
+import { perfCount } from '../perfProbe';
 
 const NATIVE = Platform.OS !== 'web';
 
@@ -32,6 +41,10 @@ const RANGE_DEG = 10;
 const MAX_DEG = 28;
 /** sensor interval (ms) — 60 Hz; CoreMotion fuses at 100 Hz+ anyway */
 const INTERVAL_MS = 16;
+/** deg/s below which the gyroscope is just noise / bias (CoreMotion's is ~0.1–0.3 °/s) */
+const NOISE_DPS = 0.35;
+/** smallest change worth sending: × ~150 pt (the cover light's travel) ≈ 0.2 pt */
+const EPS = 0.0015;
 
 function makeValue() {
   return new Animated.Value(0, NATIVE ? { useNativeDriver: true } : undefined);
@@ -66,6 +79,9 @@ let appActive = isFront(AppState.currentState);
 let angX = 0; // eye-right, degrees
 let angY = 0; // eye-down, degrees
 let lastT = 0;
+/** last values sent to the UI side */
+let sentX = 0;
+let sentY = 0;
 let sensorOk: boolean | null = null;
 const sampleListeners = new Set<SampleListener>();
 /** low-passed gravity, only for sources without a gravity-free acceleration */
@@ -86,6 +102,22 @@ function shape(deg: number) {
   return Math.tanh(deg / RANGE_DEG) * gain;
 }
 
+/** send x / y to the UI side only when they moved visibly; snap to rest near the centre */
+function push(x: number, y: number) {
+  if (Math.abs(x) < EPS * 2) x = 0;
+  if (Math.abs(y) < EPS * 2) y = 0;
+  if (Math.abs(x - sentX) > EPS || (x === 0 && sentX !== 0)) {
+    sentX = x;
+    X.setValue(x);
+    perfCount('setValue:tilt');
+  }
+  if (Math.abs(y - sentY) > EPS || (y === 0 && sentY !== 0)) {
+    sentY = y;
+    Y.setValue(y);
+    perfCount('setValue:tilt');
+  }
+}
+
 function onMotion(m: any) {
   const t = now();
   const dt = lastT ? Math.min(0.1, Math.max(0, (t - lastT) / 1000)) : 0;
@@ -93,9 +125,12 @@ function onMotion(m: any) {
   const rr = m?.rotationRate;
   if (rr && dt > 0) {
     // degrees / second around the device's X (pitch) and Y (left/right) axes
-    const rateX = Platform.OS === 'ios' ? Number(rr.gamma) : Number(rr.beta);
-    const rateY = Platform.OS === 'ios' ? Number(rr.beta) : Number(rr.gamma);
+    let rateX = Platform.OS === 'ios' ? Number(rr.gamma) : Number(rr.beta);
+    let rateY = Platform.OS === 'ios' ? Number(rr.beta) : Number(rr.gamma);
     if (Number.isFinite(rateX) && Number.isFinite(rateY)) {
+      // a still phone: noise, not motion (keeps the angle from wandering)
+      if (Math.abs(rateX) < NOISE_DPS) rateX = 0;
+      if (Math.abs(rateY) < NOISE_DPS) rateY = 0;
       // right-hand rule: +Y turns the right edge away → the eye moves left of the normal;
       // +X brings the top edge toward you → the eye moves below it
       angX -= rateY * dt;
@@ -103,10 +138,7 @@ function onMotion(m: any) {
       const k = Math.exp(-dt / LEAK_TAU);
       angX = Math.max(-MAX_DEG, Math.min(MAX_DEG, angX * k));
       angY = Math.max(-MAX_DEG, Math.min(MAX_DEG, angY * k));
-      if (visualRefs > 0) {
-        X.setValue(shape(angX));
-        Y.setValue(shape(angY));
-      }
+      if (visualRefs > 0) push(shape(angX), shape(angY));
     }
   }
   if (sampleListeners.size) {
@@ -137,6 +169,7 @@ function onMotion(m: any) {
 function settle() {
   angX = angY = 0;
   curX = curY = 0;
+  sentX = sentY = 0;
   lastT = 0;
   if (NATIVE) {
     [X, Y].forEach((v) =>
@@ -202,8 +235,7 @@ function startPointer() {
     }
     curX += (pointerX - curX) * 0.12;
     curY += (pointerY - curY) * 0.12;
-    X.setValue(curX * gain);
-    Y.setValue(curY * gain);
+    push(curX * gain, curY * gain);
     rafId = requestAnimationFrame(tick);
   };
   rafId = requestAnimationFrame(tick);

@@ -6,11 +6,12 @@
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView } from 'expo-video';
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
   Platform,
+  Pressable,
   StyleProp,
   StyleSheet,
   Text,
@@ -34,7 +35,9 @@ export const MusicVideoStage: React.FC<{
   accent: string;
   vi: boolean;
   style?: StyleProp<ViewStyle>;
-  /** the badge (quality · saved · exact sync) opens the video's options */
+  /** the badge (quality · saved · exact sync) opens the video's options. It stays hidden while
+   *  the video plays — a tap on the picture shows it for a few seconds (like a video app's
+   *  controls), so nothing sits on top of the scenes */
   onBadgePress?: () => void;
 }> = ({ width, accent, vi, style, onBadgePress }) => {
   const st = useVideoState();
@@ -53,6 +56,33 @@ export const MusicVideoStage: React.FC<{
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
+  // the badge: hidden until the picture is tapped, then fades out again after a few seconds
+  const [chrome, setChrome] = useState(false);
+  const chromeOp = useRef(new Animated.Value(0)).current;
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showChrome = useCallback(
+    (on: boolean) => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      hideTimer.current = on ? setTimeout(() => showChrome(false), 3500) : null;
+      setChrome(on);
+      Animated.timing(chromeOp, {
+        toValue: on ? 1 : 0,
+        duration: on ? 160 : 280,
+        useNativeDriver: true,
+      }).start();
+    },
+    [chromeOp]
+  );
+  useEffect(
+    () => () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    },
+    []
+  );
+  // a new video starts clean
+  useEffect(() => {
+    if (!ready) showChrome(false);
+  }, [ready, showChrome]);
   return (
     <View style={[styles.stage, { width, height: h }, style]}>
       {ready ? (
@@ -83,34 +113,53 @@ export const MusicVideoStage: React.FC<{
         </View>
       )}
       {ready && (
-        <Tap
-          feedback="opacity"
-          hitSlop={10}
-          disabled={!onBadgePress}
-          onPress={onBadgePress}
-          style={[
-            styles.badge,
-            { borderColor: st.synced ? accent + '66' : 'rgba(255,255,255,0.18)' },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={
-            (vi ? 'Tuỳ chọn MV: ' : 'Video options: ') +
-            [
-              st.height ? `${st.height}p` : 'MV',
-              st.local ? (vi ? 'bản đã lưu' : 'saved copy') : '',
-              st.synced ? (vi ? 'tiếng từ video' : 'audio from the video') : '',
-            ]
-              .filter(Boolean)
-              .join(', ')
-          }
-        >
-          {st.synced && <View style={[styles.dot, { backgroundColor: accent }]} />}
-          {st.local && <Ionicons name="arrow-down-circle" size={11} color="#fff" />}
-          <Text style={styles.badgeText}>
-            {st.height ? `MV · ${st.height >= 1080 ? '1080p' : `${st.height}p`}` : 'MV'}
-          </Text>
-          {onBadgePress && <Ionicons name="chevron-down" size={10} color="rgba(255,255,255,0.8)" />}
-        </Tap>
+        <>
+          {/* tap the picture: show / hide the badge (a swipe still changes the song) */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => showChrome(!chrome)}
+            accessibilityRole="button"
+            accessibilityLabel={vi ? 'Hiện thông tin MV' : 'Show video info'}
+          />
+          <Animated.View
+            pointerEvents={chrome ? 'box-none' : 'none'}
+            style={[styles.badgeWrap, { opacity: chromeOp }]}
+          >
+            <Tap
+              feedback="opacity"
+              hitSlop={10}
+              disabled={!onBadgePress || !chrome}
+              onPress={() => {
+                showChrome(false);
+                onBadgePress?.();
+              }}
+              style={[
+                styles.badge,
+                { borderColor: st.synced ? accent + '66' : 'rgba(255,255,255,0.18)' },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                (vi ? 'Tuỳ chọn MV: ' : 'Video options: ') +
+                [
+                  st.height ? `${st.height}p` : 'MV',
+                  st.local ? (vi ? 'bản đã lưu' : 'saved copy') : '',
+                  st.synced ? (vi ? 'tiếng từ video' : 'audio from the video') : '',
+                ]
+                  .filter(Boolean)
+                  .join(', ')
+              }
+            >
+              {st.synced && <View style={[styles.dot, { backgroundColor: accent }]} />}
+              {st.local && <Ionicons name="arrow-down-circle" size={11} color="#fff" />}
+              <Text style={styles.badgeText}>
+                {st.height ? `MV · ${st.height >= 1080 ? '1080p' : `${st.height}p`}` : 'MV'}
+              </Text>
+              {onBadgePress && (
+                <Ionicons name="chevron-down" size={10} color="rgba(255,255,255,0.8)" />
+              )}
+            </Tap>
+          </Animated.View>
+        </>
       )}
     </View>
   );
@@ -151,7 +200,7 @@ export const VideoAmbient: React.FC<{
           colors={
             light
               ? ['rgba(255,255,255,0.35)', 'rgba(255,255,255,0.55)', 'rgba(255,255,255,0.8)']
-              : ['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.7)']
+              : ['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.32)', 'rgba(0,0,0,0.55)']
           }
           style={StyleSheet.absoluteFill}
         />
@@ -201,10 +250,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   waitText: { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '600' },
+  badgeWrap: { position: 'absolute', top: 10, left: 10 },
   badge: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,

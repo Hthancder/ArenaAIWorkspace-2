@@ -202,13 +202,14 @@ const TopGlow: React.FC<{
   const opacity = energy.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] });
   const k = (scheme === 'light' ? 0.32 : 0.5) * strength;
   return (
-    <Animated.View style={[styles.topGlow, { opacity }]}>
+    <View style={styles.topGlow}>
       {layers.map((l) => (
         <Animated.View key={l.key} style={[StyleSheet.absoluteFill, { opacity: l.op }]}>
-          <Lobes colors={l.value} strength={k} spread={1.5} />
+          {/* breathing on the lobes' small box (a cheap offscreen pass), not on this big one */}
+          <Lobes colors={l.value} strength={k} spread={1.5} opacity={opacity} />
         </Animated.View>
       ))}
-    </Animated.View>
+    </View>
   );
 };
 
@@ -238,11 +239,12 @@ const CoverFlood: React.FC<{
               style={[styles.flood, { opacity: (light ? 0.38 : 0.55) * strength }]}
             />
           )}
-          <Animated.View style={[styles.topGlow, { opacity: breathe, transform: [{ scale }] }]}>
+          <Animated.View style={[styles.topGlow, { transform: [{ scale }] }]}>
             <Lobes
               colors={l.value.colors}
               strength={(light ? 0.4 : 0.75) * strength}
               spread={1.6}
+              opacity={breathe}
             />
           </Animated.View>
         </Animated.View>

@@ -6,6 +6,10 @@
 // ~26 MB of backing store at 3×), laid out once over two screen-heights so the climb loops
 // seamlessly; everything that moves is a transform / opacity on the native driver. Nothing is
 // drawn when it's off, under Reduce Motion, in Low Power Mode, or while the app is hidden.
+// The bass glint is applied to each speck, never to a layer: on iOS a container with opacity
+// below 1 is composited as a group in an offscreen pass — three full-screen offscreen passes per
+// frame (the climb never stops) just to dim a few dozen dots. A handful of shared opacity
+// nodes (one per brightness step) drive all the specks instead.
 
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -58,7 +62,8 @@ const DustLayer: React.FC<{
       y: rand() * h,
       r: layer.r[0] + rand() * (layer.r[1] - layer.r[0]),
       c: rand() < 0.45 ? '#FFFFFF' : colors[Math.floor(rand() * colors.length) % colors.length],
-      o: 0.55 + rand() * 0.45,
+      // three brightness steps (each a shared native node below), not one value per speck
+      o: [0.62, 0.8, 0.98][Math.floor(rand() * 3) % 3],
     }));
   }, [layer, index, w, h, colors]);
 
@@ -91,21 +96,33 @@ const DustLayer: React.FC<{
           { translateY: climb.interpolate({ inputRange: [0, 1], outputRange: [0, -h] }) },
         ],
       },
-      glint: {
-        opacity: energy.interpolate({
-          inputRange: [0.25, 1],
-          outputRange: layer.opacity,
-          extrapolate: 'clamp',
-        }),
-      },
     }),
-    [layer, climb, energy, h]
+    [layer, climb, h]
   );
+  // glint × brightness step → opacity, per step (speck) and for the halos
+  const glintOp = useMemo(() => {
+    const glint = energy.interpolate({
+      inputRange: [0.25, 1],
+      outputRange: layer.opacity,
+      extrapolate: 'clamp',
+    });
+    const speck: Record<number, Animated.AnimatedInterpolation<number>> = {};
+    const halo: Record<number, Animated.AnimatedInterpolation<number>> = {};
+    for (const o of [0.62, 0.8, 0.98]) {
+      const [a, b] = layer.opacity;
+      speck[o] = glint.interpolate({ inputRange: [a, b], outputRange: [a * o, b * o] });
+      halo[o] = glint.interpolate({
+        inputRange: [a, b],
+        outputRange: [a * o * 0.08, b * o * 0.08],
+      });
+    }
+    return { speck, halo };
+  }, [energy, layer]);
 
   // a margin around the screen so parallax never shows an empty edge
   const m = Math.abs(layer.depth) * 1.6;
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, styles3.glint]}>
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Animated.View style={[StyleSheet.absoluteFill, styles3.parallax]}>
         <Animated.View
           style={[
@@ -117,7 +134,7 @@ const DustLayer: React.FC<{
             specks.map((sp, i) => (
               <React.Fragment key={`${dy}-${i}`}>
                 {layer.halo && (
-                  <View
+                  <Animated.View
                     style={{
                       position: 'absolute',
                       left: sp.x + m - sp.r * 3.2,
@@ -126,11 +143,11 @@ const DustLayer: React.FC<{
                       height: sp.r * 6.4,
                       borderRadius: sp.r * 3.2,
                       backgroundColor: sp.c,
-                      opacity: 0.08 * sp.o,
+                      opacity: glintOp.halo[sp.o],
                     }}
                   />
                 )}
-                <View
+                <Animated.View
                   style={{
                     position: 'absolute',
                     left: sp.x + m - sp.r,
@@ -139,7 +156,7 @@ const DustLayer: React.FC<{
                     height: sp.r * 2,
                     borderRadius: sp.r,
                     backgroundColor: sp.c,
-                    opacity: sp.o,
+                    opacity: glintOp.speck[sp.o],
                   }}
                 />
               </React.Fragment>
@@ -147,7 +164,7 @@ const DustLayer: React.FC<{
           )}
         </Animated.View>
       </Animated.View>
-    </Animated.View>
+    </View>
   );
 };
 

@@ -162,13 +162,24 @@ export const SpectrumBars: React.FC<{
       ),
     [values, h, half]
   );
-  const color = (i: number) =>
-    colors[Math.min(colors.length - 1, Math.floor((i / n) * colors.length))];
+  // The dimming is baked into each bar's colour when it can be: an opacity below 1 on the box
+  // that holds the moving bars makes iOS composite the whole box offscreen on every frame.
+  // Bars and mirror bars never overlap, so the result is identical. (The overlapping 'wave'
+  // columns, or colours that aren't plain hex, keep the box opacity.)
+  const bake =
+    opacity < 1 &&
+    variant !== 'wave' &&
+    colors.every((c) => /^#([0-9a-f]{6}|[0-9a-f]{3})$/i.test(c));
+  const boxOpacity = bake ? 1 : opacity;
+  const color = (i: number, k = 1) => {
+    const c = colors[Math.min(colors.length - 1, Math.floor((i / n) * colors.length))];
+    return bake && c ? withAlpha(c, opacity * k) : c;
+  };
 
   return (
     <View
       pointerEvents="none"
-      style={[style, { opacity }]}
+      style={[style, boxOpacity < 1 ? { opacity: boxOpacity } : null]}
       onLayout={(e) => setH(Math.round(e.nativeEvent.layout.height))}
     >
       {h > 0 && (
@@ -176,6 +187,8 @@ export const SpectrumBars: React.FC<{
           {values.map((_, i) => {
             const c = color(i) || '#FFFFFF';
             if (variant === 'mirror') {
+              // the reflection: 32 % of the bar (baked in, or as before on its clip)
+              const cDown = bake ? color(i, 0.32) || c : c;
               return (
                 <View key={i} style={styles.col}>
                   <View style={[styles.clip, { height: half }]}>
@@ -186,13 +199,15 @@ export const SpectrumBars: React.FC<{
                       ]}
                     />
                   </View>
-                  <View style={[styles.clip, { height: h - half, opacity: 0.32 }]}>
+                  <View
+                    style={[styles.clip, { height: h - half }, bake ? null : { opacity: 0.32 }]}
+                  >
                     <Animated.View
                       style={[
                         styles.bar,
                         {
                           height: h - half,
-                          backgroundColor: c,
+                          backgroundColor: cDown,
                           transform: [{ translateY: tyDown[i] }],
                         },
                       ]}

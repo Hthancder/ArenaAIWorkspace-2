@@ -143,38 +143,43 @@ export const canShowImage = (uri: string) =>
 // ---------------------------------------------------------------- colour lobes
 
 /** Soft radial lobes in the cover's corner colours — the shape of YouTube's glow. */
-export const Lobes: React.FC<{ colors: AmbientColors; strength: number; spread?: number }> =
-  React.memo(({ colors, strength, spread = 1 }) => {
-    const ids = useIds(5);
-    const [tl, tr, bl, br] = colors.corners;
-    const lobe = (id: string, c: string, o: number) => (
-      <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%" fx="50%" fy="50%">
-        <Stop offset="0" stopColor={c} stopOpacity={Math.min(1, o * strength)} />
-        <Stop offset="0.45" stopColor={c} stopOpacity={Math.min(1, o * strength * 0.45)} />
-        <Stop offset="1" stopColor={c} stopOpacity={0} />
-      </RadialGradient>
-    );
-    const r = 34 * spread;
-    // pure gradients: drawn at low resolution and scaled up (1/16 of the bitmap memory)
-    return (
-      <LowRes>
-        <Svg width="100%" height="100%" viewBox="-25 -25 150 150" preserveAspectRatio="none">
-          <Defs>
-            {lobe(ids[0], colors.primary, 0.75)}
-            {lobe(ids[1], tl, 0.9)}
-            {lobe(ids[2], tr, 0.9)}
-            {lobe(ids[3], bl, 0.9)}
-            {lobe(ids[4], br, 0.9)}
-          </Defs>
-          <Ellipse cx="50" cy="50" rx={r * 1.25} ry={r * 1.25} fill={`url(#${ids[0]})`} />
-          <Ellipse cx="30" cy="30" rx={r} ry={r} fill={`url(#${ids[1]})`} />
-          <Ellipse cx="70" cy="30" rx={r} ry={r} fill={`url(#${ids[2]})`} />
-          <Ellipse cx="30" cy="70" rx={r} ry={r} fill={`url(#${ids[3]})`} />
-          <Ellipse cx="70" cy="70" rx={r} ry={r} fill={`url(#${ids[4]})`} />
-        </Svg>
-      </LowRes>
-    );
-  });
+export const Lobes: React.FC<{
+  colors: AmbientColors;
+  strength: number;
+  spread?: number;
+  /** breathing etc. — applied inside, on the low-resolution box (see LowRes) */
+  opacity?: number | Animated.AnimatedInterpolation<number>;
+}> = React.memo(({ colors, strength, spread = 1, opacity }) => {
+  const ids = useIds(5);
+  const [tl, tr, bl, br] = colors.corners;
+  const lobe = (id: string, c: string, o: number) => (
+    <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%" fx="50%" fy="50%">
+      <Stop offset="0" stopColor={c} stopOpacity={Math.min(1, o * strength)} />
+      <Stop offset="0.45" stopColor={c} stopOpacity={Math.min(1, o * strength * 0.45)} />
+      <Stop offset="1" stopColor={c} stopOpacity={0} />
+    </RadialGradient>
+  );
+  const r = 34 * spread;
+  // pure gradients: drawn at low resolution and scaled up (1/16 of the bitmap memory)
+  return (
+    <LowRes opacity={opacity}>
+      <Svg width="100%" height="100%" viewBox="-25 -25 150 150" preserveAspectRatio="none">
+        <Defs>
+          {lobe(ids[0], colors.primary, 0.75)}
+          {lobe(ids[1], tl, 0.9)}
+          {lobe(ids[2], tr, 0.9)}
+          {lobe(ids[3], bl, 0.9)}
+          {lobe(ids[4], br, 0.9)}
+        </Defs>
+        <Ellipse cx="50" cy="50" rx={r * 1.25} ry={r * 1.25} fill={`url(#${ids[0]})`} />
+        <Ellipse cx="30" cy="30" rx={r} ry={r} fill={`url(#${ids[1]})`} />
+        <Ellipse cx="70" cy="30" rx={r} ry={r} fill={`url(#${ids[2]})`} />
+        <Ellipse cx="30" cy="70" rx={r} ry={r} fill={`url(#${ids[3]})`} />
+        <Ellipse cx="70" cy="70" rx={r} ry={r} fill={`url(#${ids[4]})`} />
+      </Svg>
+    </LowRes>
+  );
+});
 
 // ---------------------------------------------------------------- tilt drift
 
@@ -206,14 +211,18 @@ export const AmbientBackdrop: React.FC<{
   still?: boolean;
   /** motion effects: points the light drifts with the tilt (0 = fixed) */
   drift?: number;
-}> = React.memo(({ artworkUrl, colors, level, energy, still, drift = 0 }) => {
+  /** covered by the music video's ambient blur: no breathing (it would force a full-screen
+   *  re-blur on every energy step, between the video's own frames) */
+  rest?: boolean;
+}> = React.memo(({ artworkUrl, colors, level, energy, still, drift = 0, rest = false }) => {
   const uri = normalizeArtworkUrl(artworkUrl);
   const layers = useCrossfade(`${uri}|${colors.primary}|${colors.corners.join()}`, {
     uri,
     colors,
   });
-  const breathe = energy.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] });
-  const scale = still ? 1 : energy.interpolate({ inputRange: [0, 1], outputRange: [1, 1.07] });
+  const breathe = rest ? 0.86 : energy.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] });
+  const scale =
+    still || rest ? 1 : energy.interpolate({ inputRange: [0, 1], outputRange: [1, 1.07] });
   const driftStyle = useDrift(drift);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -236,11 +245,15 @@ export const AmbientBackdrop: React.FC<{
                 style={[styles.flood, { opacity: 0.62 * level }]}
               />
             )}
-            <Animated.View
-              style={[StyleSheet.absoluteFill, { opacity: breathe, transform: [{ scale }] }]}
-            >
+            {/* the breathing opacity goes on the lobes' small box, not on this big one */}
+            <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale }] }]}>
               <View style={styles.lobesTop}>
-                <Lobes colors={l.value.colors} strength={0.9 * level} spread={1.6} />
+                <Lobes
+                  colors={l.value.colors}
+                  strength={0.9 * level}
+                  spread={1.6}
+                  opacity={breathe}
+                />
               </View>
             </Animated.View>
           </Animated.View>
@@ -248,7 +261,7 @@ export const AmbientBackdrop: React.FC<{
       ))}
       {/* legibility scrim: lighter at the top where the cover sits, darker under the controls */}
       <LinearGradient
-        colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.26)', 'rgba(0,0,0,0.62)']}
+        colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.26)', 'rgba(0,0,0,0.5)']}
         locations={[0, 0.45, 1]}
         style={StyleSheet.absoluteFill}
       />
@@ -285,10 +298,10 @@ export const CoverGlow: React.FC<{
             driftStyle,
           ]}
         >
-          <Animated.View style={[StyleSheet.absoluteFill, { opacity, transform: [{ scale }] }]}>
+          <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale }] }]}>
             {layers.map((l) => (
               <Animated.View key={l.key} style={[StyleSheet.absoluteFill, { opacity: l.op }]}>
-                <Lobes colors={l.value} strength={level} spread={1.3} />
+                <Lobes colors={l.value} strength={level} spread={1.3} opacity={opacity} />
               </Animated.View>
             ))}
           </Animated.View>
@@ -397,12 +410,15 @@ export function useAmbientColors(): AmbientColors {
 }
 
 const styles = StyleSheet.create({
+  // both reach past the bottom edge (they used to stop at 90 %: the strip with the Lyrics /
+  // Queue / Audio Lab buttons sat on the bare dark base, uncovered by the light)
+  // (same centres as before — the light still sits behind the cover — just taller)
   flood: {
     position: 'absolute',
-    top: '-25%',
+    top: '-40%',
     left: '-45%',
     width: '190%',
-    height: '115%',
+    height: '150%',
   },
-  lobesTop: { position: 'absolute', top: '-22%', left: '-30%', width: '160%', height: '112%' },
+  lobesTop: { position: 'absolute', top: '-42%', left: '-30%', width: '160%', height: '152%' },
 });

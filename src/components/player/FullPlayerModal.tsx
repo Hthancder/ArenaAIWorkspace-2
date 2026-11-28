@@ -361,6 +361,11 @@ export const FullPlayerModal: React.FC = () => {
   const liked = isLiked(currentTrack.id);
   const fontFamily = resolveFontFamily(prefs.fontStyle);
 
+  // the music video's blurred scenes light the player: everything under that full-screen blur
+  // is re-blurred whenever it changes, so the cover light beneath it rests (no breathing) and
+  // the blur only redraws when a new video frame arrives — never between them, nor when paused
+  const videoAmbientOn =
+    videoMode && prefs.videoAmbient && isPlayerOpen && !prefs.pureBlack && video.status === 'ready';
   const ambientBackdrop =
     ambientOn && prefs.playerBackground === 'AMBIENT' && prefs.playerStyle !== 'IPOD';
   const gradientColors: readonly [string, string, ...string[]] = ambientBackdrop
@@ -434,11 +439,12 @@ export const FullPlayerModal: React.FC = () => {
               level={ambient.level}
               energy={energy}
               still={ambient.reduceMotion}
+              rest={videoAmbientOn}
               drift={backTilt.on ? 18 : 0}
             />
           )}
           {/* the music video's scenes light the player (moves with the picture) */}
-          {videoMode && prefs.videoAmbient && isPlayerOpen && !prefs.pureBlack && (
+          {videoAmbientOn && (
             <VideoAmbient live={!ambient.reduceMotion} level={prefs.videoAmbientLevel} />
           )}
           <DustField on={dustTilt.on} colors={ambientColors.corners} energy={energy} />
