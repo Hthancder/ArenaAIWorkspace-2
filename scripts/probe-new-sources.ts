@@ -22,7 +22,9 @@ import {
   invidiousInstances,
   resolveInvidiousStream,
   searchInvidiousVideos,
+  videoCandidates,
 } from '../src/services/providers/invidiousProvider';
+import { rankCandidates } from '../src/services/trackMatcher';
 
 const log = (...a: unknown[]) => console.log(...a);
 const short = (s: unknown, n = 160) => String(JSON.stringify(s)).slice(0, n);
@@ -81,7 +83,29 @@ async function invidious() {
   }
   const hits = await searchInvidiousVideos('Sơn Tùng M-TP Chúng Ta Của Hiện Tại', 5);
   log('search ->', hits.length, hits.slice(0, 3).map((h) => `${h.videoId} ${h.title} — ${h.author} ${h.lengthSeconds}s`).join(' | '));
+  const ranked = rankCandidates({ title: 'Chúng Ta Của Hiện Tại', artists: ['Sơn Tùng M-TP'], durationSec: 302 }, hits.flatMap(videoCandidates), 0);
+  log('ranked', ranked.slice(0, 4).map((r) => `${r.score.toFixed(2)} ${r.track.title} / ${r.track.artist}`).join(' | '));
   const vid = hits[0]?.videoId || 'psZ1g9fMfeo';
+  // what each instance answers for the video (local=true: proxied links)
+  for (const base of inst) {
+    try {
+      const r = await fetch(`${base}/api/v1/videos/${vid}?local=true`, { signal: AbortSignal.timeout(8000) });
+      const txt = await r.text();
+      let j: any = null;
+      try { j = JSON.parse(txt); } catch {}
+      const af: any[] = j?.adaptiveFormats || [];
+      const au = af.filter((f) => /^audio\//.test(String(f.type || '')));
+      const m4a = au.find((f) => /audio\/mp4/.test(String(f.type)));
+      log(`  ${base} videos ${r.status} err=${short(j?.error, 120)} adaptive=${af.length} audio=${au.length} hls=${!!j?.hlsUrl} m4a=${m4a ? String(m4a.url).slice(0, 110) : '-'}`);
+      if (m4a) {
+        const u = String(m4a.url).startsWith('http') ? String(m4a.url) : base + m4a.url;
+        log('     range', await rangeProbe(u, 1_048_576), 'clen', m4a.clen);
+      }
+      if (!j) log('     body', txt.slice(0, 160).replace(/\s+/g, ' '));
+    } catch (e: any) {
+      log(`  ${base} videos ERR ${e?.cause?.code || e?.name}`);
+    }
+  }
   const a = await invidiousAudio(vid);
   log('audio ->', a ? `${a.qualityLabel} @${a.instance} ${a.url.slice(0, 100)}` : 'null');
   if (a) log('   range 3MiB', await rangeProbe(a.url, 3 * 1_048_576));

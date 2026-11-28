@@ -8,6 +8,10 @@ on:
     paths-ignore:
       - 'scripts/probe-sources.mjs'
       - '.github/workflows/probe-sources.yml'
+      - 'scripts/probe-new-sources.ts'
+      - 'scripts/probe-new-sources.bundle.mjs'
+      - 'scripts/probe-stubs/**'
+      - '.github/workflows/probe-new-sources.yml'
     tags:
       - 'v*'
 

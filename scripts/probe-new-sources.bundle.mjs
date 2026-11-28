@@ -897,6 +897,18 @@ async function invidiousAudio(videoId) {
   return null;
 }
 var cleanAuthor = (a) => a.replace(/\s*-\s*Topic$/i, "").replace(/\s*(VEVO|Official( Channel)?)$/i, "").trim();
+function videoCandidates(h) {
+  const author = cleanAuthor(h.author);
+  const parts = h.title.split(/\s+[-–—]\s+|\s*[|｜]\s*/).map((p) => p.trim()).filter(Boolean);
+  const titles = parts.length > 1 ? [h.title, ...parts] : [h.title];
+  return titles.map((title, i) => ({
+    id: `${h.videoId}#${i}`,
+    vid: h.videoId,
+    title,
+    artist: [author, ...parts.filter((p) => p !== title)].join(" "),
+    durationSec: h.lengthSeconds || void 0
+  }));
+}
 async function resolveInvidiousStream(query, pushStep) {
   const t0 = Date.now();
   let videoId = query.videoId;
@@ -905,19 +917,7 @@ async function resolveInvidiousStream(query, pushStep) {
       `${query.artists[0] || ""} ${coreTitle(query.title)} audio`.trim(),
       8
     );
-    const ranked = rankCandidates(
-      query,
-      hits.map(
-        (h) => ({
-          id: h.videoId,
-          vid: h.videoId,
-          title: h.title,
-          artist: cleanAuthor(h.author),
-          durationSec: h.lengthSeconds || void 0
-        })
-      ),
-      0.6
-    );
+    const ranked = rankCandidates(query, hits.flatMap(videoCandidates), 0.6);
     videoId = ranked[0]?.track.vid;
     if (!videoId) {
       pushStep({
@@ -997,7 +997,31 @@ async function invidious() {
   }
   const hits = await searchInvidiousVideos("S\u01A1n T\xF9ng M-TP Ch\xFAng Ta C\u1EE7a Hi\u1EC7n T\u1EA1i", 5);
   log("search ->", hits.length, hits.slice(0, 3).map((h) => `${h.videoId} ${h.title} \u2014 ${h.author} ${h.lengthSeconds}s`).join(" | "));
+  const ranked = rankCandidates({ title: "Ch\xFAng Ta C\u1EE7a Hi\u1EC7n T\u1EA1i", artists: ["S\u01A1n T\xF9ng M-TP"], durationSec: 302 }, hits.flatMap(videoCandidates), 0);
+  log("ranked", ranked.slice(0, 4).map((r) => `${r.score.toFixed(2)} ${r.track.title} / ${r.track.artist}`).join(" | "));
   const vid = hits[0]?.videoId || "psZ1g9fMfeo";
+  for (const base of inst) {
+    try {
+      const r = await fetch(`${base}/api/v1/videos/${vid}?local=true`, { signal: AbortSignal.timeout(8e3) });
+      const txt = await r.text();
+      let j = null;
+      try {
+        j = JSON.parse(txt);
+      } catch {
+      }
+      const af = j?.adaptiveFormats || [];
+      const au = af.filter((f) => /^audio\//.test(String(f.type || "")));
+      const m4a = au.find((f) => /audio\/mp4/.test(String(f.type)));
+      log(`  ${base} videos ${r.status} err=${short(j?.error, 120)} adaptive=${af.length} audio=${au.length} hls=${!!j?.hlsUrl} m4a=${m4a ? String(m4a.url).slice(0, 110) : "-"}`);
+      if (m4a) {
+        const u = String(m4a.url).startsWith("http") ? String(m4a.url) : base + m4a.url;
+        log("     range", await rangeProbe(u, 1048576), "clen", m4a.clen);
+      }
+      if (!j) log("     body", txt.slice(0, 160).replace(/\s+/g, " "));
+    } catch (e) {
+      log(`  ${base} videos ERR ${e?.cause?.code || e?.name}`);
+    }
+  }
   const a = await invidiousAudio(vid);
   log("audio ->", a ? `${a.qualityLabel} @${a.instance} ${a.url.slice(0, 100)}` : "null");
   if (a) log("   range 3MiB", await rangeProbe(a.url, 3 * 1048576));
