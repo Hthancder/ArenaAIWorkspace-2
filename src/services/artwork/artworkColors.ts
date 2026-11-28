@@ -230,6 +230,9 @@ export function smallArtworkUrl(url: string): string {
   if (/saavncdn\.com/.test(url)) return url.replace(/-\d+x\d+\.(jpg|png)/, '-50x50.$1');
   if (/audius|creatornode|content-node/.test(url))
     return url.replace(/(480x480|1000x1000)\.jpg/, '150x150.jpg');
+  if (/sndcdn\.com/.test(url)) return url.replace(/-t500x500\.(jpg|png)/, '-large.$1');
+  if (/bcbits\.com/.test(url)) return url.replace(/_10\.jpg$/, '_3.jpg');
+  if (/dzcdn\.net/.test(url)) return url.replace(/\/\d+x\d+-000000/, '/120x120-000000');
   return url;
 }
 

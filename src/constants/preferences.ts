@@ -61,6 +61,10 @@ export type AppFontStyle = 'inter' | 'system' | 'rounded' | 'mono' | 'serif';
 
 export type JioSaavnQuality = '320' | '160' | '96';
 
+/** Playback source modules, in the user's priority order (itunes = Apple 30 s previews, last) */
+export type ModuleId =
+  'monochrome' | 'jiosaavn' | 'innertube' | 'soundcloud' | 'bandcamp' | 'itunes';
+
 export type HomeSectionId =
   | 'greeting'
   | 'quickActions'
@@ -152,19 +156,14 @@ export interface HolySicPreferences {
    */
   bitPerfect: boolean;
   preferredJioSaavnQuality: JioSaavnQuality;
-  moduleOrder: ('monochrome' | 'jiosaavn' | 'innertube' | 'itunes')[];
+  moduleOrder: ModuleId[];
   /** Fall back to Apple's 30-second preview when no full-length source plays (off = never) */
   allowPreviewFallback: boolean;
   /** Remember the source that played each song and try it first next time */
   rememberSources: boolean;
   /** iOS: prefer sources that start instantly; Monochrome FLAC (needs a one-time download) goes after them */
   preferInstantStart: boolean;
-  enabledModules: {
-    monochrome: boolean;
-    jiosaavn: boolean;
-    innertube: boolean;
-    itunes: boolean;
-  };
+  enabledModules: Record<ModuleId, boolean>;
 
   // ── Background & effects (behind the tabs) ──
   appBackdrop: AppBackdrop;
@@ -321,7 +320,7 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   crossfadeCurve: 'equalPower',
   bitPerfect: false,
   preferredJioSaavnQuality: '320',
-  moduleOrder: ['monochrome', 'jiosaavn', 'innertube', 'itunes'],
+  moduleOrder: ['monochrome', 'jiosaavn', 'innertube', 'soundcloud', 'bandcamp', 'itunes'],
   allowPreviewFallback: false,
   rememberSources: true,
   preferInstantStart: true,
@@ -329,6 +328,8 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
     monochrome: true,
     jiosaavn: true,
     innertube: true,
+    soundcloud: true,
+    bandcamp: true,
     itunes: true,
   },
   appBackdrop: 'plain',

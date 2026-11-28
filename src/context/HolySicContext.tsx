@@ -37,6 +37,7 @@ import {
   fetchYouTubePlaylist,
   matchTextItems,
   parseMusicLink,
+  expandSpotifyShortLink,
   parseTextList,
   TextItem,
   youtubeVideoTrack,
@@ -60,6 +61,12 @@ import { useConnectivity } from '../services/net/connectivity';
 import { fetchNonMusicSegments, segmentAt } from '../services/discovery/sponsorBlock';
 import { registerStationClick, searchStations } from '../services/discovery/radioBrowser';
 import { searchAudiusTracks } from '../services/providers/audiusProvider';
+import {
+  fetchSoundCloudLink,
+  searchSoundCloudTracks,
+} from '../services/providers/soundcloudProvider';
+import { fetchBandcampLink, searchBandcampTracks } from '../services/providers/bandcampProvider';
+import { fetchDeezerLink, searchDeezerTracks } from '../services/providers/deezerProvider';
 import { exportDownloadToFiles, shareTrack as shareTrackSheet } from '../services/share/shareTools';
 import { AUTO_EQ_PRESETS, OFFLINE_SHOWCASE_TRACKS } from '../data/curatedCatalog';
 import { audioEngine } from '../services/audio/audioEngine';
@@ -1980,6 +1987,10 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       // Catalog-only extras: Audius (artist uploads) and live radio stations
       if (sourceFilter === 'audius') tasks.push(searchAudiusTracks(q, 25));
+      // SoundCloud (free streams) / Bandcamp (artist streams) / Deezer (catalog, plays elsewhere)
+      if (sourceFilter === 'soundcloud') tasks.push(searchSoundCloudTracks(q, 25));
+      if (sourceFilter === 'bandcamp') tasks.push(searchBandcampTracks(q, 25));
+      if (sourceFilter === 'deezer') tasks.push(searchDeezerTracks(q, 25));
       if (sourceFilter === 'radio') tasks.push(searchStations({ name: q, limit: 30 }));
       // music videos (YouTube): the picture plays in the player, the sound from the same video
       if (sourceFilter === 'video')
@@ -2473,10 +2484,53 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       text: string,
       onProgress?: (done: number, total: number) => void
     ): Promise<LinkResult> => {
-      const link = parseMusicLink(text);
+      let link = parseMusicLink(text);
       const isVi = prefsRef.current.language === 'vi';
+      if (link?.kind === 'spotify-short') link = await expandSpotifyShortLink(link.url);
       if (!link)
         return { kind: 'none', message: isVi ? 'Không nhận ra liên kết này' : 'Unrecognised link' };
+      // SoundCloud / Bandcamp (played from there) and Deezer (catalog: plays through the other
+      // sources, by ISRC or title + artist + length) give their tracks directly — no re-matching
+      if (link.kind === 'soundcloud' || link.kind === 'bandcamp' || link.kind === 'deezer') {
+        const name = { soundcloud: 'SoundCloud', bandcamp: 'Bandcamp', deezer: 'Deezer' }[
+          link.kind
+        ];
+        const res =
+          link.kind === 'soundcloud'
+            ? await fetchSoundCloudLink(link.url)
+            : link.kind === 'bandcamp'
+              ? await fetchBandcampLink(link.url)
+              : await fetchDeezerLink(link.url);
+        const tracks = res ? filterBlacklisted(res.tracks, prefsRef.current.blacklist) : [];
+        if (!res || tracks.length === 0) {
+          return {
+            kind: 'none',
+            message: isVi
+              ? Platform.OS === 'web'
+                ? `Liên kết ${name} chỉ mở được trong app iPhone (trình duyệt chặn CORS)`
+                : link.kind === 'soundcloud'
+                  ? 'Không đọc được liên kết SoundCloud (riêng tư, bị chặn ở khu vực này, hoặc chỉ có cho Go+)'
+                  : link.kind === 'bandcamp'
+                    ? 'Không đọc được trang Bandcamp (cần liên kết bài hoặc album)'
+                    : 'Không đọc được liên kết Deezer (playlist phải công khai)'
+              : `Could not read this ${name} link`,
+          };
+        }
+        if (res.single) {
+          await playTrack(tracks[0], tracks);
+          setIsPlayerOpen(true);
+          return { kind: 'played', title: tracks[0].title };
+        }
+        return {
+          kind: 'playlist',
+          playlist: savePlaylistFromTracks(
+            res.name,
+            tracks,
+            `${name} · ${tracks.length}`,
+            res.coverUrl
+          ),
+        };
+      }
       if (link.kind === 'youtube-video') {
         const t = await youtubeVideoTrack(link.id);
         await playTrack(t, [t]);
@@ -2565,8 +2619,8 @@ export const HolySicProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return {
         kind: 'none',
         message: isVi
-          ? 'Hỗ trợ: YouTube / YouTube Music (bài, playlist), Spotify (bài, playlist, album), Apple Music'
-          : 'Supported: YouTube / YouTube Music, Spotify, Apple Music links',
+          ? 'Hỗ trợ: YouTube / YouTube Music, Spotify (bài, playlist, album, nghệ sĩ), Apple Music, SoundCloud, Deezer, Bandcamp'
+          : 'Supported: YouTube / YouTube Music, Spotify, Apple Music, SoundCloud, Deezer and Bandcamp links',
       };
     },
     [matchSongList, playTrack, savePlaylistFromTracks]

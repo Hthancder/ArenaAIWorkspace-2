@@ -6,8 +6,9 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MusicSourceId, ResolvedStream, Track } from '../../types/music';
+import { ModuleId } from '../../constants/preferences';
 
-export type ModuleId = 'monochrome' | 'jiosaavn' | 'innertube' | 'itunes';
+export type { ModuleId };
 
 const STORAGE_KEY = '@holysic/source_memory_v1';
 const MAX_TRACKS = 400;
@@ -83,10 +84,14 @@ export function trackMemoryKey(track: Pick<Track, 'title' | 'artist' | 'artists'
   return `${norm(track.title)}|${norm(artist)}`;
 }
 
-/** googlevideo links carry `expire=<epoch seconds>` */
+/** googlevideo links carry `expire=<epoch seconds>`; SoundCloud / Bandcamp stream links are
+ *  short-lived signed tokens, so they are never reused (the module asks again, which is quick) */
 function expiryFromUrl(url: string): number | undefined {
   const m = url.match(/[?&]expire=(\d{9,11})/);
-  return m ? Number(m[1]) * 1000 : undefined;
+  if (m) return Number(m[1]) * 1000;
+  if (/sndcdn\.com|soundcloud\.cloud|bcbits\.com|bandcamp\.com\/stream_redirect/.test(url))
+    return Date.now();
+  return undefined;
 }
 
 export const SourceMemory = {

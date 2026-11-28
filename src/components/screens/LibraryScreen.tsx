@@ -270,8 +270,8 @@ export const LibraryScreen: React.FC = () => {
             title={vi ? 'Chưa có danh sách phát' : 'No playlists yet'}
             message={
               vi
-                ? 'Tạo playlist mới hoặc nhập từ Spotify, YouTube, Apple Music.'
-                : 'Make a new playlist or import one from Spotify, YouTube or Apple Music.'
+                ? 'Tạo playlist mới hoặc nhập từ Spotify, YouTube, Apple Music, Deezer, SoundCloud.'
+                : 'Make a new playlist or import one from Spotify, YouTube, Apple Music, Deezer or SoundCloud.'
             }
             actionLabel={vi ? 'Tạo playlist' : 'New playlist'}
             actionIcon="add"

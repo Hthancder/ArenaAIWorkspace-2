@@ -46,6 +46,36 @@ export const UPSTREAM_CREDITS: CreditProject[] = [
     url: 'https://audius.co',
   },
   {
+    name: 'SoundCloud',
+    author: 'SoundCloud & its artists',
+    roleVi: 'Bản phát miễn phí của SoundCloud (remix, DJ set, demo); bỏ qua bản Go+ và bản có DRM',
+    roleEn: 'SoundCloud’s free streams (remixes, DJ sets, demos); Go+ and DRM streams are skipped',
+    url: 'https://soundcloud.com',
+  },
+  {
+    name: 'Bandcamp',
+    author: 'Bandcamp & independent artists',
+    roleVi: 'Bài nghệ sĩ indie cho nghe miễn phí (MP3 128); hãy mua nhạc để ủng hộ họ',
+    roleEn: 'Tracks independent artists let anyone stream (MP3 128) — buy music to support them',
+    url: 'https://bandcamp.com',
+  },
+  {
+    name: 'Deezer API',
+    author: 'Deezer',
+    roleVi:
+      'Danh mục bài hát, album, playlist và ISRC (chỉ dữ liệu — nhạc phát qua các nguồn khác)',
+    roleEn:
+      'Catalog of songs, albums, playlists and ISRCs (data only — audio comes from other sources)',
+    url: 'https://developers.deezer.com',
+  },
+  {
+    name: 'yt-dlp',
+    author: 'yt-dlp contributors',
+    roleVi: 'Tham khảo cách đọc luồng miễn phí của SoundCloud (Unlicense)',
+    roleEn: 'Reference for reading SoundCloud’s free streams (Unlicense)',
+    url: 'https://github.com/yt-dlp/yt-dlp',
+  },
+  {
     name: 'Radio Browser',
     author: 'segler-alex & community',
     roleVi: 'Danh bạ 50.000+ đài radio trực tuyến do cộng đồng duy trì',

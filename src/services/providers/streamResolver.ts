@@ -19,11 +19,32 @@ import { searchItunesTracks } from './itunesProvider';
 import { resolveJioSaavnStream } from './jiosaavnProvider';
 import { MONOCHROME_STREAM_HEADERS, resolveMonochromeStream } from './monochromeProvider';
 import { SourceMemory } from './sourceMemory';
+import {
+  resolveSoundCloudStream,
+  SoundCloudStream,
+  soundCloudStreamsById,
+} from './soundcloudProvider';
+import { BandcampStream, bandcampStreamById, resolveBandcampStream } from './bandcampProvider';
 import { StreamFileCache } from '../audio/streamFileCache';
 
 const GRACE_MS = 1300;
 
 type Candidate = Omit<ResolvedStream, 'diagnostics'>;
+
+const scCandidate = (s: SoundCloudStream): Candidate => ({
+  url: s.url,
+  source: 'soundcloud',
+  sourceLabel: 'SoundCloud',
+  qualityLabel: s.qualityLabel,
+  codec: s.codec,
+});
+const bcCandidate = (s: BandcampStream): Candidate => ({
+  url: s.url,
+  source: 'bandcamp',
+  sourceLabel: 'Bandcamp',
+  qualityLabel: s.qualityLabel,
+  codec: 'MP3',
+});
 
 export interface StreamCandidateQueue {
   /** Shared, growing diagnostics log for this playback attempt */
@@ -128,6 +149,25 @@ export function createStreamCandidateQueue(
           codec: radio ? (/\.m3u8/i.test(track.streamUrl) ? 'HLS' : 'Stream') : 'MP3',
         } as Candidate,
       ])
+    );
+    return makeQueue(producers, diagnostics, prefs);
+  }
+
+  // 2b'. SoundCloud / Bandcamp catalog tracks: that exact upload / release (a remix or DJ edit
+  // found there has no equal elsewhere); the stream link is asked for now because it expires
+  if (track.source === 'soundcloud' && track.id.startsWith('sc-')) {
+    producers.push(
+      soundCloudStreamsById(track.id.slice(3), pushStep)
+        .then((list) => list.map(scCandidate))
+        .catch(() => [])
+    );
+    return makeQueue(producers, diagnostics, prefs);
+  }
+  if (track.source === 'bandcamp' && track.id.startsWith('bc-')) {
+    producers.push(
+      bandcampStreamById(track.id, pushStep)
+        .then((list) => list.map(bcCandidate))
+        .catch(() => [])
     );
     return makeQueue(producers, diagnostics, prefs);
   }
@@ -327,6 +367,18 @@ export function createStreamCandidateQueue(
             )
           )
         )
+      );
+    }
+
+    if (modId === 'soundcloud') {
+      producers.push(
+        safe(resolveSoundCloudStream(query, pushStep).then((list) => list.map(scCandidate)))
+      );
+    }
+
+    if (modId === 'bandcamp') {
+      producers.push(
+        safe(resolveBandcampStream(query, pushStep).then((list) => list.map(bcCandidate)))
       );
     }
 

@@ -9,7 +9,11 @@ export type MusicSourceId =
   | 'local'
   | 'synth'
   | 'audius'
-  | 'radio';
+  | 'radio'
+  | 'soundcloud'
+  | 'bandcamp'
+  /** catalog only (search / links): plays through the other sources */
+  | 'deezer';
 
 export interface Track {
   id: string;

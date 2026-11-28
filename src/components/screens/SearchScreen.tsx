@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Animated,
   ScrollView,
   StyleSheet,
@@ -39,9 +40,15 @@ const SOURCE_FILTERS: { id: SearchFilter; vi: string; en: string }[] = [
   { id: 'monochrome', vi: 'Lossless FLAC', en: 'Lossless FLAC' },
   { id: 'jiosaavn', vi: 'JioSaavn', en: 'JioSaavn' },
   { id: 'itunes', vi: 'Apple Music', en: 'Apple Music' },
+  { id: 'soundcloud', vi: 'SoundCloud', en: 'SoundCloud' },
+  { id: 'deezer', vi: 'Deezer', en: 'Deezer' },
+  { id: 'bandcamp', vi: 'Bandcamp', en: 'Bandcamp' },
   { id: 'audius', vi: 'Audius (indie)', en: 'Audius (indie)' },
   { id: 'radio', vi: 'Radio', en: 'Radio' },
 ];
+
+/** sources that send no CORS headers: they answer in the iPhone app only */
+const NATIVE_ONLY: SearchFilter[] = ['soundcloud', 'bandcamp', 'deezer'];
 
 const FEATURED_ARTISTS = [
   { name: 'tlinh', tag: 'V-Pop / R&B' },
@@ -491,13 +498,17 @@ export const SearchScreen: React.FC = () => {
                       ? vi
                         ? 'Không kết nối được tới nguồn nhạc.'
                         : 'Couldn’t reach the music sources.'
-                      : sourceFilter !== 'all'
+                      : NATIVE_ONLY.includes(sourceFilter) && Platform.OS === 'web'
                         ? vi
-                          ? 'Không tìm thấy trên nguồn này. Thử chọn "Tất cả" nhé.'
-                          : 'Nothing on this source. Try "All".'
-                        : vi
-                          ? `Không tìm thấy kết quả cho “${query.trim()}”. Thử từ khoá ngắn hơn hoặc bỏ dấu.`
-                          : `No results for “${query.trim()}”. Try fewer words.`}
+                          ? 'Nguồn này chỉ có trong app iPhone (trình duyệt bị chặn CORS).'
+                          : 'This source works in the iPhone app only (the browser blocks it).'
+                        : sourceFilter !== 'all'
+                          ? vi
+                            ? 'Không tìm thấy trên nguồn này. Thử chọn "Tất cả" nhé.'
+                            : 'Nothing on this source. Try "All".'
+                          : vi
+                            ? `Không tìm thấy kết quả cho “${query.trim()}”. Thử từ khoá ngắn hơn hoặc bỏ dấu.`
+                            : `No results for “${query.trim()}”. Try fewer words.`}
                 </Text>
                 {(searchFailed || sourceFilter !== 'all') && isOnline && (
                   <Tap

@@ -12,9 +12,13 @@ import { fetchYouTubeMusicPlaylist } from '../providers/innertubeProvider';
 export type ParsedLink =
   | { kind: 'youtube-video'; id: string }
   | { kind: 'youtube-playlist'; id: string }
-  | { kind: 'spotify'; type: 'track' | 'playlist' | 'album'; id: string }
+  | { kind: 'spotify'; type: SpotifyType; id: string }
+  /** spotify.link/… share links: the real link is behind a redirect */
+  | { kind: 'spotify-short'; url: string }
   | { kind: 'apple'; type: 'song' | 'album' | 'playlist'; id: string; url: string }
-  | { kind: 'deezer' | 'soundcloud' | 'other'; url: string };
+  | { kind: 'deezer' | 'soundcloud' | 'bandcamp' | 'other'; url: string };
+
+export type SpotifyType = 'track' | 'playlist' | 'album' | 'artist';
 
 export interface TextItem {
   title: string;
@@ -33,7 +37,7 @@ export function looksLikeLink(text: string): boolean {
 
 export function parseMusicLink(raw: string): ParsedLink | null {
   const text = raw.trim();
-  const spUri = text.match(/^spotify:(track|playlist|album):([A-Za-z0-9]{22})/);
+  const spUri = text.match(/^spotify:(track|playlist|album|artist):([A-Za-z0-9]{22})/);
   if (spUri) return { kind: 'spotify', type: spUri[1] as 'track', id: spUri[2] };
   // React Native's URL polyfill lacks hostname/pathname/searchParams, so parse by hand
   const href = /^https?:\/\//i.test(text) ? text : `https://${text}`;
@@ -59,9 +63,11 @@ export function parseMusicLink(raw: string): ParsedLink | null {
     if (list) return { kind: 'youtube-playlist', id: list };
     return null;
   }
+  if (host === 'spotify.link' || host === 'spotify.app.link')
+    return { kind: 'spotify-short', url: href };
   if (host.endsWith('spotify.com')) {
     const m = pathname.match(
-      /\/(?:intl-[a-z-]+\/)?(?:embed\/)?(track|playlist|album)\/([A-Za-z0-9]{22})/
+      /\/(?:intl-[a-z-]+\/)?(?:embed\/)?(track|playlist|album|artist)\/([A-Za-z0-9]{22})/
     );
     return m ? { kind: 'spotify', type: m[1] as 'track', id: m[2] } : null;
   }
@@ -72,9 +78,29 @@ export function parseMusicLink(raw: string): ParsedLink | null {
     if (m) return { kind: 'apple', type: m[1].toLowerCase() as 'album', id: m[2], url: href };
     return null;
   }
-  if (host.endsWith('deezer.com')) return { kind: 'deezer', url: href };
-  if (host.endsWith('soundcloud.com')) return { kind: 'soundcloud', url: href };
+  if (host.endsWith('deezer.com') || host === 'deezer.page.link' || host === 'dzr.page.link')
+    return { kind: 'deezer', url: href };
+  if (host.endsWith('soundcloud.com') || host === 'soundcloud.app.goo.gl')
+    return { kind: 'soundcloud', url: href };
+  if (host.endsWith('bandcamp.com')) return { kind: 'bandcamp', url: href };
   return { kind: 'other', url: href };
+}
+
+/** spotify.link/… → the open.spotify.com link it redirects to (parsed), or null */
+export async function expandSpotifyShortLink(url: string): Promise<ParsedLink | null> {
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': DESKTOP_UA } });
+    const direct = parseMusicLink(res.url || '');
+    if (direct?.kind === 'spotify') return direct;
+    const html = await res.text();
+    const m = html.match(
+      /https:\/\/open\.spotify\.com\/[a-z/-]*(track|playlist|album|artist)\/[A-Za-z0-9]{22}/
+    );
+    const parsed = m ? parseMusicLink(m[0]) : null;
+    return parsed?.kind === 'spotify' ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchText(
@@ -96,7 +122,7 @@ async function fetchText(
 
 /** Spotify embed pages carry the whole entity in __NEXT_DATA__ (native iOS only — no CORS) */
 export async function fetchSpotifyEntity(
-  type: 'track' | 'playlist' | 'album',
+  type: SpotifyType,
   id: string
 ): Promise<{ name: string; coverUrl?: string; items: TextItem[] } | null> {
   if (Platform.OS !== 'web') {
@@ -133,16 +159,19 @@ export async function fetchSpotifyEntity(
               ],
             };
           }
-          const list: any[] = entity.trackList || [];
+          const list: any[] = entity.trackList || entity.topTracks || [];
+          const owner = String(entity.name || entity.title || '');
           return {
-            name: entity.name || entity.title || 'Spotify',
+            // an artist link imports their top songs
+            name: type === 'artist' && owner ? `${owner} · Top` : owner || 'Spotify',
             coverUrl: cover,
             items: list
               .map((t) => ({
-                title: String(t?.title || '').trim(),
-                artist: String(t?.subtitle || '')
-                  .replace(/\u00a0/g, ' ')
-                  .trim(),
+                title: String(t?.title || t?.name || '').trim(),
+                artist:
+                  String(t?.subtitle || '')
+                    .replace(/\u00a0/g, ' ')
+                    .trim() || (type === 'artist' ? owner : ''),
                 durationSec: t?.duration ? Math.round(Number(t.duration) / 1000) : undefined,
               }))
               .filter((t) => t.title),

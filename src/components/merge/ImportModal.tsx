@@ -339,8 +339,8 @@ export const ImportModal: React.FC<Props> = ({
               <Text style={styles.help}>
                 {mode === 'link'
                   ? vi
-                    ? 'YouTube / YouTube Music (bài hoặc playlist), Spotify (bài, album, playlist công khai), Apple Music. Bài hát được ghép với nguồn phát đầy đủ của HolySic.'
-                    : 'YouTube / YouTube Music (song or playlist), Spotify (track, album, public playlist), Apple Music. Songs are matched to HolySic’s full-length sources.'
+                    ? 'YouTube / YouTube Music, Spotify (bài, album, playlist công khai, nghệ sĩ), Apple Music, Deezer, SoundCloud, Bandcamp. Bài hát được ghép với nguồn phát đầy đủ của HolySic.'
+                    : 'YouTube / YouTube Music, Spotify (track, album, public playlist, artist), Apple Music, Deezer, SoundCloud, Bandcamp. Songs are matched to HolySic’s full-length sources.'
                   : vi
                     ? 'Mỗi dòng một bài, hoặc ngăn cách bằng dấu phẩy. Dạng "Nghệ sĩ - Tên bài" cho kết quả chính xác nhất.'
                     : 'One song per line or comma separated. "Artist - Title" gives the best matches.'}

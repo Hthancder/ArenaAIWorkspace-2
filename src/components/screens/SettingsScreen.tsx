@@ -605,6 +605,12 @@ export const SettingsScreen: React.FC = () => {
                     monochrome: 'Monochrome · Lossless FLAC (16/24-bit)',
                     jiosaavn: `JioSaavn · Full AAC (${prefs.preferredJioSaavnQuality} kbps)`,
                     innertube: vi ? 'YouTube Music · phát ngay' : 'YouTube Music · instant start',
+                    soundcloud: vi
+                      ? 'SoundCloud · bản free, remix, DJ set'
+                      : 'SoundCloud · free streams, remixes, DJ sets',
+                    bandcamp: vi
+                      ? 'Bandcamp · nghệ sĩ indie (MP3 128)'
+                      : 'Bandcamp · indie artists (MP3 128)',
                   };
                   return (
                     <View key={modId} style={styles.moduleRow}>
@@ -630,6 +636,12 @@ export const SettingsScreen: React.FC = () => {
                     </View>
                   );
                 })}
+
+                <Text style={[styles.rowDesc, { marginTop: 8 }]}>
+                  {vi
+                    ? 'Spotify, Apple Music, Tidal và bản đầy đủ của Deezer được khoá DRM (mã hoá cho tài khoản trả phí), nên HolySic không phát trực tiếp từ đó: dán liên kết bài / playlist / album (Thư viện › Nhập) để nhập danh sách, rồi bài hát được phát từ các nguồn trên. SoundCloud và Bandcamp chỉ phát bản mà chính họ cho nghe miễn phí.'
+                    : 'Spotify, Apple Music, Tidal and Deezer’s full streams are DRM-locked (encrypted for subscribers), so HolySic doesn’t play from them: paste a song / playlist / album link (Library › Import) to bring the list in, and the songs play from the sources above. SoundCloud and Bandcamp only play what they themselves stream for free.'}
+                </Text>
 
                 {/* Playback source behaviour */}
                 <View style={[styles.switchRow, { marginTop: 10 }]}>
