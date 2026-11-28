@@ -22,7 +22,18 @@ export type AppBackdrop = 'plain' | 'color' | 'artwork' | 'ambient' | 'visualize
 export type BackdropVisualizer = 'bars' | 'mirror' | 'wave';
 export type DockVisualizer = 'off' | 'bars' | 'glow';
 /** how the synced lyrics come alive */
-export type LyricsEffect = 'glow' | 'karaoke' | 'wave' | 'depth' | 'neon' | 'minimal';
+export type LyricsEffect =
+  | 'glow'
+  | 'karaoke'
+  | 'wave'
+  | 'depth'
+  | 'neon'
+  | 'minimal'
+  // Phase 20 — from lyric-video typography (focus pull, typewriter, marker, RGB split)
+  | 'focus'
+  | 'typewriter'
+  | 'marker'
+  | 'glitch';
 export type LyricsSize = 'S' | 'M' | 'L';
 
 /** Background colour presets for the 'color' backdrop (dark tone, light tone) */
@@ -209,6 +220,8 @@ export interface HolySicPreferences {
   videoAmbient: boolean;
   /** outside the player the last scene stays (still) behind the app */
   videoAmbientApp: boolean;
+  /** the scenes keep lighting the background after the camera button hides the picture */
+  videoAmbientWhenHidden: boolean;
   /** ambient strength 0..1 */
   videoAmbientLevel: number;
   /** max picture height */
@@ -256,6 +269,8 @@ export interface HolySicPreferences {
   pipAuto: boolean;
   /** what fills the PiP window */
   pipStyle: PipStyle;
+  /** the lyrics effect in the floating window ('app' = same as the Lyrics screen) */
+  pipEffect: 'app' | LyricsEffect;
 
   // ── MIDI ──
   /** 'sampled' = real instruments (GeneralUser GS sample bank), 'synth' = light procedural synth */
@@ -343,6 +358,7 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   musicVideo: false,
   videoAmbient: true,
   videoAmbientApp: true,
+  videoAmbientWhenHidden: true,
   videoAmbientLevel: 0.6,
   videoQuality: 720,
   videoAudio: true,
@@ -363,6 +379,7 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   pipLyrics: true,
   pipAuto: false,
   pipStyle: 'lyrics',
+  pipEffect: 'app',
   midiSound: 'sampled',
   midiPiano: '0:0',
   midiAutoDownload: true,

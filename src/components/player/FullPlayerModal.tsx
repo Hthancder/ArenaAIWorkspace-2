@@ -55,16 +55,19 @@ import { useTrackMenu } from '../menu/useTrackMenu';
 import { MorphIcon, NudgeIcon } from '../ui/MorphIcon';
 import { PlayerStack } from '../../services/ui/playerStack';
 import { MusicVideoStage, VideoAmbient } from '../video/VideoSurfaces';
-import { useVideoState, videoWanted, VideoStore } from '../../services/video/videoStore';
+import {
+  useVideoHidden,
+  useVideoState,
+  VideoHidden,
+  videoWanted,
+  VideoStore,
+} from '../../services/video/videoStore';
 import { openMvOptions } from '../video/MvOptionsSheet';
 import { perfCount } from '../../services/perfProbe';
 import { CoverSheen, TiltCard, useTilt } from '../motion/TiltLayers';
 import { DustField } from '../motion/DustField';
 import { openLyricsEditor } from './LyricsEditor';
 import { PipButton } from './PipButton';
-
-// "show the cover instead" survives closing / re-opening the player (this app session)
-let videoHiddenMemo = false;
 
 type SubPane = 'artwork' | 'lyrics' | 'queue' | 'sleep' | 'diagnostics' | 'styles';
 
@@ -282,16 +285,14 @@ export const FullPlayerModal: React.FC = () => {
 
   // ── music video (Settings › Music video) ──
   const video = useVideoState();
-  const [videoHidden, setVideoHiddenState] = useState(videoHiddenMemo);
+  // "show the cover instead" survives closing / re-opening the player (this app session)
+  const videoHidden = useVideoHidden();
   const lastShowVideoRef = useRef(false);
 
   if (!currentTrack) return null;
   const vi = prefs.language === 'vi';
 
-  const setVideoHidden = (v: boolean) => {
-    videoHiddenMemo = v;
-    setVideoHiddenState(v);
-  };
+  const setVideoHidden = (v: boolean) => VideoHidden.set(v);
   const videoMode = videoWanted(prefs.musicVideo, currentTrack);
   const videoReady = videoMode && video.status === 'ready' && video.trackId === currentTrack?.id;
   // "Tự phát MV" off and not asked for yet
@@ -365,7 +366,13 @@ export const FullPlayerModal: React.FC = () => {
   // is re-blurred whenever it changes, so the cover light beneath it rests (no breathing) and
   // the blur only redraws when a new video frame arrives — never between them, nor when paused
   const videoAmbientOn =
-    videoMode && prefs.videoAmbient && isPlayerOpen && !prefs.pureBlack && video.status === 'ready';
+    videoMode &&
+    prefs.videoAmbient &&
+    isPlayerOpen &&
+    !prefs.pureBlack &&
+    video.status === 'ready' &&
+    // the camera button hid the picture: its light stays only if the user wants it to
+    (!videoHidden || prefs.videoAmbientWhenHidden !== false);
   const ambientBackdrop =
     ambientOn && prefs.playerBackground === 'AMBIENT' && prefs.playerStyle !== 'IPOD';
   const gradientColors: readonly [string, string, ...string[]] = ambientBackdrop

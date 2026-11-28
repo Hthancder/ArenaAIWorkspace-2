@@ -1,10 +1,22 @@
-// Picture in Picture on the web: the same live card as iOS, drawn on a canvas, streamed into a
-// hidden <video> and floated with the browser's video PiP (Chrome, Edge, Safari).
-// The PiP window's play/pause comes back as commands; prev/next/seek go through the Media
-// Session handlers the app already sets.
+// Picture in Picture on the web: the same live card as iOS, drawn on a canvas.
+//
+// Chrome / Edge 116+ (Document Picture-in-Picture): the canvas moves into a real floating window
+// with HTML controls under it — a draggable seek bar, previous / play / next. Elsewhere (Safari,
+// Firefox) the canvas is streamed into a hidden <video> and floated with video PiP; its
+// play/pause comes back as commands, prev/next/seek go through the Media Session handlers the
+// app already sets, and the seek bar is drawn into the picture.
 
 import type { PipCommandEvent, PipMeta } from '../../../modules/holysic-pip';
 import { PlaybackClock } from '../audio/playbackClock';
+import {
+  ANIMATED_FX,
+  blurText,
+  contextLine,
+  drawAmbient,
+  drawSeekBar,
+  drawSung,
+  type PipWord,
+} from './pipLyricsFx';
 
 /** canvas (= PiP window shape) per style — same as the iOS module */
 export function pipCanvasSize(style: string): [number, number] {
@@ -86,6 +98,20 @@ class WebPip {
   private ctx: CanvasRenderingContext2D | null = null;
   private meta: PipMeta | null = null;
   private lyr: Lyr = { starts: [], texts: [], offset: 0, synced: false };
+  /** real word timing per line (null = estimate from the line) */
+  private words: (PipWord[] | null)[] = [];
+  /** the ambient backdrop, drawn once per song / look */
+  private base: HTMLCanvasElement | null = null;
+  private baseKey = '';
+  /** Document PiP window (Chrome / Edge) — the canvas lives in it while open */
+  private docWin: Window | null = null;
+  private docUi: {
+    range: HTMLInputElement;
+    cur: HTMLElement;
+    left: HTMLElement;
+    play: HTMLButtonElement;
+    dragging: boolean;
+  } | null = null;
   private pos = 0;
   private at = 0;
   private playing = false;
@@ -172,8 +198,145 @@ class WebPip {
     }
   }
 
+  /** Chrome / Edge: a real floating window with the card and live controls */
+  private async startDocument(): Promise<boolean> {
+    const dpip = (
+      window as unknown as {
+        documentPictureInPicture?: {
+          requestWindow(o: { width: number; height: number }): Promise<Window>;
+        };
+      }
+    ).documentPictureInPicture;
+    if (!dpip || !this.canvas) return false;
+    const scale = W > 1000 ? 0.42 : W > 700 ? 0.5 : 0.55;
+    const win = await dpip.requestWindow({
+      width: Math.round(W * scale),
+      height: Math.round(H * scale) + 64,
+    });
+    const d = win.document;
+    d.title = this.meta?.title || 'HolySic';
+    const st = d.createElement('style');
+    const accent = this.meta?.accent || '#8B5CF6';
+    st.textContent = `
+      html,body{margin:0;height:100%;background:#050507;color:#fff;overflow:hidden;
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif}
+      body{display:flex;flex-direction:column}
+      canvas{flex:1;min-height:0;width:100%;object-fit:contain;display:block}
+      .bar{display:flex;align-items:center;gap:10px;padding:8px 12px 10px;background:#0b0b10}
+      button{all:unset;cursor:pointer;width:32px;height:32px;border-radius:16px;display:grid;
+        place-items:center;font-size:15px;color:#fff}
+      button:hover{background:rgba(255,255,255,.1)}
+      button.play{background:${accent};color:#000;width:36px;height:36px;border-radius:18px}
+      .t{font-size:12px;font-variant-numeric:tabular-nums;opacity:.75;min-width:38px}
+      input[type=range]{flex:1;accent-color:${accent};height:4px;cursor:pointer}`;
+    d.head.appendChild(st);
+    d.body.appendChild(this.canvas);
+    Object.assign(this.canvas.style, {
+      position: 'static',
+      width: '100%',
+      height: 'auto',
+      opacity: '1',
+      pointerEvents: 'auto',
+      zIndex: 'auto',
+    });
+    const bar = d.createElement('div');
+    bar.className = 'bar';
+    const mk = (label: string, text: string, cls = '') => {
+      const b = d.createElement('button');
+      b.textContent = text;
+      b.title = label;
+      b.setAttribute('aria-label', label);
+      if (cls) b.className = cls;
+      return b;
+    };
+    const prev = mk('Previous', '⏮');
+    const play = mk('Play / pause', this.playing ? '❚❚' : '▶', 'play');
+    const next = mk('Next', '⏭');
+    const cur = d.createElement('span');
+    cur.className = 't';
+    const range = d.createElement('input');
+    range.type = 'range';
+    range.min = '0';
+    range.step = '0.1';
+    range.setAttribute('aria-label', 'Seek');
+    const left = d.createElement('span');
+    left.className = 't';
+    bar.append(prev, play, next, cur, range, left);
+    d.body.appendChild(bar);
+    const ui = { range, cur, left, play, dragging: false };
+    this.docUi = ui;
+    const send = (c: PipCommandEvent) => this.cmdSubs.forEach((f) => f(c));
+    prev.onclick = () => send({ type: 'previous' });
+    next.onclick = () => send({ type: 'next' });
+    play.onclick = () => send({ type: this.playing ? 'pause' : 'play' });
+    range.oninput = () => {
+      ui.dragging = true;
+      cur.textContent = mmss(Number(range.value));
+    };
+    range.onchange = () => {
+      ui.dragging = false;
+      send({ type: 'seekTo', position: Number(range.value) });
+    };
+    // keyboard: space plays / pauses, arrows skip 5 s
+    d.addEventListener('keydown', (e) => {
+      if (e.target === range) return;
+      if (e.key === ' ') {
+        e.preventDefault();
+        send({ type: this.playing ? 'pause' : 'play' });
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
+        send({ type: 'seek', delta: e.key === 'ArrowLeft' ? -5 : 5 });
+    });
+    win.addEventListener('pagehide', () => this.closeDocument());
+    this.docWin = win;
+    this.setActive(true);
+    this.render(true);
+    return true;
+  }
+
+  /** the window closed: the canvas goes back to the page, hidden */
+  private closeDocument() {
+    if (!this.docWin) return;
+    this.docWin = null;
+    this.docUi = null;
+    if (this.canvas) {
+      Object.assign(this.canvas.style, {
+        position: 'fixed',
+        left: '0',
+        top: '0',
+        width: '2px',
+        height: '2px',
+        opacity: '0',
+        pointerEvents: 'none',
+        zIndex: '-1',
+      });
+      document.body.appendChild(this.canvas);
+    }
+    this.setActive(false);
+  }
+
+  private updateDocUi(pos: number) {
+    const ui = this.docUi;
+    const m = this.meta;
+    if (!ui || !m) return;
+    const d = m.duration;
+    ui.range.disabled = !(d > 0);
+    ui.range.max = String(Math.max(1, d));
+    if (!ui.dragging) {
+      ui.range.value = String(Math.min(d, pos));
+      ui.cur.textContent = mmss(pos);
+    }
+    ui.left.textContent = d > 0 ? '-' + mmss(Math.max(0, d - pos)) : '';
+    ui.play.textContent = this.playing ? '❚❚' : '▶';
+  }
+
   async start(): Promise<boolean> {
-    if (!this.ensure() || !this.video) return false;
+    if (!this.ensure()) return false;
+    try {
+      if (await this.startDocument()) return true;
+    } catch {
+      // not allowed here (no user gesture, iframe…) — fall back to video PiP
+    }
+    if (!this.video) return false;
     const v = this.video as HTMLVideoElement & { requestPictureInPicture(): Promise<unknown> };
     try {
       this.prepare();
@@ -201,6 +364,11 @@ class WebPip {
   }
 
   async stop(): Promise<void> {
+    if (this.docWin) {
+      this.docWin.close();
+      this.closeDocument();
+      return;
+    }
     const d = document as Document & {
       pictureInPictureElement?: Element | null;
       exitPictureInPicture?: () => Promise<void>;
@@ -223,6 +391,7 @@ class WebPip {
     }
     if (m.artwork !== this.artUri) this.loadArt(m.artwork);
     this.render(true);
+    this.schedule();
   }
 
   setLyrics(starts: number[], texts: string[], offset: number, synced: boolean) {
@@ -233,8 +402,22 @@ class WebPip {
       offset,
       synced: synced && n > 0,
     };
+    this.words = [];
     this.render(true);
     this.schedule();
+  }
+
+  setWords(texts: string[][], starts: number[][], ends: number[][]) {
+    this.words = texts.map((ws, i) =>
+      ws.length
+        ? ws.map((text, k) => ({
+            text,
+            start: starts[i]?.[k] ?? 0,
+            end: ends[i]?.[k] ?? (starts[i]?.[k] ?? 0) + 0.4,
+          }))
+        : null
+    );
+    this.render(true);
   }
 
   setPlayback(pos: number, playing: boolean) {
@@ -278,9 +461,18 @@ class WebPip {
       this.timer = null;
       return;
     }
-    if (this.timer) return;
-    this.timer = setInterval(() => this.render(false), 80);
+    const fast =
+      this.playing &&
+      this.lyr.synced &&
+      !!this.meta?.showLyrics &&
+      ANIMATED_FX.has(this.meta?.effect || 'glow');
+    const every = fast ? 50 : 80;
+    if (this.timer && this.timerEvery === every) return;
+    if (this.timer) clearInterval(this.timer);
+    this.timerEvery = every;
+    this.timer = setInterval(() => this.render(false), every);
   }
+  private timerEvery = 0;
 
   private loadArt(uri: string) {
     this.artUri = uri;
@@ -313,53 +505,67 @@ class WebPip {
             : start + 5;
       fill = Math.max(0, Math.min(1, (pos - start) / Math.max(0.3, Math.min(end - start, 12))));
     }
-    const progressPx = m.duration > 0 ? Math.floor((pos / m.duration) * 400) : 0;
-    const key = `${idx}|${Math.floor(fill * 60)}|${progressPx}|${this.playing}|${Math.floor(pos)}`;
+    const progressPx = m.duration > 0 ? Math.floor((pos / m.duration) * 600) : 0;
+    const anim = idx >= 0 && ANIMATED_FX.has(m.effect || 'glow') ? Math.floor(pos * 20) : 0;
+    const key = `${idx}|${Math.floor(fill * 60)}|${progressPx}|${this.playing}|${Math.floor(pos)}|${anim}`;
+    this.updateDocUi(pos);
     if (!force && key === this.lastKey) return;
     this.lastKey = key;
     this.draw(ctx, m, pos, idx, fill);
   }
 
-  private draw(ctx: CanvasRenderingContext2D, m: PipMeta, pos: number, idx: number, fill: number) {
+  /** the ambient backdrop (or the cover, full-bleed, for the square style), cached */
+  private backdrop(m: PipMeta): HTMLCanvasElement | null {
+    const amb = m.ambient || [];
+    const key = `${W}x${H}|${m.style}|${amb.join()}|${m.ambientLevel ?? 0.8}|${m.accent}|${this.art ? this.artUri : ''}`;
+    if (this.base && this.baseKey === key) return this.base;
+    const c = this.base || document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    if (!g) return null;
+    g.clearRect(0, 0, W, H);
+    if (this.art && m.style === 'square') {
+      const a = this.art;
+      const s = Math.max(W / a.width, H / a.height);
+      g.drawImage(a, (W - a.width * s) / 2, (H - a.height * s) / 2, a.width * s, a.height * s);
+      const sh = g.createLinearGradient(0, H * 0.38, 0, H);
+      sh.addColorStop(0, 'rgba(0,0,0,0)');
+      sh.addColorStop(0.55, 'rgba(0,0,0,0.55)');
+      sh.addColorStop(1, 'rgba(0,0,0,0.85)');
+      g.fillStyle = sh;
+      g.fillRect(0, 0, W, H);
+    } else {
+      drawAmbient(g, W, H, amb, m.ambientLevel ?? 0.8, this.art, m.accent);
+    }
+    this.base = c;
+    this.baseKey = key;
+    return c;
+  }
+
+  private draw(ctx: CanvasRenderingContext2D, m: PipMeta, pos: number, idx: number, _fill: number) {
     const l = this.lyr;
     const hasLyrics = m.showLyrics && l.synced;
     const line = idx >= 0 ? l.texts[idx] || '' : '';
     const next = hasLyrics && idx + 1 < l.texts.length ? l.texts[Math.max(0, idx + 1)] : '';
+    const effect = m.effect || 'glow';
+    // the window's own controls carry the seek bar in Document PiP
+    const drawBar = !this.docWin;
+    const t = pos - l.offset + LEAD;
+    const lineStart = idx >= 0 ? l.starts[idx] : 0;
+    const lineEnd =
+      idx >= 0 && idx + 1 < l.starts.length
+        ? l.starts[idx + 1]
+        : m.duration > 0
+          ? Math.min(lineStart + 8, m.duration - l.offset - 0.3)
+          : lineStart + 5;
 
-    // backdrop
-    ctx.save();
-    const g = ctx.createLinearGradient(0, 0, W * 0.6, H);
-    g.addColorStop(0, m.accent);
-    g.addColorStop(1, '#0A0A12');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-    if (this.art && m.style === 'square') {
-      const a = this.art;
-      const s = Math.max(W / a.width, H / a.height);
-      ctx.drawImage(a, (W - a.width * s) / 2, (H - a.height * s) / 2, a.width * s, a.height * s);
-      const sh = ctx.createLinearGradient(0, H * 0.38, 0, H);
-      sh.addColorStop(0, 'rgba(0,0,0,0)');
-      sh.addColorStop(0.55, 'rgba(0,0,0,0.55)');
-      sh.addColorStop(1, 'rgba(0,0,0,0.85)');
-      ctx.fillStyle = sh;
-      ctx.fillRect(0, 0, W, H);
-    } else if (this.art && m.style !== 'minimal' && m.style !== 'bar') {
-      const a = this.art;
-      const s = Math.max(W / a.width, H / a.height) * 1.1;
-      try {
-        ctx.filter = 'blur(28px)';
-        ctx.drawImage(a, (W - a.width * s) / 2, (H - a.height * s) / 2, a.width * s, a.height * s);
-        ctx.filter = 'none';
-      } catch {
-        // ignore
-      }
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(0, 0, W, H);
-    } else {
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    const base = this.backdrop(m);
+    if (base) ctx.drawImage(base, 0, 0);
+    else {
+      ctx.fillStyle = '#0A0A12';
       ctx.fillRect(0, 0, W, H);
     }
-    ctx.restore();
     ctx.textBaseline = 'top';
     ctx.shadowColor = 'rgba(0,0,0,0.35)';
     ctx.shadowBlur = 6;
@@ -385,7 +591,32 @@ class WebPip {
       return lines.length * size * 1.2;
     };
 
-    /** the sung line, centred in its box, karaoke fill on a one-line text */
+    /** a neighbouring line, in the effect's look (blurred in Focus, accent in Neon…) */
+    const ctxLine = (
+      s: string,
+      x: number,
+      y: number,
+      w: number,
+      size: number,
+      align: CanvasTextAlign,
+      distance: number,
+      max = 1
+    ) => {
+      if (!s) return;
+      const look = contextLine(effect, m.accent, distance);
+      if (!look.blur) {
+        text(s, x, y, w, size, 700, look.color, align, max);
+        return;
+      }
+      ctx.font = `700 ${size}px ${FONT}`;
+      ctx.textAlign = align;
+      const ax = align === 'center' ? x + w / 2 : align === 'right' ? x + w : x;
+      wrap(ctx, s, w, max).forEach((ln, i) =>
+        blurText(ctx, ln, ax, y + i * size * 1.2, look.color, look.blur)
+      );
+    };
+
+    /** the sung line, with the lyrics effect */
     const sung = (
       s: string,
       x: number,
@@ -396,34 +627,26 @@ class WebPip {
       max: number,
       align: CanvasTextAlign
     ) => {
-      let fs = size;
-      let lines: string[] = [];
-      for (;;) {
-        ctx.font = `800 ${fs}px ${FONT}`;
-        lines = wrap(ctx, s, w, max);
-        if (fs <= 22 || lines.length * fs * 1.2 <= h) break;
-        fs -= 4;
+      if (idx < 0 || !line) {
+        text(s, x, y + (h - size * 1.2) / 2, w, size, 800, '#FFF', align, max);
+        return;
       }
-      const total = lines.length * fs * 1.2;
-      const top = y + (h - total) / 2;
-      ctx.textAlign = align;
-      const ax = align === 'center' ? x + w / 2 : x;
-      if (lines.length === 1 && fill > 0 && fill < 1) {
-        const tw = ctx.measureText(lines[0]).width;
-        const x0 = align === 'center' ? x + (w - tw) / 2 : x;
-        ctx.fillStyle = 'rgba(255,255,255,0.42)';
-        ctx.fillText(lines[0], ax, top);
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(x0, top - 10, tw * fill, fs * 1.2 + 20);
-        ctx.clip();
-        ctx.fillStyle = '#FFF';
-        ctx.fillText(lines[0], ax, top);
-        ctx.restore();
-      } else {
-        ctx.fillStyle = '#FFF';
-        lines.forEach((ln, i) => ctx.fillText(ln, ax, top + i * fs * 1.2));
-      }
+      drawSung(ctx, {
+        text: s,
+        words: this.words[idx] ?? null,
+        lineStart,
+        lineEnd,
+        t,
+        x,
+        y,
+        w,
+        h,
+        size,
+        maxLines: max,
+        align,
+        effect,
+        accent: m.accent,
+      });
     };
 
     const cover = (x: number, y: number, s: number, r: number) => {
@@ -455,54 +678,27 @@ class WebPip {
       ctx.restore();
     };
 
-    const progress = (x: number, y: number, w: number) => {
-      const f = m.duration > 0 ? Math.max(0, Math.min(1, pos / m.duration)) : 0;
-      ctx.save();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = 'rgba(255,255,255,0.22)';
-      ctx.fillRect(x, y, w, 6);
-      ctx.fillStyle = m.accent;
-      ctx.fillRect(x, y, Math.max(6, w * f), 6);
-      ctx.restore();
-      text(mmss(pos), x, y + 12, 120, 18, 600, 'rgba(255,255,255,0.7)', 'left');
-      text(
-        m.duration > 0 ? '-' + mmss(Math.max(0, m.duration - pos)) : this.playing ? '' : '❚❚',
-        x + w - 120,
-        y + 12,
-        120,
-        18,
-        600,
-        'rgba(255,255,255,0.7)',
-        'right'
-      );
-    };
-
-    const thin = () => {
-      const f = m.duration > 0 ? Math.max(0, Math.min(1, pos / m.duration)) : 0;
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.fillRect(0, H - 6, W, 6);
-      ctx.fillStyle = m.accent;
-      ctx.fillRect(0, H - 6, W * f, 6);
+    const bar = (x: number, y: number, w: number, times = true) => {
+      if (drawBar) drawSeekBar(ctx, x, y, w, pos, m.duration, m.accent, times, this.playing);
     };
 
     if (m.style === 'square') {
       if (hasLyrics && line) {
-        sung(line, 36, H - 262, W - 72, 150, 44, 3, 'left');
-        text(next, 36, H - 100, W - 72, 24, 600, 'rgba(255,255,255,0.55)', 'left');
+        sung(line, 36, H - 300, W - 72, 150, 44, 3, 'left');
+        ctxLine(next, 36, H - 140, W - 72, 24, 'left', 1);
       } else {
         if (!this.art) cover(W / 2 - 150, 90, 300, 30);
-        text(m.title, 36, H - 230, W - 72, 44, 800, '#FFF', 'left', 2);
-        text(m.artist, 36, H - 108, W - 72, 26, 600, 'rgba(255,255,255,0.7)', 'left');
+        text(m.title, 36, H - 268, W - 72, 44, 800, '#FFF', 'left', 2);
+        text(m.artist, 36, H - 146, W - 72, 26, 600, 'rgba(255,255,255,0.7)', 'left');
       }
-      thin();
+      bar(36, H - 74, W - 72);
     } else if (m.style === 'bar') {
-      if (hasLyrics) sung(line || '♪', 40, 34, W - 80, H - 80, 72, 2, 'center');
+      if (hasLyrics) sung(line || '♪', 40, 28, W - 80, H - 84, 72, 2, 'center');
       else
         text(
           m.artist ? `${m.title} — ${m.artist}` : m.title,
           40,
-          H / 2 - 60,
+          H / 2 - 66,
           W - 80,
           52,
           800,
@@ -510,7 +706,7 @@ class WebPip {
           'center',
           2
         );
-      thin();
+      bar(40, H - 30, W - 80, false);
     } else if (m.style === 'stack') {
       cover(40, 40, 96, 16);
       text(m.title, 156, 48, W - 196, 30, 700, '#FFF', 'left');
@@ -518,10 +714,10 @@ class WebPip {
       if (hasLyrics) {
         const prev = idx >= 1 ? l.texts[idx - 1] || '' : '';
         const after = idx + 2 < l.texts.length ? l.texts[idx + 2] : '';
-        text(prev, 40, 168, W - 80, 28, 700, 'rgba(255,255,255,0.3)', 'left', 2);
+        ctxLine(prev, 40, 168, W - 80, 28, 'left', 1, 2);
         sung(line || '♪', 40, 250, W - 80, 270, 48, 5, 'left');
-        text(next, 40, 534, W - 80, 30, 700, 'rgba(255,255,255,0.42)', 'left', 2);
-        text(after, 40, 614, W - 80, 30, 700, 'rgba(255,255,255,0.26)', 'left', 2);
+        ctxLine(next, 40, 534, W - 80, 30, 'left', 1, 2);
+        ctxLine(after, 40, 614, W - 80, 30, 'left', 2, 2);
       } else {
         text(
           m.showLyrics ? m.noLyrics : m.artist,
@@ -536,7 +732,7 @@ class WebPip {
         );
         text(m.upNext, 40, 480, W - 80, 24, 600, 'rgba(255,255,255,0.55)', 'left', 2);
       }
-      progress(40, H - 74, W - 80);
+      bar(40, H - 76, W - 80);
     } else if (m.style === 'card') {
       cover(40, 40, 400, 26);
       const x = 470;
@@ -544,10 +740,10 @@ class WebPip {
       text(m.title, x, 60, w, 38, 800, '#FFF', 'left', 2);
       text(m.artist, x, 165, w, 26, 600, 'rgba(255,255,255,0.7)', 'left');
       if (hasLyrics) {
-        sung(line || '♪', x, 230, w, 150, 32, 3, 'left');
-        text(next, x, 392, w, 22, 600, 'rgba(255,255,255,0.5)', 'left');
+        sung(line || '♪', x, 226, w, 150, 32, 3, 'left');
+        ctxLine(next, x, 388, w, 22, 'left', 1);
       } else if (m.upNext) text(m.upNext, x, 380, w, 21, 600, 'rgba(255,255,255,0.6)', 'left', 2);
-      progress(x, 470, w);
+      bar(x, 456, w);
     } else if (m.style === 'minimal') {
       text(
         `${m.title}  ·  ${m.artist}`,
@@ -560,17 +756,17 @@ class WebPip {
         'center'
       );
       if (hasLyrics && line) {
-        sung(line, 60, 130, W - 120, 230, 56, 3, 'center');
-        text(next, 60, 380, W - 120, 28, 600, 'rgba(255,255,255,0.45)', 'center');
-      } else text(m.title, 60, 200, W - 120, 50, 800, '#FFF', 'center', 2);
-      thin();
+        sung(line, 60, 120, W - 120, 230, 56, 3, 'center');
+        ctxLine(next, 60, 366, W - 120, 28, 'center', 1);
+      } else text(m.title, 60, 190, W - 120, 50, 800, '#FFF', 'center', 2);
+      bar(60, H - 70, W - 120);
     } else {
       cover(40, 32, 84, 14);
       text(m.title, 142, 40, W - 190, 30, 700, '#FFF', 'left');
       text(m.artist, 142, 80, W - 190, 22, 500, 'rgba(255,255,255,0.65)', 'left');
       if (hasLyrics) {
-        sung(line || '♪', 48, 150, W - 96, 200, 48, 2, 'center');
-        text(next, 48, 365, W - 96, 27, 600, 'rgba(255,255,255,0.5)', 'center');
+        sung(line || '♪', 48, 146, W - 96, 200, 48, 2, 'center');
+        ctxLine(next, 48, 360, W - 96, 27, 'center', 1);
       } else {
         text(
           m.showLyrics ? m.noLyrics : m.artist,
@@ -585,7 +781,7 @@ class WebPip {
         );
         text(m.upNext, 48, 330, W - 96, 24, 600, 'rgba(255,255,255,0.55)', 'center');
       }
-      progress(48, 470, W - 96);
+      bar(48, 456, W - 96);
     }
   }
 }

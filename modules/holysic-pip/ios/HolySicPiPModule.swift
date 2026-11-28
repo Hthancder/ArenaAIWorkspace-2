@@ -31,6 +31,26 @@ private func canvasSize(_ style: String) -> (Int, Int) {
 
 private let LEAD: Double = 0.15
 
+/// effects that move between frames (the render loop runs at 20 fps for them)
+private let ANIMATED_FX: Set<String> = ["glow", "wave", "focus", "typewriter", "glitch"]
+
+/// one sung word: real timing from the lyrics, or estimated from the line's length
+struct PWord {
+  var text: String
+  var start: Double
+  var end: Double
+}
+
+/// a word placed on the canvas
+struct WBox {
+  var w: PWord
+  var x: CGFloat
+  var y: CGFloat
+  var width: CGFloat
+  /// a space follows on the same row
+  var gap: CGFloat
+}
+
 private struct Meta {
   var title = ""
   var artist = ""
@@ -42,6 +62,12 @@ private struct Meta {
   var noLyrics = "♪"
   /** "Up next · Title — Artist" (shown when there are no lyrics to show) */
   var upNext = ""
+  /// the lyrics effect (same ids as the app: glow, karaoke, wave, depth, neon, minimal, focus,
+  /// typewriter, marker, glitch)
+  var effect = "glow"
+  /// the player's ambient light: primary, dark base, then the cover's 4 corners ([] = accent)
+  var ambient: [UIColor] = []
+  var ambientLevel: Double = 0.8
   var version = 0
 }
 
@@ -50,6 +76,8 @@ private struct Lyrics {
   var texts: [String] = []
   var offset: Double = 0
   var synced = false
+  /// real word timing per line ([] for a line = estimate it)
+  var words: [[PWord]] = []
 }
 
 private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
@@ -236,6 +264,11 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       m.duration = (dict["duration"] as? NSNumber)?.doubleValue ?? m.duration
       m.noLyrics = dict["noLyrics"] as? String ?? m.noLyrics
       m.upNext = dict["upNext"] as? String ?? ""
+      if let fx = dict["effect"] as? String, !fx.isEmpty { m.effect = fx }
+      if let list = dict["ambient"] as? [String] {
+        m.ambient = list.compactMap { PiPEngine.color($0) }
+      }
+      if let lv = dict["ambientLevel"] as? NSNumber { m.ambientLevel = lv.doubleValue }
       m.version += 1
       self.meta = m
       let size = canvasSize(m.style)
@@ -252,6 +285,24 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       self.renderNow(force: true)
     }
     DispatchQueue.main.async { self.controller?.invalidatePlaybackState() }
+    schedule()
+  }
+
+  func setWords(texts: [[String]], starts: [[Double]], ends: [[Double]]) {
+    queue.async {
+      var out: [[PWord]] = []
+      for (i, ws) in texts.enumerated() {
+        var line: [PWord] = []
+        for (k, w) in ws.enumerated() {
+          let st = i < starts.count && k < starts[i].count ? starts[i][k] : 0
+          let en = i < ends.count && k < ends[i].count ? ends[i][k] : st + 0.4
+          line.append(PWord(text: w, start: st, end: en))
+        }
+        out.append(line)
+      }
+      self.lyrics.words = out
+      self.renderNow(force: true)
+    }
   }
 
   func setLyrics(starts: [Double], texts: [String], offset: Double, synced: Bool) {
@@ -315,7 +366,8 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       }
       // fast while a karaoke line fills, slow otherwise (progress only)
       let fast = self.active && self.lyrics.synced && self.meta.showLyrics && self.clock().playing
-      let interval = self.active ? (fast ? 0.08 : 0.5) : 1.0
+      let moving = fast && ANIMATED_FX.contains(self.meta.effect)
+      let interval = self.active ? (moving ? 0.05 : fast ? 0.08 : 0.5) : 1.0
       if self.timer != nil && self.timerInterval == interval { return }
       self.timer?.cancel()
       let t = DispatchSource.makeTimerSource(queue: self.queue)
@@ -367,9 +419,10 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
         : (meta.duration > start ? min(start + 8, meta.duration - 0.3) : start + 5)
       fill = max(0, min(1, (c.pos - start) / max(0.3, min(end - start, 12))))
     }
-    let progressPx = meta.duration > 0 ? Int(c.pos / meta.duration * 400) : 0
+    let progressPx = meta.duration > 0 ? Int(c.pos / meta.duration * 600) : 0
+    let anim = idx >= 0 && ANIMATED_FX.contains(meta.effect) ? Int(c.pos * 20) : 0
     let key =
-      "\(meta.version)|\(idx)|\(Int(fill * 60))|\(progressPx)|\(c.playing)|\(art != nil)|\(Int(c.pos))"
+      "\(meta.version)|\(idx)|\(Int(fill * 60))|\(progressPx)|\(c.playing)|\(art != nil)|\(Int(c.pos))|\(anim)"
     if !force && key == lastKey { return }
     lastKey = key
     guard let pb = makeBuffer() else { return }
@@ -444,70 +497,79 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     if baseVersion != meta.version || baseImage == nil { buildBase() }
     baseImage?.draw(in: CGRect(x: 0, y: 0, width: W, height: H))
 
-    let line = idx >= 0 && idx < lyrics.texts.count ? lyrics.texts[idx] : ""
-    let next = idx + 1 < lyrics.texts.count && idx >= -1 && lyrics.synced ? lyrics.texts[max(0, idx + 1)] : ""
     let hasLyrics = meta.showLyrics && lyrics.synced
-
+    let line = idx >= 0 && idx < lyrics.texts.count ? lyrics.texts[idx] : ""
+    let next = hasLyrics && idx + 1 < lyrics.texts.count ? lyrics.texts[max(0, idx + 1)] : ""
     let fw = CGFloat(W)
     let fh = CGFloat(H)
+    let t = pos - lyrics.offset + LEAD
+    let lineStart = idx >= 0 && idx < lyrics.starts.count ? lyrics.starts[idx] : 0
+    let lineEnd: Double =
+      idx >= 0 && idx + 1 < lyrics.starts.count
+      ? lyrics.starts[idx + 1]
+      : (meta.duration > 0
+        ? min(lineStart + 8, meta.duration - lyrics.offset - 0.3) : lineStart + 5)
+
+    /// the sung line with the lyrics effect (plain text before the first line)
+    func sung(_ s: String, _ rect: CGRect, _ size: CGFloat, _ maxLines: Int, _ align: NSTextAlignment) {
+      if idx < 0 || line.isEmpty {
+        drawText(
+          s, CGRect(x: rect.minX, y: rect.midY - size * 0.62, width: rect.width, height: size * 1.3),
+          font: .systemFont(ofSize: size, weight: .heavy), color: .white, align: align, lines: 1)
+        return
+      }
+      drawSung(
+        s, in: rect, size: size, maxLines: maxLines, align: align, t: t, lineStart: lineStart,
+        lineEnd: lineEnd, idx: idx)
+    }
+    func bar(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ times: Bool) {
+      drawSeekBar(pos: pos, playing: playing, x: x, y: y, w: w, times: times)
+    }
+
     switch meta.style {
     case "square":
       // cover fills the window, the line sits on the shade at the bottom
       if hasLyrics && !line.isEmpty {
-        drawLine(
-          line, in: CGRect(x: 36, y: fh - 262, width: fw - 72, height: 150), size: 44,
-          maxLines: 3, fill: fill, align: .left)
-        if !next.isEmpty {
-          drawText(
-            next, CGRect(x: 36, y: fh - 106, width: fw - 72, height: 34),
-            font: .systemFont(ofSize: 24, weight: .semibold),
-            color: UIColor.white.withAlphaComponent(0.55), align: .left, lines: 1)
-        }
+        sung(line, CGRect(x: 36, y: fh - 300, width: fw - 72, height: 150), 44, 3, .left)
+        drawContext(
+          next, CGRect(x: 36, y: fh - 140, width: fw - 72, height: 34), size: 24, align: .left,
+          distance: 1, lines: 1)
       } else {
         drawText(
-          meta.title, CGRect(x: 36, y: fh - 230, width: fw - 72, height: 110),
+          meta.title, CGRect(x: 36, y: fh - 268, width: fw - 72, height: 110),
           font: .systemFont(ofSize: 44, weight: .heavy), color: .white, align: .left, lines: 2)
         drawText(
-          meta.artist, CGRect(x: 36, y: fh - 112, width: fw - 72, height: 40),
+          meta.artist, CGRect(x: 36, y: fh - 150, width: fw - 72, height: 40),
           font: .systemFont(ofSize: 26, weight: .semibold),
           color: UIColor.white.withAlphaComponent(0.7), align: .left, lines: 1)
       }
-      drawThinProgress(pos: pos)
+      bar(36, fh - 74, fw - 72, true)
     case "bar":
       // the line only, as large as the strip allows
       if hasLyrics {
-        drawLine(
-          line.isEmpty ? "♪" : line, in: CGRect(x: 40, y: 34, width: fw - 80, height: fh - 80),
-          size: 72, maxLines: 2, fill: fill, align: .center)
+        sung(line.isEmpty ? "♪" : line, CGRect(x: 40, y: 28, width: fw - 80, height: fh - 84), 72, 2, .center)
       } else {
         drawText(
           meta.artist.isEmpty ? meta.title : "\(meta.title) — \(meta.artist)",
-          CGRect(x: 40, y: fh / 2 - 60, width: fw - 80, height: 120),
+          CGRect(x: 40, y: fh / 2 - 66, width: fw - 80, height: 120),
           font: .systemFont(ofSize: 52, weight: .heavy), color: .white, align: .center, lines: 2)
       }
-      drawThinProgress(pos: pos)
+      bar(40, fh - 30, fw - 80, false)
     case "stack":
       // previous line, the sung line, two lines ahead — like the lyrics screen
       if hasLyrics {
-        let dim = UIColor.white.withAlphaComponent(0.42)
         let prev = idx >= 1 && idx - 1 < lyrics.texts.count ? lyrics.texts[idx - 1] : ""
         let after = idx + 2 < lyrics.texts.count && idx >= -1 ? lyrics.texts[idx + 2] : ""
-        if !prev.isEmpty {
-          drawText(
-            prev, CGRect(x: 40, y: 168, width: fw - 80, height: 70),
-            font: .systemFont(ofSize: 28, weight: .bold),
-            color: UIColor.white.withAlphaComponent(0.3), align: .left, lines: 2)
-        }
-        drawLine(
-          line.isEmpty ? "♪" : line, in: CGRect(x: 40, y: 250, width: fw - 80, height: 270),
-          size: 48, maxLines: 5, fill: fill, align: .left)
-        drawText(
-          next, CGRect(x: 40, y: 534, width: fw - 80, height: 76),
-          font: .systemFont(ofSize: 30, weight: .bold), color: dim, align: .left, lines: 2)
-        drawText(
-          after, CGRect(x: 40, y: 614, width: fw - 80, height: 76),
-          font: .systemFont(ofSize: 30, weight: .bold),
-          color: UIColor.white.withAlphaComponent(0.26), align: .left, lines: 2)
+        drawContext(
+          prev, CGRect(x: 40, y: 168, width: fw - 80, height: 70), size: 28, align: .left,
+          distance: 1, lines: 2)
+        sung(line.isEmpty ? "♪" : line, CGRect(x: 40, y: 250, width: fw - 80, height: 270), 48, 5, .left)
+        drawContext(
+          next, CGRect(x: 40, y: 534, width: fw - 80, height: 76), size: 30, align: .left,
+          distance: 1, lines: 2)
+        drawContext(
+          after, CGRect(x: 40, y: 614, width: fw - 80, height: 76), size: 30, align: .left,
+          distance: 2, lines: 2)
       } else {
         drawText(
           meta.showLyrics ? meta.noLyrics : meta.artist,
@@ -521,70 +583,54 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
             color: UIColor.white.withAlphaComponent(0.55), align: .left, lines: 2)
         }
       }
-      drawProgress(pos: pos, playing: playing, rect: CGRect(x: 40, y: fh - 74, width: fw - 80, height: 30))
+      bar(40, fh - 76, fw - 80, true)
     case "card":
       let x: CGFloat = 470
-      let wdt: CGFloat = CGFloat(W) - x - 40
+      let wdt: CGFloat = fw - x - 40
       if hasLyrics {
-        drawLine(
-          line.isEmpty ? "♪" : line, in: CGRect(x: x, y: 230, width: wdt, height: 150), size: 32,
-          maxLines: 3, fill: fill, align: .left)
-        if !next.isEmpty {
-          drawText(
-            next, CGRect(x: x, y: 392, width: wdt, height: 40),
-            font: .systemFont(ofSize: 22, weight: .semibold),
-            color: UIColor.white.withAlphaComponent(0.5), align: .left, lines: 1)
-        }
+        sung(line.isEmpty ? "♪" : line, CGRect(x: x, y: 226, width: wdt, height: 150), 32, 3, .left)
+        drawContext(
+          next, CGRect(x: x, y: 388, width: wdt, height: 40), size: 22, align: .left,
+          distance: 1, lines: 1)
       } else if !meta.upNext.isEmpty {
         drawText(
           meta.upNext, CGRect(x: x, y: 380, width: wdt, height: 70),
           font: .systemFont(ofSize: 21, weight: .semibold),
           color: UIColor.white.withAlphaComponent(0.6), align: .left, lines: 2)
       }
-      drawProgress(pos: pos, playing: playing, rect: CGRect(x: x, y: 470, width: wdt, height: 30))
+      bar(x, 456, wdt, true)
     case "minimal":
       if hasLyrics && !line.isEmpty {
-        drawLine(
-          line, in: CGRect(x: 60, y: 130, width: CGFloat(W) - 120, height: 230), size: 56,
-          maxLines: 3, fill: fill, align: .center)
-        if !next.isEmpty {
-          drawText(
-            next, CGRect(x: 60, y: 380, width: CGFloat(W) - 120, height: 50),
-            font: .systemFont(ofSize: 28, weight: .semibold),
-            color: UIColor.white.withAlphaComponent(0.45), align: .center, lines: 1)
-        }
+        sung(line, CGRect(x: 60, y: 120, width: fw - 120, height: 230), 56, 3, .center)
+        drawContext(
+          next, CGRect(x: 60, y: 366, width: fw - 120, height: 50), size: 28, align: .center,
+          distance: 1, lines: 1)
       } else {
         drawText(
-          meta.title, CGRect(x: 60, y: 190, width: CGFloat(W) - 120, height: 130),
+          meta.title, CGRect(x: 60, y: 190, width: fw - 120, height: 130),
           font: .systemFont(ofSize: 50, weight: .heavy), color: .white, align: .center, lines: 2)
       }
-      drawThinProgress(pos: pos)
+      bar(60, fh - 70, fw - 120, true)
     default:  // lyrics
       if hasLyrics {
-        drawLine(
-          line.isEmpty ? "♪" : line, in: CGRect(x: 48, y: 150, width: CGFloat(W) - 96, height: 200),
-          size: 48, maxLines: 2, fill: fill, align: .center)
-        if !next.isEmpty {
-          drawText(
-            next, CGRect(x: 48, y: 365, width: CGFloat(W) - 96, height: 44),
-            font: .systemFont(ofSize: 27, weight: .semibold),
-            color: UIColor.white.withAlphaComponent(0.5), align: .center, lines: 1)
-        }
+        sung(line.isEmpty ? "♪" : line, CGRect(x: 48, y: 146, width: fw - 96, height: 200), 48, 2, .center)
+        drawContext(
+          next, CGRect(x: 48, y: 360, width: fw - 96, height: 44), size: 27, align: .center,
+          distance: 1, lines: 1)
       } else {
         drawText(
           meta.showLyrics ? meta.noLyrics : meta.artist,
-          CGRect(x: 48, y: 190, width: CGFloat(W) - 96, height: 110),
+          CGRect(x: 48, y: 190, width: fw - 96, height: 110),
           font: .systemFont(ofSize: 40, weight: .bold),
           color: UIColor.white.withAlphaComponent(0.85), align: .center, lines: 2)
         if !meta.upNext.isEmpty {
           drawText(
-            meta.upNext, CGRect(x: 48, y: 330, width: CGFloat(W) - 96, height: 40),
+            meta.upNext, CGRect(x: 48, y: 330, width: fw - 96, height: 40),
             font: .systemFont(ofSize: 24, weight: .semibold),
             color: UIColor.white.withAlphaComponent(0.55), align: .center, lines: 1)
         }
       }
-      drawProgress(
-        pos: pos, playing: playing, rect: CGRect(x: 48, y: 470, width: CGFloat(W) - 96, height: 30))
+      bar(48, 456, fw - 96, true)
     }
   }
 
@@ -617,29 +663,11 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
             g, start: CGPoint(x: 0, y: CGFloat(H) * 0.38), end: CGPoint(x: 0, y: CGFloat(H)),
             options: [.drawsAfterEndLocation])
         }
-      } else if let blur, m.style != "minimal" && m.style != "bar" {
-        let s = max(CGFloat(W) / blur.size.width, CGFloat(H) / blur.size.height)
-        let sz = CGSize(width: blur.size.width * s, height: blur.size.height * s)
-        blur.draw(
-          in: CGRect(
-            x: (CGFloat(W) - sz.width) / 2, y: (CGFloat(H) - sz.height) / 2, width: sz.width,
-            height: sz.height))
-        UIColor.black.withAlphaComponent(0.5).setFill()
-        ctx.fill(full)
       } else {
-        let colors =
-          [
-            m.accent.withAlphaComponent(1).cgColor,
-            UIColor(red: 0.04, green: 0.04, blue: 0.07, alpha: 1).cgColor,
-          ] as CFArray
-        if let g = CGGradient(
-          colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])
-        {
-          ctx.drawLinearGradient(
-            g, start: .zero, end: CGPoint(x: CGFloat(W) * 0.6, y: CGFloat(H)), options: [])
-        }
-        UIColor.black.withAlphaComponent(0.25).setFill()
-        ctx.fill(full)
+        // the player's ambient light: dark base, blurred cover flood, the cover's colour lobes
+        PiPEngine.drawAmbient(
+          ctx, size: CGSize(width: W, height: H), colors: m.ambient, level: m.ambientLevel,
+          blur: blur, accent: m.accent)
       }
 
       switch m.style {
@@ -704,77 +732,318 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     ctx.restoreGState()
   }
 
-  /// The sung line: fits the box (smaller type for long lines); a one-line text fills left→right
-  private func drawLine(
-    _ s: String, in rect: CGRect, size: CGFloat, maxLines: Int, fill: Double,
-    align: NSTextAlignment
-  ) {
-    var fs = size
-    var font = UIFont.systemFont(ofSize: fs, weight: .heavy)
-    var bounds = PiPEngine.measure(s, font: font, width: rect.width)
-    while fs > 22 && bounds.height > rect.height {
-      fs -= 4
-      font = UIFont.systemFont(ofSize: fs, weight: .heavy)
-      bounds = PiPEngine.measure(s, font: font, width: rect.width)
-    }
-    let oneLine = bounds.height < font.lineHeight * 1.6
-    let h = min(rect.height, ceil(bounds.height))
-    let box = CGRect(x: rect.minX, y: rect.midY - h / 2, width: rect.width, height: h + 4)
-    if oneLine && fill > 0 && fill < 1 {
-      let textW = min(rect.width, ceil(PiPEngine.measureOneLine(s, font: font)))
-      let x0: CGFloat =
-        align == .center ? rect.midX - textW / 2 : align == .left ? rect.minX : rect.maxX - textW
-      PiPEngine.text(
-        s, box, font: font, color: UIColor.white.withAlphaComponent(0.42), align: align,
-        lines: maxLines)
-      guard let ctx = UIGraphicsGetCurrentContext() else { return }
-      ctx.saveGState()
-      ctx.clip(to: CGRect(x: x0, y: box.minY - 10, width: textW * CGFloat(fill), height: box.height + 20))
-      PiPEngine.text(s, box, font: font, color: .white, align: align, lines: maxLines)
-      ctx.restoreGState()
-    } else {
-      PiPEngine.text(s, box, font: font, color: .white, align: align, lines: maxLines)
-    }
-  }
-
   private func drawText(
     _ s: String, _ rect: CGRect, font: UIFont, color: UIColor, align: NSTextAlignment, lines: Int
   ) {
     PiPEngine.text(s, rect, font: font, color: color, align: align, lines: lines)
   }
 
-  private func drawProgress(pos: Double, playing: Bool, rect: CGRect) {
+  // MARK: lyrics effects
+
+  /// Words wrapped into at most `maxLines` rows of the box (smaller type for long lines)
+  private func layoutWords(
+    _ words: [PWord], in rect: CGRect, size: CGFloat, maxLines: Int, align: NSTextAlignment
+  ) -> ([WBox], UIFont) {
+    var fs = size
+    var font = UIFont.systemFont(ofSize: fs, weight: .heavy)
+    var rows: [[PWord]] = []
+    var space: CGFloat = 0
+    while true {
+      font = UIFont.systemFont(ofSize: fs, weight: .heavy)
+      space = PiPEngine.width(" ", font)
+      rows = []
+      var cur: [PWord] = []
+      var cw: CGFloat = 0
+      for wd in words {
+        let ww = PiPEngine.width(wd.text, font)
+        if !cur.isEmpty && cw + space + ww > rect.width {
+          rows.append(cur)
+          cur = [wd]
+          cw = ww
+        } else {
+          cw += (cur.isEmpty ? 0 : space) + ww
+          cur.append(wd)
+        }
+      }
+      if !cur.isEmpty { rows.append(cur) }
+      if fs <= 22 || (rows.count <= maxLines && CGFloat(rows.count) * font.lineHeight <= rect.height) {
+        break
+      }
+      fs -= 4
+    }
+    if rows.count > maxLines { rows = Array(rows.prefix(maxLines)) }
+    let lh = font.lineHeight
+    let top = rect.minY + (rect.height - CGFloat(rows.count) * lh) / 2
+    var boxes: [WBox] = []
+    for (ri, row) in rows.enumerated() {
+      let widths = row.map { PiPEngine.width($0.text, font) }
+      let total = widths.reduce(0, +) + space * CGFloat(max(0, row.count - 1))
+      var cx: CGFloat
+      switch align {
+      case .center: cx = rect.minX + (rect.width - min(rect.width, total)) / 2
+      case .right: cx = rect.maxX - total
+      default: cx = rect.minX
+      }
+      for (i, wd) in row.enumerated() {
+        boxes.append(
+          WBox(
+            w: wd, x: cx, y: top + CGFloat(ri) * lh, width: widths[i],
+            gap: i < row.count - 1 ? space : 0))
+        cx += widths[i] + space
+      }
+    }
+    return (boxes, font)
+  }
+
+  /// The sung line, word by word, in the chosen effect (mirrors src/services/pip/pipLyricsFx.ts)
+  private func drawSung(
+    _ s: String, in rect: CGRect, size: CGFloat, maxLines: Int, align: NSTextAlignment,
+    t: Double, lineStart: Double, lineEnd: Double, idx: Int
+  ) {
     guard let ctx = UIGraphicsGetCurrentContext() else { return }
-    let d = meta.duration
-    let f = d > 0 ? CGFloat(max(0, min(1, pos / d))) : 0
-    let bar = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: 6)
-    UIColor.white.withAlphaComponent(0.22).setFill()
-    UIBezierPath(roundedRect: bar, cornerRadius: 3).fill()
-    meta.accent.withAlphaComponent(1).setFill()
-    UIBezierPath(
-      roundedRect: CGRect(x: bar.minX, y: bar.minY, width: max(6, bar.width * f), height: 6),
-      cornerRadius: 3
-    ).fill()
+    let realWords = idx >= 0 && idx < lyrics.words.count ? lyrics.words[idx] : []
+    let real = !realWords.isEmpty
+    let words = real ? realWords : PiPEngine.estimateWords(s, lineStart, lineEnd)
+    if words.isEmpty { return }
+    let (boxes, font) = layoutWords(words, in: rect, size: size, maxLines: maxLines, align: align)
+    let fx = meta.effect
+    let accent = meta.accent
+    let lh = font.lineHeight
+    // line-level effects light the whole line unless the lyrics have real word timing
+    let wholeLine = !real && (fx == "glow" || fx == "depth" || fx == "neon" || fx == "minimal")
+    func frac(_ w: PWord) -> Double { max(0, min(1, (t - w.start) / max(0.12, w.end - w.start))) }
+    func lit(_ w: PWord) -> Bool { wholeLine || t >= w.start }
+    func put(_ text: String, _ x: CGFloat, _ y: CGFloat, _ color: UIColor) {
+      (text as NSString).draw(
+        at: CGPoint(x: x, y: y), withAttributes: [.font: font, .foregroundColor: color])
+    }
+    func noShadow() { ctx.setShadow(offset: .zero, blur: 0, color: nil) }
+    let dim = UIColor.white.withAlphaComponent(0.42)
+    // Reduce Motion: no hops, jolts or zoom — colour and fades only
+    let still = UIAccessibility.isReduceMotionEnabled
     ctx.saveGState()
-    let font = UIFont.monospacedDigitSystemFont(ofSize: 18, weight: .semibold)
-    let col = UIColor.white.withAlphaComponent(0.7)
-    PiPEngine.text(
-      PiPEngine.mmss(pos), CGRect(x: rect.minX, y: rect.minY + 10, width: 120, height: 24),
-      font: font, color: col, align: .left, lines: 1)
-    PiPEngine.text(
-      d > 0 ? "-" + PiPEngine.mmss(max(0, d - pos)) : (playing ? "" : "❚❚"),
-      CGRect(x: rect.maxX - 120, y: rect.minY + 10, width: 120, height: 24), font: font,
-      color: col, align: .right, lines: 1)
+    defer { ctx.restoreGState() }
+
+    switch fx {
+    case "karaoke":
+      for b in boxes {
+        noShadow()
+        put(b.w.text, b.x, b.y, dim)
+        let f = CGFloat(frac(b.w))
+        if f <= 0 { continue }
+        ctx.saveGState()
+        ctx.clip(to: CGRect(x: b.x - 2, y: b.y - 8, width: (b.width + 4) * f, height: lh + 16))
+        ctx.setShadow(offset: .zero, blur: 12, color: accent.withAlphaComponent(0.7).cgColor)
+        put(b.w.text, b.x, b.y, accent)
+        ctx.restoreGState()
+      }
+    case "wave":
+      for b in boxes {
+        let age = t - b.w.start
+        var dy = 0.0
+        if age >= 0 && age < 0.6 && !still {
+          dy = age < 0.13 ? -(age / 0.13) : -exp(-(age - 0.13) * 7) * cos((age - 0.13) * 15)
+        }
+        if age >= 0 {
+          ctx.setShadow(offset: .zero, blur: 10, color: accent.withAlphaComponent(0.55).cgColor)
+        } else {
+          noShadow()
+        }
+        put(b.w.text, b.x, b.y + CGFloat(dy) * font.pointSize * 0.14, age >= 0 ? .white : dim)
+      }
+    case "neon":
+      for b in boxes {
+        if lit(b.w) {
+          ctx.setShadow(offset: .zero, blur: 24, color: accent.cgColor)
+          put(b.w.text, b.x, b.y, .white)
+          ctx.setShadow(offset: .zero, blur: 10, color: accent.cgColor)
+          put(b.w.text, b.x, b.y, .white)
+        } else {
+          noShadow()
+          put(b.w.text, b.x, b.y, accent.withAlphaComponent(0.6))
+        }
+      }
+    case "focus":
+      noShadow()
+      for b in boxes {
+        let k = CGFloat(max(0, min(1, (t - b.w.start) / 0.28)))
+        if k < 1 {
+          PiPEngine.blurDraw(
+            ctx, b.w.text, font: font, at: CGPoint(x: b.x, y: b.y),
+            color: UIColor.white.withAlphaComponent(0.85 * (1 - k)), blur: 11)
+        }
+        if k > 0 {
+          ctx.setAlpha(k)
+          put(b.w.text, b.x, b.y, .white)
+          ctx.setAlpha(1)
+        }
+      }
+    case "typewriter":
+      noShadow()
+      let ink = PiPEngine.inkOn(accent)
+      let ghost = UIColor.white.withAlphaComponent(0.16)
+      var cursorDone = false
+      for b in boxes {
+        let f = frac(b.w)
+        let chars = Array(b.w.text)
+        let n = f >= 1 ? chars.count : min(chars.count, Int(ceil(Double(chars.count) * f)))
+        let shown = String(chars[0..<n])
+        if !shown.isEmpty { put(shown, b.x, b.y, .white) }
+        let sx = b.x + (shown.isEmpty ? 0 : PiPEngine.width(shown, font))
+        if n >= chars.count { continue }
+        if !cursorDone {
+          // a block cursor on the next letter
+          cursorDone = true
+          let ch = String(chars[n])
+          let cw = PiPEngine.width(ch, font)
+          accent.setFill()
+          UIRectFill(CGRect(x: sx - 1, y: b.y + lh * 0.07, width: cw + 2, height: lh * 0.9))
+          put(ch, sx, b.y, ink)
+          if n + 1 < chars.count { put(String(chars[(n + 1)...]), sx + cw, b.y, ghost) }
+        } else {
+          put(String(chars[n...]), sx, b.y, ghost)
+        }
+      }
+    case "marker":
+      noShadow()
+      let ink = PiPEngine.inkOn(accent)
+      for b in boxes {
+        put(b.w.text, b.x, b.y, dim)
+        let f = CGFloat(frac(b.w))
+        if f <= 0 { continue }
+        let bw = (b.width + b.gap + 3) * f
+        accent.withAlphaComponent(0.92).setFill()
+        UIBezierPath(
+          roundedRect: CGRect(x: b.x - 3, y: b.y + lh * 0.28, width: bw, height: lh * 0.66),
+          cornerRadius: 6
+        ).fill()
+        ctx.saveGState()
+        ctx.clip(to: CGRect(x: b.x - 3, y: b.y - 6, width: bw, height: lh + 12))
+        put(b.w.text, b.x, b.y, ink)
+        ctx.restoreGState()
+      }
+    case "glitch":
+      noShadow()
+      let red = UIColor(red: 1, green: 0.18, blue: 0.33, alpha: 1)
+      let cyan = UIColor(red: 0.13, green: 0.89, blue: 1, alpha: 1)
+      for b in boxes {
+        let age = t - b.w.start
+        if age >= 0.22 {
+          put(b.w.text, b.x, b.y, .white)
+          continue
+        }
+        // unsung: split layers; just sung: they jolt and lock together
+        let k = age < 0 ? 1.0 : 1 - age / 0.22
+        let jolt = CGFloat(age >= 0 && !still ? sin(age * 95) * 5 * k : 0)
+        let sp = CGFloat(3.5 * k)
+        ctx.saveGState()
+        ctx.setAlpha(CGFloat(0.6 * max(0.35, k)))
+        ctx.setBlendMode(.plusLighter)
+        put(b.w.text, b.x - sp + jolt, b.y, red)
+        put(b.w.text, b.x + sp + jolt, b.y, cyan)
+        ctx.restoreGState()
+        put(b.w.text, b.x + jolt, b.y, age >= 0 ? .white : UIColor.white.withAlphaComponent(0.5))
+      }
+    case "glow":
+      // the line grows in and glows (Lyrics screen: zoom + glow)
+      let a = max(0, min(1, (t - lineStart) / 0.35))
+      let e = CGFloat(1 - pow(1 - a, 3))
+      let sc = still ? 1 : 0.93 + 0.07 * e
+      ctx.translateBy(x: rect.midX, y: rect.midY)
+      ctx.scaleBy(x: sc, y: sc)
+      ctx.translateBy(x: -rect.midX, y: -rect.midY)
+      ctx.setAlpha(0.45 + 0.55 * e)
+      for b in boxes {
+        if lit(b.w) {
+          ctx.setShadow(offset: .zero, blur: 18, color: accent.withAlphaComponent(0.75).cgColor)
+          put(b.w.text, b.x, b.y, .white)
+        } else {
+          noShadow()
+          put(b.w.text, b.x, b.y, dim)
+        }
+      }
+    default:
+      // depth / minimal: bright and dim (depth adds a soft white halo to the sung words)
+      for b in boxes {
+        let on = lit(b.w)
+        if fx == "depth" && on {
+          ctx.setShadow(
+            offset: .zero, blur: 10, color: UIColor.white.withAlphaComponent(0.35).cgColor)
+        } else {
+          noShadow()
+        }
+        put(b.w.text, b.x, b.y, on ? .white : UIColor.white.withAlphaComponent(0.4))
+      }
+    }
+  }
+
+  /// A neighbouring (not sung) line in the effect's look: dimmer with distance in Depth, accent
+  /// in Neon, out of focus in Focus, faint in Typewriter
+  private func drawContext(
+    _ s: String, _ rect: CGRect, size: CGFloat, align: NSTextAlignment, distance: Int, lines: Int
+  ) {
+    guard !s.isEmpty, let ctx = UIGraphicsGetCurrentContext() else { return }
+    let d = max(1, distance)
+    let font = UIFont.systemFont(ofSize: size, weight: .bold)
+    var color = UIColor.white.withAlphaComponent(d == 1 ? 0.5 : 0.28)
+    var blur: CGFloat = 0
+    switch meta.effect {
+    case "depth":
+      let alphas: [CGFloat] = [0, 0.5, 0.32, 0.2]
+      color = UIColor.white.withAlphaComponent(alphas[min(3, d)])
+    case "neon":
+      color = meta.accent.withAlphaComponent(d == 1 ? 0.55 : 0.32)
+    case "focus":
+      color = UIColor.white.withAlphaComponent(d == 1 ? 0.6 : 0.4)
+      blur = CGFloat(7 + d * 2)
+    case "typewriter":
+      color = UIColor.white.withAlphaComponent(d == 1 ? 0.22 : 0.14)
+    default:
+      break
+    }
+    if blur == 0 {
+      PiPEngine.text(s, rect, font: font, color: color, align: align, lines: lines)
+      return
+    }
+    ctx.saveGState()
+    ctx.setShadow(offset: CGSize(width: -20000, height: 0), blur: blur, color: color.cgColor)
+    NSAttributedString(string: s, attributes: PiPEngine.plainAttrs(font, .white, align, lines)).draw(
+      with: rect.offsetBy(dx: 20000, dy: 0),
+      options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], context: nil)
     ctx.restoreGState()
   }
 
-  private func drawThinProgress(pos: Double) {
+  /// Seek bar: track, accent fill and a knob; elapsed / remaining under it. (The PiP window's
+  /// own controls also show progress and ±skip — iOS gives a sample-buffer window no scrubbing.)
+  private func drawSeekBar(pos: Double, playing: Bool, x: CGFloat, y: CGFloat, w: CGFloat, times: Bool) {
+    guard let ctx = UIGraphicsGetCurrentContext() else { return }
     let d = meta.duration
     let f = d > 0 ? CGFloat(max(0, min(1, pos / d))) : 0
-    UIColor.white.withAlphaComponent(0.18).setFill()
-    UIRectFill(CGRect(x: 0, y: CGFloat(H) - 6, width: CGFloat(W), height: 6))
+    let h: CGFloat = 8
+    ctx.saveGState()
+    ctx.setShadow(offset: .zero, blur: 0, color: nil)
+    UIColor.white.withAlphaComponent(0.24).setFill()
+    UIBezierPath(roundedRect: CGRect(x: x, y: y, width: w, height: h), cornerRadius: h / 2).fill()
     meta.accent.setFill()
-    UIRectFill(CGRect(x: 0, y: CGFloat(H) - 6, width: CGFloat(W) * f, height: 6))
+    UIBezierPath(
+      roundedRect: CGRect(x: x, y: y, width: max(h, w * f), height: h), cornerRadius: h / 2
+    ).fill()
+    if d > 0 {
+      ctx.setShadow(offset: .zero, blur: 6, color: UIColor.black.withAlphaComponent(0.4).cgColor)
+      UIColor.white.setFill()
+      ctx.fillEllipse(in: CGRect(x: x + w * f - 10, y: y + h / 2 - 10, width: 20, height: 20))
+    }
+    ctx.restoreGState()
+    guard times else { return }
+    let font = UIFont.monospacedDigitSystemFont(ofSize: 19, weight: .semibold)
+    let col = UIColor.white.withAlphaComponent(0.75)
+    PiPEngine.text(
+      PiPEngine.mmss(pos), CGRect(x: x, y: y + 16, width: 140, height: 26),
+      font: font, color: col, align: .left, lines: 1)
+    PiPEngine.text(
+      d > 0 ? "-" + PiPEngine.mmss(max(0, d - pos)) : (playing ? "" : "❚❚"),
+      CGRect(x: x + w - 140, y: y + 16, width: 140, height: 26), font: font,
+      color: col, align: .right, lines: 1)
   }
 
   // MARK: artwork
@@ -822,6 +1091,113 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
   }
 
   // MARK: helpers
+
+  /// word starts estimated from length when the lyrics only time whole lines (same as the app)
+  static func estimateWords(_ text: String, _ start: Double, _ end: Double) -> [PWord] {
+    let parts = text.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" }).map(String.init)
+    if parts.isEmpty { return [] }
+    let span = min(12, max(0.8, end - start))
+    let dur = span * 0.82
+    let total = Double(parts.reduce(0) { $0 + $1.count + 1 })
+    var acc = 0.0
+    return parts.map { p in
+      let st = start + dur * acc / total
+      acc += Double(p.count + 1)
+      return PWord(text: p, start: st, end: start + dur * acc / total)
+    }
+  }
+
+  static func width(_ s: String, _ font: UIFont) -> CGFloat {
+    (s as NSString).size(withAttributes: [.font: font]).width
+  }
+
+  /// blurred text: drawn far off the canvas, only its shadow (offset back) lands on it
+  static func blurDraw(
+    _ ctx: CGContext, _ s: String, font: UIFont, at p: CGPoint, color: UIColor, blur: CGFloat
+  ) {
+    ctx.saveGState()
+    ctx.setShadow(offset: CGSize(width: -20000, height: 0), blur: blur, color: color.cgColor)
+    (s as NSString).draw(
+      at: CGPoint(x: p.x + 20000, y: p.y), withAttributes: [.font: font, .foregroundColor: UIColor.white])
+    ctx.restoreGState()
+  }
+
+  /// dark ink on a light accent, white on a dark one
+  static func inkOn(_ c: UIColor) -> UIColor {
+    var r: CGFloat = 0
+    var g: CGFloat = 0
+    var b: CGFloat = 0
+    var a: CGFloat = 0
+    c.getRed(&r, green: &g, blue: &b, alpha: &a)
+    func lin(_ v: CGFloat) -> CGFloat { v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+    let l = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+    return l > 0.55 ? UIColor(red: 0.067, green: 0.067, blue: 0.086, alpha: 1) : .white
+  }
+
+  static func plainAttrs(_ font: UIFont, _ color: UIColor, _ align: NSTextAlignment, _ lines: Int)
+    -> [NSAttributedString.Key: Any]
+  {
+    let p = NSMutableParagraphStyle()
+    p.alignment = align
+    p.lineBreakMode = lines == 1 ? .byTruncatingTail : .byWordWrapping
+    return [.font: font, .foregroundColor: color, .paragraphStyle: p]
+  }
+
+  /// The player's ambient light (AmbientBackdrop): dark base, the blurred cover flooding from the
+  /// top, five soft colour lobes (primary + the cover's corners), and the legibility scrim.
+  static func drawAmbient(
+    _ ctx: CGContext, size: CGSize, colors: [UIColor], level: Double, blur: UIImage?,
+    accent: UIColor
+  ) {
+    let W = size.width
+    let H = size.height
+    let has = colors.count >= 6
+    let primary = has ? colors[0] : accent
+    let dark = has ? colors[1] : UIColor(red: 0.04, green: 0.04, blue: 0.07, alpha: 1)
+    let corners: [UIColor] = has ? Array(colors[2..<6]) : [accent, accent, accent, accent]
+    let lv = CGFloat(has ? max(0.35, level) : 0.7)
+    let space = CGColorSpaceCreateDeviceRGB()
+    let floor = UIColor(red: 0.02, green: 0.02, blue: 0.027, alpha: 1)
+    if let g = CGGradient(
+      colorsSpace: space, colors: [dark.cgColor, floor.cgColor] as CFArray, locations: [0, 1])
+    {
+      ctx.drawLinearGradient(
+        g, start: CGPoint(x: W * 0.2, y: 0), end: CGPoint(x: W * 0.8, y: H),
+        options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    }
+    if let blur {
+      let s = max(W * 1.9 / blur.size.width, H * 1.9 / blur.size.height)
+      let sz = CGSize(width: blur.size.width * s, height: blur.size.height * s)
+      blur.draw(
+        in: CGRect(x: W / 2 - sz.width / 2, y: H * 0.25 - sz.height / 2, width: sz.width, height: sz.height),
+        blendMode: .normal, alpha: 0.62 * lv)
+    }
+    let R = max(W, H) * 0.42
+    func lobe(_ cx: CGFloat, _ cy: CGFloat, _ c: UIColor, _ o: CGFloat, _ r: CGFloat) {
+      let a = min(1, o * 0.9 * lv)
+      let cs = [
+        c.withAlphaComponent(a).cgColor, c.withAlphaComponent(a * 0.45).cgColor,
+        c.withAlphaComponent(0).cgColor,
+      ]
+      guard let g = CGGradient(colorsSpace: space, colors: cs as CFArray, locations: [0, 0.45, 1])
+      else { return }
+      ctx.drawRadialGradient(
+        g, startCenter: CGPoint(x: cx, y: cy), startRadius: 0, endCenter: CGPoint(x: cx, y: cy),
+        endRadius: r, options: [])
+    }
+    lobe(W * 0.5, H * 0.5, primary, 0.75, R * 1.25)
+    lobe(W * 0.3, H * 0.3, corners[0], 0.9, R)
+    lobe(W * 0.7, H * 0.3, corners[1], 0.9, R)
+    lobe(W * 0.3, H * 0.7, corners[2], 0.9, R)
+    lobe(W * 0.7, H * 0.7, corners[3], 0.9, R)
+    let scrim = [
+      UIColor.black.withAlphaComponent(0.12).cgColor, UIColor.black.withAlphaComponent(0.32).cgColor,
+      UIColor.black.withAlphaComponent(0.55).cgColor,
+    ]
+    if let g = CGGradient(colorsSpace: space, colors: scrim as CFArray, locations: [0, 0.45, 1]) {
+      ctx.drawLinearGradient(g, start: .zero, end: CGPoint(x: 0, y: H), options: [])
+    }
+  }
 
   static func downscale(_ img: UIImage, max side: CGFloat) -> UIImage? {
     let s = min(1, side / max(img.size.width, img.size.height))
@@ -926,8 +1302,20 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     _ pictureInPictureController: AVPictureInPictureController,
     skipByInterval skipInterval: CMTime, completion completionHandler: @escaping () -> Void
   ) {
+    // move the clock right away so the window's progress jumps with the tap, then let JS seek
+    queue.sync {
+      let c = self.clock()
+      let d = self.meta.duration
+      var target = c.pos + skipInterval.seconds
+      if d > 0 { target = min(target, d - 0.5) }
+      self.jsPos = max(0, target)
+      self.jsAt = CACurrentMediaTime()
+      self.syncTimebase()
+    }
     module?.sendCommand(["type": "seek", "delta": skipInterval.seconds])
     completionHandler()
+    pictureInPictureController.invalidatePlaybackState()
+    queue.async { self.renderNow(force: true) }
   }
 
   func pictureInPictureControllerShouldProhibitBackgroundAudioPlayback(
@@ -1047,6 +1435,11 @@ public class HolySicPiPModule: Module {
 
     Function("setPlayback") { (position: Double, playing: Bool) in
       self.engine.setPlayback(position: position, playing: playing)
+    }
+
+    /// real word timing per line (karaoke / typewriter… follow the voice exactly)
+    Function("setWords") { (texts: [[String]], starts: [[Double]], ends: [[Double]]) in
+      self.engine.setWords(texts: texts, starts: starts, ends: ends)
     }
 
     OnDestroy {

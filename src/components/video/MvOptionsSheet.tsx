@@ -291,6 +291,36 @@ const Body: React.FC<{ track: Track }> = ({ track }) => {
                 accessibilityLabel={vi ? 'Tự phát MV' : 'Play videos automatically'}
               />
             </View>
+            {prefs.videoAmbient && (
+              <View style={[s.row, s.divider]}>
+                <View style={[s.icon, { backgroundColor: palette.accent + '22' }]}>
+                  <Ionicons name="sunny" size={17} color={palette.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.rowTitle}>
+                    {vi ? 'Ánh sáng khi ẩn MV' : 'Light while the video is hidden'}
+                  </Text>
+                  <Text style={s.rowDesc}>
+                    {prefs.videoAmbientWhenHidden !== false
+                      ? vi
+                        ? 'Xem ảnh bìa, cảnh MV vẫn chiếu nền phía sau'
+                        : 'On the cover, the video’s scenes still light the background'
+                      : vi
+                        ? 'Xem ảnh bìa thì nền về ánh sáng của ảnh bìa'
+                        : 'On the cover, the background takes the cover’s light'}
+                  </Text>
+                </View>
+                <Switch
+                  value={prefs.videoAmbientWhenHidden !== false}
+                  onValueChange={(v) => {
+                    haptic('selection');
+                    updatePrefs({ videoAmbientWhenHidden: v });
+                  }}
+                  trackColor={{ false: c.field, true: palette.accent }}
+                  accessibilityLabel={vi ? 'Ánh sáng khi ẩn MV' : 'Light while the video is hidden'}
+                />
+              </View>
+            )}
           </View>
           <Text style={s.foot}>
             {vi

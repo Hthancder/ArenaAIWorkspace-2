@@ -161,6 +161,18 @@ export const VideoSettings: React.FC<{ fontFamily?: string }> = ({ fontFamily })
           sw(prefs.videoAmbient, (v) => set({ videoAmbient: v }), 'ambient', !on)
         )}
         {row(
+          vi ? 'Ánh sáng khi ẩn MV' : 'Light while the video is hidden',
+          vi
+            ? 'Khi bạn bấm nút máy quay để xem ảnh bìa, cảnh video vẫn chiếu sáng nền phía sau. Tắt để nền về ánh sáng ảnh bìa.'
+            : 'When the camera button switches to the cover, the video’s scenes keep lighting the background. Off: the cover’s own light returns.',
+          sw(
+            prefs.videoAmbientWhenHidden !== false,
+            (v) => set({ videoAmbientWhenHidden: v }),
+            vi ? 'Ánh sáng khi ẩn MV' : 'Light while the video is hidden',
+            !on || !prefs.videoAmbient
+          )
+        )}
+        {row(
           vi ? 'Giữ cảnh ở nền ứng dụng' : 'Keep the scene behind the app',
           vi
             ? 'Ngoài trình phát, cảnh cuối đứng yên phía sau các menu (không chuyển động).'

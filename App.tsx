@@ -204,6 +204,7 @@ const HolySicShell: React.FC = () => {
             hidden={isPlayerOpen}
             level={prefs.videoAmbientLevel * (scheme === 'light' ? 0.45 : 0.6)}
             light={scheme === 'light'}
+            whenHidden={prefs.videoAmbientWhenHidden !== false}
           />
         )}
         <Perf id="tabs">

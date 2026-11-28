@@ -4,9 +4,11 @@ import { PipButton } from './PipButton';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Animated,
   Easing,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,7 +22,8 @@ import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { storedLyricsInfo, useStoredLyrics } from '../../services/lyrics/lyricsStore';
 import { openLyricsEditor, providerLabel } from './LyricsEditor';
-import { usePositionSec } from '../../services/audio/playbackClock';
+import { PlaybackClock, usePositionSec } from '../../services/audio/playbackClock';
+import { luminance } from '../../theme/colorMath';
 import { Tap } from '../ui/Tap';
 import { perfCount } from '../../services/perfProbe';
 import { useActiveLyricIndex } from '../../services/lyrics/lyricClock';
@@ -543,7 +546,45 @@ export const LYRICS_EFFECTS: {
     descVi: 'Không hiệu ứng, chỉ đậm nhạt — dễ đọc nhất',
     descEn: 'No effects, just bright and dim — easiest to read',
   },
+  {
+    id: 'focus',
+    vi: 'Lấy nét',
+    en: 'Focus',
+    descVi: 'Chữ mờ nhoè rồi nét dần đúng lúc được hát, như máy quay lấy nét',
+    descEn: 'Words sit out of focus and pull sharp as they are sung, like a camera',
+  },
+  {
+    id: 'typewriter',
+    vi: 'Gõ chữ',
+    en: 'Typewriter',
+    descVi: 'Từng ký tự hiện ra theo giọng hát, con trỏ chạy theo',
+    descEn: 'Letters type out with the voice, a cursor running ahead',
+  },
+  {
+    id: 'marker',
+    vi: 'Bút dạ quang',
+    en: 'Highlighter',
+    descVi: 'Một nét bút màu nhấn quét dưới chữ theo giọng hát',
+    descEn: 'An accent-colour marker sweeps under the words as they are sung',
+  },
+  {
+    id: 'glitch',
+    vi: 'Lệch màu',
+    en: 'Glitch',
+    descVi: 'Chữ chưa hát tách lớp đỏ–xanh, khớp lại khi được hát',
+    descEn: 'Unsung words split into red and cyan, snapping together when sung',
+  },
 ];
+
+/** effects that run word by word (estimated timing when the lyrics have none) */
+// Reduce Motion: words still light up, but nothing hops, jolts or scales
+let calm = false;
+AccessibilityInfo.isReduceMotionEnabled?.()
+  .then((v) => (calm = v))
+  .catch(() => {});
+AccessibilityInfo.addEventListener?.('reduceMotionChanged', (v) => (calm = v));
+
+const FLOWING: LyricsEffect[] = ['karaoke', 'wave', 'focus', 'typewriter', 'marker', 'glitch'];
 
 const SIZES: Record<LyricsSize, { font: number; line: number }> = {
   S: { font: 21, line: 30 },
@@ -585,6 +626,34 @@ function lineLook(
           color: active ? '#FFFFFF' : past ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.4)',
         },
         scale: 1,
+        opacity: 1,
+      };
+    case 'focus':
+      // the other lines stay soft (a halo of their own colour), the sung one is crisp
+      return {
+        text: active
+          ? { color: '#FFFFFF' }
+          : {
+              color: past ? 'rgba(255,255,255,0.26)' : 'rgba(255,255,255,0.36)',
+              textShadowColor: 'rgba(255,255,255,0.4)',
+              textShadowRadius: 7,
+            },
+        scale: active ? 1 : 0.92,
+        opacity: 1,
+      };
+    case 'typewriter':
+      // paper and ink: no zoom, typed lines stay, lines ahead are faint
+      return {
+        text: {
+          color: active ? '#FFFFFF' : past ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.2)',
+        },
+        scale: 1,
+        opacity: 1,
+      };
+    case 'glitch':
+      return {
+        text: active ? { color: '#FFFFFF' } : { color: dim },
+        scale: active ? 1 : 0.9,
         opacity: 1,
       };
     default:
@@ -648,7 +717,7 @@ const ActiveLine: React.FC<{
   align: 'left' | 'center' | 'right';
   gap: number;
 }> = (p) => {
-  const flowing = p.effect === 'karaoke' || p.effect === 'wave';
+  const flowing = FLOWING.includes(p.effect);
   const hasWords = !!p.line.words && p.line.words.length > 0;
   if (!hasWords && !flowing) {
     const look = lineLook(p.effect, p.accent, true, false, 0);
@@ -674,7 +743,25 @@ const ActiveWords: React.FC<React.ComponentProps<typeof ActiveLine>> = ({
   );
   const lit = useLitCount(words, offset, playing);
 
-  if (effect === 'karaoke' || effect === 'wave') {
+  if (effect === 'typewriter') {
+    return (
+      <TypeLine
+        words={words}
+        offset={offset}
+        playing={playing}
+        textStyle={textStyle}
+        accent={accent}
+      />
+    );
+  }
+
+  if (
+    effect === 'karaoke' ||
+    effect === 'wave' ||
+    effect === 'focus' ||
+    effect === 'marker' ||
+    effect === 'glitch'
+  ) {
     return (
       <View
         style={[
@@ -725,13 +812,60 @@ const ActiveWords: React.FC<React.ComponentProps<typeof ActiveLine>> = ({
   );
 };
 
-/** One word of a karaoke / bounce line: the lit copy fades in over the word's own duration
- *  (karaoke) or the word hops (bounce). Native-driven opacity / transform only. */
+/** Typewriter: the sung part of the line is typed out letter by letter, a block cursor sits on
+ *  the next letter. Unsung letters keep their place (ghosted), so the line never reflows. Only
+ *  the one active line re-renders, ~20×/s while playing. */
+const TypeLine: React.FC<{
+  words: LyricWord[];
+  offset: number;
+  playing: boolean;
+  textStyle: any;
+  accent: string;
+}> = ({ words, offset, playing, textStyle, accent }) => {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!playing) return;
+    const id = setInterval(() => tick((n) => (n + 1) % 1e6), 50);
+    return () => clearInterval(id);
+  }, [playing]);
+  const t = PlaybackClock.now(playing) - offset + 0.08;
+  const full = words.map((w) => w.text).join(' ');
+  let shown = 0;
+  let pos = 0;
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const span = Math.max(0.12, w.endSec - w.startSec);
+    const f = Math.max(0, Math.min(1, (t - w.startSec) / span));
+    if (f <= 0) break;
+    shown = pos + Math.ceil(w.text.length * f);
+    pos += w.text.length + 1;
+    if (f < 1) break;
+    shown = Math.min(full.length, pos); // the space after a finished word
+  }
+  const done = shown >= full.length;
+  const ink = luminance(accent) > 0.55 ? '#111116' : '#FFFFFF';
+  return (
+    <Text style={textStyle}>
+      <Text style={{ color: '#FFFFFF' }}>{full.slice(0, shown)}</Text>
+      {!done && <Text style={{ color: ink, backgroundColor: accent }}>{full.charAt(shown)}</Text>}
+      {!done && <Text style={{ color: 'rgba(255,255,255,0.16)' }}>{full.slice(shown + 1)}</Text>}
+    </Text>
+  );
+};
+
+type FlowFx = 'karaoke' | 'wave' | 'focus' | 'marker' | 'glitch';
+
+/** One word of a word-by-word line. Native-driven opacity / transform only:
+ *  karaoke  the lit copy fades in over the word's own duration
+ *  wave     the word hops
+ *  focus    a soft, haloed copy pulls into a crisp one
+ *  marker   an accent band sweeps under the word over its duration
+ *  glitch   red / cyan copies split off the unsung word snap back with a short jolt */
 const FlowWord: React.FC<{
   text: string;
   lit: boolean;
   ms: number;
-  effect: 'karaoke' | 'wave';
+  effect: FlowFx;
   accent: string;
   textStyle: any;
   gap: number;
@@ -745,10 +879,18 @@ const FlowWord: React.FC<{
     }
     Animated.timing(v, {
       toValue: 1,
-      duration: effect === 'karaoke' ? ms : 160,
+      duration:
+        effect === 'karaoke' || effect === 'marker'
+          ? ms
+          : effect === 'focus'
+            ? 280
+            : effect === 'glitch'
+              ? 220
+              : 160,
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
     }).start();
+    if (calm) return;
     if (effect === 'wave') {
       hop.setValue(0);
       Animated.sequence([
@@ -760,8 +902,124 @@ const FlowWord: React.FC<{
         }),
         Animated.spring(hop, { toValue: 0, useNativeDriver: true, speed: 14, bounciness: 10 }),
       ]).start();
+    } else if (effect === 'glitch') {
+      // a few frames of jolt as the layers lock together
+      hop.setValue(0);
+      Animated.sequence(
+        [1, -0.7, 0.45, -0.2, 0].map((x) =>
+          Animated.timing(hop, { toValue: x, duration: 36, useNativeDriver: true })
+        )
+      ).start();
     }
   }, [lit, ms, effect, v, hop]);
+
+  if (effect === 'focus') {
+    return (
+      <Animated.View
+        style={{
+          marginRight: gap,
+          transform: [
+            { scale: v.interpolate({ inputRange: [0, 1], outputRange: [calm ? 1 : 0.96, 1] }) },
+          ],
+        }}
+      >
+        <Animated.Text
+          style={[
+            textStyle,
+            styles.wordText,
+            {
+              color: 'rgba(255,255,255,0.3)',
+              textShadowColor: 'rgba(255,255,255,0.75)',
+              textShadowRadius: 9,
+              opacity: v.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+            },
+            // the web can really blur
+            Platform.OS === 'web' && ({ filter: 'blur(2.5px)' } as any),
+          ]}
+        >
+          {text}
+        </Animated.Text>
+        <Animated.Text
+          style={[textStyle, styles.wordText, styles.wordLit, { color: '#FFFFFF', opacity: v }]}
+        >
+          {text}
+        </Animated.Text>
+      </Animated.View>
+    );
+  }
+
+  if (effect === 'marker') {
+    const ink = luminance(accent) > 0.55 ? '#111116' : '#FFFFFF';
+    return (
+      // the band runs on under the space, so a sung phrase reads as one stroke
+      <View style={{ paddingRight: gap }}>
+        <Animated.View
+          style={[
+            styles.markerBand,
+            { backgroundColor: accent, transformOrigin: 'left', transform: [{ scaleX: v }] },
+          ]}
+        />
+        <Text style={[textStyle, styles.wordText, { color: 'rgba(255,255,255,0.42)' }]}>
+          {text}
+        </Text>
+        <Animated.Text
+          style={[textStyle, styles.wordText, styles.wordLit, { color: ink, opacity: v }]}
+        >
+          {text}
+        </Animated.Text>
+      </View>
+    );
+  }
+
+  if (effect === 'glitch') {
+    const split = v.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+    return (
+      <Animated.View
+        style={{
+          marginRight: gap,
+          transform: [
+            { translateX: hop.interpolate({ inputRange: [-1, 1], outputRange: [-4, 4] }) },
+          ],
+        }}
+      >
+        <Animated.Text
+          style={[
+            textStyle,
+            styles.wordText,
+            styles.wordLit,
+            {
+              color: '#FF2D55',
+              opacity: Animated.multiply(split, 0.6),
+              transform: [{ translateX: Animated.multiply(split, -2.5) }],
+            },
+          ]}
+        >
+          {text}
+        </Animated.Text>
+        <Animated.Text
+          style={[
+            textStyle,
+            styles.wordText,
+            styles.wordLit,
+            {
+              color: '#22E4FF',
+              opacity: Animated.multiply(split, 0.6),
+              transform: [{ translateX: Animated.multiply(split, 2.5) }],
+            },
+          ]}
+        >
+          {text}
+        </Animated.Text>
+        <Text style={[textStyle, styles.wordText, { color: 'rgba(255,255,255,0.5)' }]}>{text}</Text>
+        <Animated.Text
+          style={[textStyle, styles.wordText, styles.wordLit, { color: '#FFFFFF', opacity: v }]}
+        >
+          {text}
+        </Animated.Text>
+      </Animated.View>
+    );
+  }
+
   const litColor = effect === 'karaoke' ? accent : '#FFFFFF';
   return (
     <Animated.View
@@ -843,6 +1101,8 @@ const LyricRow: React.FC<{
           fontSize: font,
           lineHeight: lineH,
           fontWeight: effect === 'minimal' ? '700' : '800',
+          // written without a time in the lyrics editor: its moment is a guess
+          ...(line.estimated && !isActive ? { fontStyle: 'italic' as const } : null),
         };
 
     return (
@@ -1058,6 +1318,16 @@ const styles = StyleSheet.create({
   // the word box sizes to the word; lines keep their height
   wordText: { textAlign: 'left' },
   wordLit: { position: 'absolute', left: 0, top: 0 },
+  // a highlighter stroke: the lower ⅔ of the line, slightly past the word's start
+  markerBand: {
+    position: 'absolute',
+    left: -3,
+    right: 0,
+    top: '24%',
+    bottom: '10%',
+    borderRadius: 5,
+    opacity: 0.92,
+  },
   footerText: {
     color: 'rgba(255,255,255,0.32)',
     fontSize: 11.5,

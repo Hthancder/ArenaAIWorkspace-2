@@ -19,7 +19,12 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useVideoState, VideoLive, VideoStore } from '../../services/video/videoStore';
+import {
+  useVideoHidden,
+  useVideoState,
+  VideoLive,
+  VideoStore,
+} from '../../services/video/videoStore';
 import { Tap } from '../ui/Tap';
 
 /** registers a moving view while mounted & live */
@@ -211,12 +216,16 @@ export const VideoAmbient: React.FC<{
 
 /** Behind the tabs: the last scene, still (menus never move). Fades in; off while the full player
  *  covers the app, so the blur isn't drawn twice. */
-export const AppVideoAmbient: React.FC<{ hidden: boolean; level: number; light?: boolean }> = ({
-  hidden,
-  level,
-  light,
-}) => {
+export const AppVideoAmbient: React.FC<{
+  hidden: boolean;
+  level: number;
+  light?: boolean;
+  /** keep the light while the camera button hides the picture */
+  whenHidden?: boolean;
+}> = ({ hidden: hiddenIn, level, light, whenHidden = true }) => {
   const st = useVideoState();
+  const userHid = useVideoHidden();
+  const hidden = hiddenIn || (userHid && !whenHidden);
   const ready = st.status === 'ready';
   const fade = useRef(new Animated.Value(0)).current;
   const show = ready && !hidden;

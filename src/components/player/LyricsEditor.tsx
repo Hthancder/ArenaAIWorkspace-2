@@ -41,6 +41,7 @@ import { UiColors, useThemedStyles, useUi } from '../../theme/ui';
 import { LyricsData, Track } from '../../types/music';
 import { ArtworkImage } from '../ArtworkImage';
 import { Tap } from '../ui/Tap';
+import { LyricsTimingPane } from './LyricsTimingPane';
 
 // ---------- open/close store ----------
 
@@ -64,6 +65,10 @@ export const useLyricsEditorTarget = () =>
   );
 
 type Tab = 'search' | 'write';
+
+// Unsaved edits per song, kept while the app runs: closing the editor to find a spot in the
+// player and coming back picks up exactly where you left off.
+const drafts = new Map<string, string>();
 
 const sourceName = (id: string) => LYRICS_SOURCES.find((s) => s.id === id)?.name || id;
 
@@ -118,6 +123,9 @@ const EditorBody: React.FC<{ track: Track; startTab?: Tab }> = ({ track, startTa
     lyrics: playingLyrics,
     reloadLyrics,
     downloads,
+    playTrack,
+    isPlaying,
+    lyricsOffsetSec,
   } = useHolySic();
   const vi = prefs.language === 'vi';
   useStoredLyrics();
@@ -196,22 +204,75 @@ const EditorBody: React.FC<{ track: Track; startTab?: Tab }> = ({ track, startTa
     () => (current && current.lines.length ? lyricsToLrc(current) : ''),
     [current]
   );
-  const [text, setText] = useState<string | null>(null); // null = untouched
+  // null = untouched; an unsaved draft from earlier in this session comes back
+  const [text, setTextRaw] = useState<string | null>(() => drafts.get(track.id) ?? null);
+  const [restored] = useState(() => drafts.has(track.id));
   const shownText = text ?? initialText;
   const sel = useRef({ start: 0, end: 0 });
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>();
+  // undo for timing changes (typing has the keyboard's own undo)
+  const history = useRef<string[]>([]);
+  const [, bumpHistory] = useState(0);
+  const change = (next: string) => {
+    if (next === shownText) return;
+    history.current.push(shownText);
+    if (history.current.length > 80) history.current.shift();
+    bumpHistory((n) => n + 1);
+    setTextRaw(next);
+  };
+  const undo = () => {
+    const prev = history.current.pop();
+    if (prev === undefined) return;
+    bumpHistory((n) => n + 1);
+    setTextRaw(prev);
+  };
+  const [mode, setMode] = useState<'text' | 'timing'>('text');
+  // lines without a time are kept (spread between their timed neighbours) — never dropped
   const parsed = useMemo(
-    () => (shownText.trim() ? lyricsFromText(shownText, track.durationSec) : null),
+    () =>
+      shownText.trim() ? lyricsFromText(shownText, track.durationSec, { keepUntimed: true }) : null,
     [shownText, track.durationSec]
   );
+  const untimedCount = useMemo(
+    () => (parsed?.synced ? parsed.lines.filter((l) => l.estimated).length : 0),
+    [parsed]
+  );
   const dirty = text !== null && text !== initialText;
+  // keep the draft while it differs from what is saved
+  useEffect(() => {
+    if (text !== null && text !== initialText) drafts.set(track.id, text);
+    else if (current) drafts.delete(track.id);
+  }, [text, initialText, current, track.id]);
   const saveText = async () => {
     if (!parsed || !parsed.lines.length) {
       showToast(vi ? 'Chưa có lời để lưu' : 'Nothing to save yet');
       return;
     }
-    await setLyricsOverride(track, { ...parsed, trackId: track.id, provider: 'User' }, 'user');
-    applied(vi ? 'Đã lưu lời của bạn cho bài này' : 'Saved your lyrics for this song');
+    const data: LyricsData = {
+      ...parsed,
+      trackId: track.id,
+      provider: 'User',
+      // the text exactly as written: reopening the editor shows the untimed lines again
+      editText: shownText.replace(/\r\n/g, '\n').replace(/\s+$/, ''),
+    };
+    await setLyricsOverride(track, data, 'user');
+    drafts.delete(track.id);
+    haptic('light');
+    showToast(
+      untimedCount
+        ? vi
+          ? `Đã lưu · ${untimedCount} dòng chưa có giờ vẫn được giữ`
+          : `Saved · ${untimedCount} untimed lines kept`
+        : vi
+          ? 'Đã lưu lời của bạn cho bài này'
+          : 'Saved your lyrics for this song'
+    );
+    if (isCurrent) reloadLyrics();
+    // stay open: keep timing from here (Close when done)
+    setCurrent({ ...data, origin: 'override' });
+    setTextRaw(null);
+    history.current = [];
+    bumpHistory((n) => n + 1);
   };
   const paste = async () => {
     const clip = await Clipboard.getStringAsync().catch(() => '');
@@ -220,7 +281,7 @@ const EditorBody: React.FC<{ track: Track; startTab?: Tab }> = ({ track, startTa
       return;
     }
     haptic('selection');
-    setText(clip.replace(/\r\n/g, '\n'));
+    change(clip.replace(/\r\n/g, '\n'));
   };
   /** stamp the line under the cursor with the playing time and move to the next line */
   const tapTime = () => {
@@ -231,10 +292,10 @@ const EditorBody: React.FC<{ track: Track; startTab?: Tab }> = ({ track, startTa
     let le = t.indexOf('\n', ls);
     if (le < 0) le = t.length;
     const body = t.slice(ls, le).replace(/^\s*(\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\])+\s*/, '');
-    const line = stamp(PlaybackClock.get()) + body;
+    const line = stamp(PlaybackClock.now(isPlaying) - lyricsOffsetSec) + body;
     const next = t.slice(0, ls) + line + t.slice(le);
     haptic('light');
-    setText(next);
+    change(next);
     const nextLine = Math.min(ls + line.length + 1, next.length);
     sel.current = { start: nextLine, end: nextLine };
     setSelection({ start: nextLine, end: nextLine });
@@ -587,62 +648,170 @@ const EditorBody: React.FC<{ track: Track; startTab?: Tab }> = ({ track, startTa
             </>
           ) : (
             <>
-              <View style={s.writeTools}>
-                <Tap onPress={paste} style={s.chip}>
-                  <Ionicons name="clipboard-outline" size={14} color={c.icon} />
-                  <Text style={s.chipText}>{vi ? 'Dán' : 'Paste'}</Text>
-                </Tap>
-                {isCurrent && (
-                  <Tap onPress={tapTime} style={[s.chip, { borderColor: palette.accent + '66' }]}>
-                    <Ionicons name="timer-outline" size={14} color={palette.accent} />
-                    <Text style={[s.chipText, { color: palette.accent }]}>
-                      {vi ? 'Gắn giờ' : 'Time line'}
-                    </Text>
-                  </Tap>
-                )}
-                {shownText.length > 0 && (
+              {/* write: the text itself · time: stamp lines while the song plays */}
+              <View style={s.modeRow} accessibilityRole="tablist">
+                {(
+                  [
+                    ['text', 'document-text-outline', vi ? 'Văn bản' : 'Text'],
+                    ['timing', 'timer-outline', vi ? 'Gắn giờ' : 'Timing'],
+                  ] as const
+                ).map(([id, icon, label]) => {
+                  const on = mode === id;
+                  return (
+                    <Tap
+                      key={id}
+                      feedback="opacity"
+                      onPress={() => {
+                        haptic('selection');
+                        setMode(id);
+                      }}
+                      style={[s.modeBtn, on && { borderColor: palette.accent }]}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: on }}
+                    >
+                      <Ionicons name={icon} size={13} color={on ? palette.accent : c.text2} />
+                      <Text style={[s.modeText, { color: on ? palette.accent : c.text2 }]}>
+                        {label}
+                      </Text>
+                    </Tap>
+                  );
+                })}
+              </View>
+              {restored && dirty && (
+                <View style={[s.draftNote, { borderColor: palette.accent + '55' }]}>
+                  <Ionicons name="document-lock-outline" size={14} color={palette.accent} />
+                  <Text style={s.draftText}>
+                    {vi ? 'Đã mở lại bản nháp chưa lưu của bạn.' : 'Your unsaved draft is back.'}
+                  </Text>
                   <Tap
+                    feedback="opacity"
+                    hitSlop={8}
                     onPress={() => {
                       haptic('selection');
-                      setText('');
+                      change(initialText);
                     }}
-                    style={s.chip}
+                    accessibilityLabel={vi ? 'Bỏ bản nháp' : 'Discard the draft'}
                   >
-                    <Ionicons name="trash-outline" size={14} color={c.icon} />
-                    <Text style={s.chipText}>{vi ? 'Xoá hết' : 'Clear'}</Text>
+                    <Text style={[s.draftBtn, { color: palette.accent }]}>
+                      {vi ? 'Bỏ nháp' : 'Discard'}
+                    </Text>
                   </Tap>
-                )}
-              </View>
-              <TextInput
-                value={shownText}
-                onChangeText={setText}
-                selection={selection}
-                onSelectionChange={(e) => {
-                  sel.current = e.nativeEvent.selection;
-                  if (selection) setSelection(undefined);
-                }}
-                multiline
-                autoCorrect={false}
-                autoCapitalize="none"
-                placeholder={
-                  vi
-                    ? 'Dán lời LRC ([00:12.50] Câu hát…) hoặc gõ lời thường, mỗi câu một dòng.'
-                    : 'Paste LRC ([00:12.50] A line…) or type plain lyrics, one line each.'
-                }
-                placeholderTextColor={c.text3}
-                style={s.editor}
-                scrollEnabled
-                accessibilityLabel={vi ? 'Lời bài hát' : 'Lyrics text'}
-              />
+                </View>
+              )}
+              {mode === 'timing' ? (
+                isCurrent ? (
+                  <LyricsTimingPane
+                    text={shownText}
+                    onChange={change}
+                    canUndo={history.current.length > 0}
+                    onUndo={undo}
+                    durationSec={track.durationSec || 0}
+                  />
+                ) : (
+                  <View style={s.empty}>
+                    <Ionicons name="play-circle-outline" size={28} color={c.text3} />
+                    <Text style={s.emptyText}>
+                      {vi
+                        ? 'Gắn giờ dùng thời điểm đang phát — hãy phát bài này trước.'
+                        : 'Timing uses the playing time — play this song first.'}
+                    </Text>
+                    <Tap
+                      onPress={() => {
+                        haptic('light');
+                        playTrack(track);
+                      }}
+                      style={[s.useBtn, { backgroundColor: palette.accent, paddingHorizontal: 18 }]}
+                    >
+                      <Ionicons name="play" size={15} color={palette.onAccent} />
+                      <Text style={[s.useBtnText, { color: palette.onAccent }]}>
+                        {vi ? 'Phát bài này' : 'Play this song'}
+                      </Text>
+                    </Tap>
+                  </View>
+                )
+              ) : (
+                <>
+                  <View style={s.writeTools}>
+                    <Tap onPress={paste} style={s.chip}>
+                      <Ionicons name="clipboard-outline" size={14} color={c.icon} />
+                      <Text style={s.chipText}>{vi ? 'Dán' : 'Paste'}</Text>
+                    </Tap>
+                    {isCurrent && (
+                      <Tap
+                        onPress={tapTime}
+                        style={[s.chip, { borderColor: palette.accent + '66' }]}
+                        accessibilityLabel={
+                          vi ? 'Gắn giờ cho dòng có con trỏ' : 'Time the line at the cursor'
+                        }
+                      >
+                        <Ionicons name="timer-outline" size={14} color={palette.accent} />
+                        <Text style={[s.chipText, { color: palette.accent }]}>
+                          {vi ? 'Gắn giờ dòng này' : 'Time this line'}
+                        </Text>
+                      </Tap>
+                    )}
+                    {history.current.length > 0 && (
+                      <Tap
+                        onPress={() => {
+                          haptic('selection');
+                          undo();
+                        }}
+                        style={s.chip}
+                        accessibilityLabel={vi ? 'Hoàn tác' : 'Undo'}
+                      >
+                        <Ionicons name="arrow-undo" size={14} color={c.icon} />
+                        <Text style={s.chipText}>{vi ? 'Hoàn tác' : 'Undo'}</Text>
+                      </Tap>
+                    )}
+                    {shownText.length > 0 && (
+                      <Tap
+                        onPress={() => {
+                          haptic('selection');
+                          change('');
+                        }}
+                        style={s.chip}
+                      >
+                        <Ionicons name="trash-outline" size={14} color={c.icon} />
+                        <Text style={s.chipText}>{vi ? 'Xoá hết' : 'Clear'}</Text>
+                      </Tap>
+                    )}
+                  </View>
+                  <TextInput
+                    value={shownText}
+                    onChangeText={setTextRaw}
+                    selection={selection}
+                    onSelectionChange={(e) => {
+                      sel.current = e.nativeEvent.selection;
+                      if (selection) setSelection(undefined);
+                    }}
+                    multiline
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    placeholder={
+                      vi
+                        ? 'Dán lời LRC ([00:12.50] Câu hát…) hoặc gõ lời thường, mỗi câu một dòng.'
+                        : 'Paste LRC ([00:12.50] A line…) or type plain lyrics, one line each.'
+                    }
+                    placeholderTextColor={c.text3}
+                    style={s.editor}
+                    scrollEnabled
+                    accessibilityLabel={vi ? 'Lời bài hát' : 'Lyrics text'}
+                  />
+                </>
+              )}
               <Text style={s.hint}>
                 {parsed
                   ? parsed.synced
-                    ? vi
-                      ? `${parsed.lines.length} dòng · đồng bộ theo thời gian`
-                      : `${parsed.lines.length} lines · time-synced`
+                    ? untimedCount
+                      ? vi
+                        ? `${parsed.lines.length} dòng · ${untimedCount} dòng chưa có giờ — vẫn được lưu, tạm xếp giữa hai dòng có giờ`
+                        : `${parsed.lines.length} lines · ${untimedCount} not timed yet — kept, placed between their timed neighbours`
+                      : vi
+                        ? `${parsed.lines.length} dòng · đồng bộ theo thời gian`
+                        : `${parsed.lines.length} lines · time-synced`
                     : vi
-                      ? `${parsed.lines.length} dòng · chưa có thời gian${isCurrent ? ' — bật nhạc rồi bấm “Gắn giờ” khi tới mỗi câu' : ''}`
-                      : `${parsed.lines.length} lines · not timed${isCurrent ? ' — play the song and tap “Time line” as each line starts' : ''}`
+                      ? `${parsed.lines.length} dòng · chưa có thời gian${isCurrent ? ' — mở “Gắn giờ”, phát nhạc và chạm khi mỗi câu bắt đầu' : ''}`
+                      : `${parsed.lines.length} lines · not timed${isCurrent ? ' — open “Timing”, play and tap as each line starts' : ''}`
                   : vi
                     ? 'Lời sẽ được nhớ cho bài này, kể cả khi offline.'
                     : 'Remembered for this song, offline too.'}
@@ -789,6 +958,30 @@ const makeStyles = (c: UiColors) => ({
     marginTop: 10,
   },
   useBtnText: { fontSize: 14.5, fontWeight: '800' as const },
+  modeRow: { flexDirection: 'row' as const, gap: 8, marginBottom: 8 },
+  modeBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 99,
+    borderWidth: 1.5,
+    borderColor: c.border,
+  },
+  modeText: { fontSize: 12.5, fontWeight: '700' as const },
+  draftNote: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginBottom: 8,
+  },
+  draftText: { flex: 1, color: c.text2, fontSize: 12 },
+  draftBtn: { fontSize: 12.5, fontWeight: '800' as const },
   writeTools: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8, marginBottom: 8 },
   editor: {
     flex: 1,

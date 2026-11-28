@@ -132,6 +132,8 @@ export interface LyricLine {
   /** Background vocal line {bg} */
   isBackground?: boolean;
   romanization?: string;
+  /** written without a time (lyrics editor): its start is spread between its timed neighbours */
+  estimated?: boolean;
 }
 
 export interface LyricsData {
@@ -155,6 +157,9 @@ export interface LyricsData {
   wordSynced: boolean;
   lines: LyricLine[];
   plainText?: string;
+  /** the user's own text exactly as written in the lyrics editor (lines not timed yet, order,
+   *  tags) — the editor reopens on it, so nothing is lost between timing sessions */
+  editText?: string;
 }
 
 export interface ListeningEvent {

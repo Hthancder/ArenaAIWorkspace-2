@@ -28,11 +28,7 @@ const ARTIST_SEPARATORS = [
   ' with ',
 ];
 
-const YOULYPLUS_SERVERS = [
-  'https://lyricsplus.prjktla.my.id',
-  'https://lyricsplus.binimum.org',
-];
-
+const YOULYPLUS_SERVERS = ['https://lyricsplus.prjktla.my.id', 'https://lyricsplus.binimum.org'];
 
 export function cleanLyricsTitle(title: string): string {
   let cleaned = title.trim();
@@ -283,10 +279,84 @@ function expandLrc(text: string): string {
   return out.map((o) => o.line).join('\n');
 }
 
-/** LRC text (timed) or plain lyrics → LyricsData; plain lines are spread across the song */
-export function lyricsFromText(text: string, durationSec: number): LyricsData | null {
+const STAMP_RE = /^\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/;
+const META_RE = /^\[[a-z]+:.*\]$/i;
+
+const fmtStamp = (s: number) => {
+  const c = Math.max(0, s);
+  const m = Math.floor(c / 60);
+  return `[${String(m).padStart(2, '0')}:${(c - m * 60).toFixed(2).padStart(5, '0')}]`;
+};
+
+/**
+ * Half-timed text (the lyrics editor, mid-way through timing a song): every line without a time
+ * gets one spread evenly between its timed neighbours, in the order written. Returns LRC text
+ * plus the keys ("<time>|<text>") of the estimated lines; null when nothing needs filling.
+ */
+function fillUntimed(text: string, durationSec: number): { lrc: string; est: Set<string> } | null {
+  const offMs = Number(text.match(/^\s*\[offset:\s*([+-]?\d+)\s*\]/im)?.[1] || 0);
+  const rows: { t: number | null; raw: string; body: string }[] = [];
+  const meta: string[] = [];
+  for (const raw0 of text.split(/\r?\n/)) {
+    const raw = raw0.trim();
+    if (!raw) continue;
+    if (META_RE.test(raw)) {
+      meta.push(raw); // [offset:…] still has to reach expandLrc
+      continue;
+    }
+    const m = raw.match(STAMP_RE);
+    if (m) {
+      const frac = m[3] ? Number(m[3]) / Math.pow(10, m[3].length) : 0;
+      rows.push({ t: Number(m[1]) * 60 + Number(m[2]) + frac - offMs / 1000, raw, body: '' });
+    } else rows.push({ t: null, raw, body: raw });
+  }
+  if (!rows.some((r) => r.t === null) || !rows.some((r) => r.t !== null)) return null;
+  const end = Math.max(durationSec || 0, ...rows.map((r) => r.t ?? 0)) || 180;
+  const est = new Set<string>();
+  const out: string[] = [...meta];
+  let i = 0;
+  while (i < rows.length) {
+    if (rows[i].t !== null) {
+      // keep the original line (multi-stamp / word timing intact); expandLrc applies [offset]
+      out.push(rows[i].raw);
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < rows.length && rows[j].t === null) j++;
+    const before = i > 0 ? rows[i - 1].t! : 0;
+    let after = j < rows.length ? rows[j].t! : end;
+    // a run before the first time starts at 0; one after the last runs ~3 s a line
+    if (j >= rows.length) after = Math.min(end, before + 3 * (j - i + 1));
+    if (after <= before) after = before + 0.5 * (j - i + 1);
+    const step = (after - before) / (j - i + 1);
+    for (let k = i; k < j; k++) {
+      const t = before + step * (k - i + 1);
+      est.add(`${fmtStamp(t)}|${rows[k].body}`);
+      // written as if it carried the file's [offset] too (expandLrc takes it off again)
+      out.push(fmtStamp(t + offMs / 1000) + rows[k].body);
+    }
+    i = j;
+  }
+  return { lrc: out.join('\n'), est };
+}
+
+/** LRC text (timed) or plain lyrics → LyricsData; plain lines are spread across the song.
+ *  `keepUntimed`: lines without a time in otherwise timed text are kept (estimated) instead of
+ *  dropped — for the user's own lyrics, half-way through timing them. */
+export function lyricsFromText(
+  text: string,
+  durationSec: number,
+  opts: { keepUntimed?: boolean } = {}
+): LyricsData | null {
   if (/\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\]/.test(text)) {
-    const parsed = parseLrcText(expandLrc(text));
+    const filled = opts.keepUntimed ? fillUntimed(text, durationSec) : null;
+    const parsed = parseLrcText(expandLrc(filled ? filled.lrc : text));
+    if (filled) {
+      for (const l of parsed.lines) {
+        if (filled.est.has(`${fmtStamp(l.startSec)}|${l.text}`)) l.estimated = true;
+      }
+    }
     if (parsed.lines.length > 0) {
       return {
         trackId: '',

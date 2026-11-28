@@ -71,6 +71,28 @@ export const videoWanted = (musicVideo: boolean | undefined, track?: { id: strin
 
 export const useVideoState = () => useSyncExternalStore(subscribe, VideoStore.get, VideoStore.get);
 
+// ── "show the cover instead" (the player's camera button) — this app session ──
+// Shared so the app-wide video ambient can follow it too (Settings › Music video › "Ánh sáng
+// khi ẩn MV").
+let hidden = false;
+const hiddenSubs = new Set<() => void>();
+export const VideoHidden = {
+  get: () => hidden,
+  set(v: boolean) {
+    if (v === hidden) return;
+    hidden = v;
+    hiddenSubs.forEach((f) => f());
+  },
+  subscribe(f: () => void) {
+    hiddenSubs.add(f);
+    return () => {
+      hiddenSubs.delete(f);
+    };
+  },
+};
+export const useVideoHidden = () =>
+  useSyncExternalStore(VideoHidden.subscribe, VideoHidden.get, VideoHidden.get);
+
 // ── which views are on screen and "live" (the picture moves only while one is) ──
 let live = 0;
 const liveSubs = new Set<() => void>();

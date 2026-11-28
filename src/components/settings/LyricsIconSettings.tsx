@@ -18,6 +18,7 @@ import {
 } from '../../services/lyrics/lyricsStore';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { LYRICS_EFFECTS } from '../player/LyricsView';
+import { luminance } from '../../theme/colorMath';
 import { Tap } from '../ui/Tap';
 import { Pip, usePipState } from '../../services/pip/pip';
 import type { HolySicShortcutsNative } from '../../../modules/holysic-shortcuts';
@@ -67,6 +68,75 @@ const EffectSample: React.FC<{ id: LyricsEffect; accent: string }> = ({ id, acce
       );
     case 'minimal':
       return <Text style={[base, { color: '#FFF', fontWeight: '700' }]}>Hát lên nào</Text>;
+    case 'focus':
+      return (
+        <Text style={base}>
+          <Text style={{ color: '#FFF' }}>Hát lên </Text>
+          <Text
+            style={{
+              color: 'rgba(255,255,255,0.3)',
+              textShadowColor: 'rgba(255,255,255,0.8)',
+              textShadowRadius: 6,
+            }}
+          >
+            nào
+          </Text>
+        </Text>
+      );
+    case 'typewriter':
+      return (
+        <Text style={base}>
+          <Text style={{ color: '#FFF' }}>Hát lê</Text>
+          <Text
+            style={{
+              color: luminance(accent) > 0.55 ? '#111116' : '#FFF',
+              backgroundColor: accent,
+            }}
+          >
+            n
+          </Text>
+          <Text style={{ color: 'rgba(255,255,255,0.16)' }}> nào</Text>
+        </Text>
+      );
+    case 'marker':
+      return (
+        <View style={{ flexDirection: 'row' }}>
+          <View>
+            <View
+              style={{
+                position: 'absolute',
+                left: -2,
+                right: 0,
+                top: '26%',
+                bottom: '8%',
+                borderRadius: 4,
+                backgroundColor: accent,
+              }}
+            />
+            <Text style={[base, { color: luminance(accent) > 0.55 ? '#111116' : '#FFF' }]}>
+              Hát lên{' '}
+            </Text>
+          </View>
+          <Text style={[base, { color: dim }]}>nào</Text>
+        </View>
+      );
+    case 'glitch':
+      return (
+        <View style={{ flexDirection: 'row' }}>
+          <Text style={[base, { color: '#FFF' }]}>Hát lên </Text>
+          <View>
+            <Text
+              style={[base, { color: '#FF2D55', opacity: 0.6, position: 'absolute', left: -2 }]}
+            >
+              nào
+            </Text>
+            <Text style={[base, { color: '#22E4FF', opacity: 0.6, position: 'absolute', left: 2 }]}>
+              nào
+            </Text>
+            <Text style={[base, { color: dim }]}>nào</Text>
+          </View>
+        </View>
+      );
     default:
       return (
         <Text
@@ -540,6 +610,51 @@ const PipCard: React.FC<{ fontFamily?: string }> = ({ fontFamily }) => {
           );
         })()}
 
+        <Text style={[styles.subLabel, { marginTop: 16 }]}>
+          {vi ? 'Hiệu ứng lời trong PiP' : 'PiP lyrics effect'}
+        </Text>
+        <View style={styles.chipWrap} accessibilityRole="radiogroup">
+          {[
+            {
+              id: 'app' as const,
+              vi: 'Như màn hình Lời',
+              en: 'Same as Lyrics screen',
+            },
+            ...LYRICS_EFFECTS,
+          ].map((o) => {
+            const sel = (prefs.pipEffect || 'app') === o.id;
+            return (
+              <Tap
+                key={o.id}
+                onPress={() => {
+                  haptic('selection');
+                  updatePrefs({ pipEffect: o.id });
+                }}
+                style={[
+                  styles.chip,
+                  { borderColor: sel ? palette.accent : UI.fg(0.12) },
+                  sel && { backgroundColor: palette.accent },
+                ]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: sel }}
+                accessibilityLabel={(vi ? 'Hiệu ứng PiP: ' : 'PiP effect: ') + (vi ? o.vi : o.en)}
+              >
+                <Text
+                  style={[styles.chipText, { color: sel ? palette.onAccent : UI.fg(0.85) }]}
+                  numberOfLines={1}
+                >
+                  {vi ? o.vi : o.en}
+                </Text>
+              </Tap>
+            );
+          })}
+        </View>
+        <Text style={[styles.rowDesc, { marginTop: 8 }]}>
+          {vi
+            ? 'Nền PiP dùng cùng ánh sáng môi trường với trình phát (theo mức trong Cài đặt › Video). Có thanh tua; trên Chrome/Edge cửa sổ có nút điều khiển thật.'
+            : 'The PiP background uses the player’s ambient light (level from Settings › Video). It has a seek bar; in Chrome/Edge the window gets real controls.'}
+        </Text>
+
         <View style={styles.divider} />
         <View style={styles.switchRow}>
           <View style={{ flex: 1, paddingRight: 10 }}>
@@ -751,6 +866,14 @@ const LyricsSourcesCard: React.FC<{ fontFamily?: string }> = ({ fontFamily }) =>
 };
 
 const styles = themedSheet(() => ({
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  chipText: { fontSize: 13, fontWeight: '600' },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',

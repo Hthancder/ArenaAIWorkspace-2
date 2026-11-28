@@ -327,6 +327,8 @@ export function lyricsToLrc(d: LyricsData): string {
     const sec = s - m * 60;
     return `${String(m).padStart(2, '0')}:${sec.toFixed(2).padStart(5, '0')}`;
   };
+  // the user's own text as they left it (lines not timed yet included)
+  if (d.editText && d.editText.trim()) return d.editText;
   if (!d.synced) return d.lines.map((l) => l.text).join('\n');
   return d.lines.map((l) => `[${ts(Math.max(0, l.startSec))}]${l.text}`).join('\n');
 }

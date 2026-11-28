@@ -143,6 +143,10 @@ export const Pip = {
     if (native) safe(() => native.setLyrics(starts, texts, offsetSec, synced));
     else if (isWeb) webPip.setLyrics(starts, texts, offsetSec, synced);
   },
+  setWords(texts: string[][], starts: number[][], ends: number[][]): void {
+    if (native) safe(() => native.setWords?.(texts, starts, ends));
+    else if (isWeb) webPip.setWords(texts, starts, ends);
+  },
   setPlayback(positionSec: number, playing: boolean): void {
     if (native) safe(() => native.setPlayback(positionSec, playing));
     else if (isWeb) webPip.setPlayback(positionSec, playing);
