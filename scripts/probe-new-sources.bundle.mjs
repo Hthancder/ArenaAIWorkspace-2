@@ -1009,7 +1009,7 @@ async function invidious() {
   log("\n=== Invidious ===");
   const inst = await invidiousInstances();
   log("instances", inst.join(" "));
-  for (const base of inst) {
+  for (const base of process.env.VERBOSE ? inst : []) {
     try {
       const t0 = Date.now();
       const r = await fetch(`${base}/api/v1/stats`, { signal: AbortSignal.timeout(6e3) });
@@ -1023,7 +1023,7 @@ async function invidious() {
   const ranked = rankCandidates({ title: "Ch\xFAng Ta C\u1EE7a Hi\u1EC7n T\u1EA1i", artists: ["S\u01A1n T\xF9ng M-TP"], durationSec: 302 }, hits.flatMap(videoCandidates), 0);
   log("ranked", ranked.slice(0, 4).map((r) => `${r.score.toFixed(2)} ${r.track.title} / ${r.track.artist}`).join(" | "));
   const vid = hits[0]?.videoId || "psZ1g9fMfeo";
-  for (const base of inst) {
+  for (const base of process.env.VERBOSE ? inst : []) {
     try {
       const r = await fetch(`${base}/api/v1/videos/${vid}?local=true`, { signal: AbortSignal.timeout(8e3) });
       const txt = await r.text();
@@ -1085,7 +1085,7 @@ async function invidious() {
       log(`  ${base} videos ERR ${e?.cause?.code || e?.name}`);
     }
   }
-  for (const base of inst) {
+  for (const base of process.env.VERBOSE ? inst : []) {
     for (const path of ["/latest_version", "/companion/latest_version"]) {
       try {
         const u = `${base}${path}?id=${vid}&itag=140&local=true`;
@@ -1096,8 +1096,9 @@ async function invidious() {
       }
     }
   }
+  const t1 = Date.now();
   const a = await invidiousAudio(vid);
-  log("audio ->", a ? `${a.qualityLabel} @${a.instance} ${a.url.slice(0, 100)}` : "null");
+  log("audio ->", a ? `${a.qualityLabel} @${a.instance} ${a.url.slice(0, 70)}` : "null", `${Date.now() - t1}ms`);
   if (a) log("   range 3MiB", await rangeProbe(a.url, 3 * 1048576));
   const steps = [];
   const res = await resolveInvidiousStream({ title: "Shape of You", artists: ["Ed Sheeran"], durationSec: 233 }, (s) => steps.push(s));
@@ -1110,7 +1111,7 @@ async function invidious() {
     log("runner IP", await ip.text());
   } catch {
   }
-  await zing().catch((e) => log("zing FAIL", e?.stack || e));
   await invidious().catch((e) => log("invidious FAIL", e?.stack || e));
+  await zing().catch((e) => log("zing FAIL", e?.stack || e));
   log("\nProbe done.");
 })();
