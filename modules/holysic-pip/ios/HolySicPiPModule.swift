@@ -32,7 +32,27 @@ private func canvasSize(_ style: String) -> (Int, Int) {
 private let LEAD: Double = 0.15
 
 /// effects that move between frames (the render loop runs at 20 fps for them)
-private let ANIMATED_FX: Set<String> = ["glow", "wave", "focus", "typewriter", "glitch"]
+private let ANIMATED_FX: Set<String> = [
+  "glow", "wave", "focus", "typewriter", "glitch", "dissolve", "bloom", "spectrum", "rain", "lift",
+]
+
+/// a speck of a dissolving word: where it starts (% across the word), where it drifts, its radius
+struct Speck {
+  let x: CGFloat
+  let dx: CGFloat
+  let dy: CGFloat
+  let r: CGFloat
+  let accent: Bool
+}
+
+/// same specks as the app (LyricsView DUST) and the web window
+private let DUST: [Speck] = [
+  Speck(x: 12, dx: -9, dy: 20, r: 3, accent: true),
+  Speck(x: 34, dx: 4, dy: 30, r: 2.5, accent: false),
+  Speck(x: 58, dx: -3, dy: 24, r: 3.5, accent: true),
+  Speck(x: 80, dx: 10, dy: 32, r: 2.5, accent: false),
+  Speck(x: 46, dx: 7, dy: 16, r: 2, accent: false),
+]
 
 /// one sung word: real timing from the lyrics, or estimated from the line's length
 struct PWord {
@@ -63,7 +83,7 @@ private struct Meta {
   /** "Up next · Title — Artist" (shown when there are no lyrics to show) */
   var upNext = ""
   /// the lyrics effect (same ids as the app: glow, karaoke, wave, depth, neon, minimal, focus,
-  /// typewriter, marker, glitch)
+  /// typewriter, marker, glitch, dissolve, bloom, spectrum, rain, lift)
   var effect = "glow"
   /// the player's ambient light: primary, dark base, then the cover's 4 corners ([] = accent)
   var ambient: [UIColor] = []
@@ -420,9 +440,29 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       fill = max(0, min(1, (c.pos - start) / max(0.3, min(end - start, 12))))
     }
     let progressPx = meta.duration > 0 ? Int(c.pos / meta.duration * 600) : 0
-    let anim = idx >= 0 && ANIMATED_FX.contains(meta.effect) ? Int(c.pos * 20) : 0
+    // a new frame only when something changes: a word starts, an effect is mid-motion, the bar
+    // moves a step, the second ticks — a still line between words costs no drawing at all
+    var anim = 0
+    var started = 0
+    if idx >= 0 {
+      let ls = lyrics.starts[idx]
+      let le: Double =
+        idx + 1 < lyrics.starts.count
+        ? lyrics.starts[idx + 1]
+        : (meta.duration > 0 ? min(ls + 8, meta.duration - lyrics.offset - 0.3) : ls + 5)
+      let text = idx < lyrics.texts.count ? lyrics.texts[idx] : ""
+      let words = lineWords(idx, text, ls, le)
+      let t = c.pos - lyrics.offset + LEAD
+      for w in words {
+        if w.start > t { break }
+        started += 1
+      }
+      if ANIMATED_FX.contains(meta.effect) && PiPEngine.fxBusy(meta.effect, words, ls, t) {
+        anim = Int(c.pos * 20)
+      }
+    }
     let key =
-      "\(meta.version)|\(idx)|\(Int(fill * 60))|\(progressPx)|\(c.playing)|\(art != nil)|\(Int(c.pos))|\(anim)"
+      "\(meta.version)|\(idx)|\(started)|\(progressPx)|\(c.playing)|\(art != nil)|\(Int(c.pos))|\(anim)"
     if !force && key == lastKey { return }
     lastKey = key
     guard let pb = makeBuffer() else { return }
@@ -740,8 +780,40 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
 
   // MARK: lyrics effects
 
-  /// Words wrapped into at most `maxLines` rows of the box (smaller type for long lines)
+  // MARK: per-frame caches (the sung line's words and their layout stay the same for many frames)
+
+  private var wordsMemo: (key: String, words: [PWord])?
+  private var layoutMemo: (key: String, boxes: [WBox], font: UIFont)?
+
+  /// the words of line `idx`: real timing, or estimated from the line's length (cached)
+  private func lineWords(_ idx: Int, _ s: String, _ lineStart: Double, _ lineEnd: Double) -> [PWord] {
+    if idx >= 0 && idx < lyrics.words.count && !lyrics.words[idx].isEmpty {
+      return lyrics.words[idx]
+    }
+    let key = "\(s)|\(lineStart)|\(lineEnd)"
+    if let m = wordsMemo, m.key == key { return m.words }
+    let w = PiPEngine.estimateWords(s, lineStart, lineEnd)
+    wordsMemo = (key: key, words: w)
+    return w
+  }
+
+  /// layoutWords, remembered: measuring every word of the line each frame was most of the cost
   private func layoutWords(
+    _ words: [PWord], in rect: CGRect, size: CGFloat, maxLines: Int, align: NSTextAlignment
+  ) -> ([WBox], UIFont) {
+    let first = words.first?.start ?? 0
+    let last = words.last?.end ?? 0
+    let texts = words.map { $0.text }.joined(separator: " ")
+    let box = "\(rect.minX),\(rect.minY),\(rect.width),\(rect.height)"
+    let key = "\(words.count)|\(first)|\(last)|\(texts)|\(box)|\(size)|\(maxLines)|\(align.rawValue)"
+    if let m = layoutMemo, m.key == key { return (m.boxes, m.font) }
+    let out = measureWords(words, in: rect, size: size, maxLines: maxLines, align: align)
+    layoutMemo = (key: key, boxes: out.0, font: out.1)
+    return out
+  }
+
+  /// Words wrapped into at most `maxLines` rows of the box (smaller type for long lines)
+  private func measureWords(
     _ words: [PWord], in rect: CGRect, size: CGFloat, maxLines: Int, align: NSTextAlignment
   ) -> ([WBox], UIFont) {
     var fs = size
@@ -801,9 +873,8 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     t: Double, lineStart: Double, lineEnd: Double, idx: Int
   ) {
     guard let ctx = UIGraphicsGetCurrentContext() else { return }
-    let realWords = idx >= 0 && idx < lyrics.words.count ? lyrics.words[idx] : []
-    let real = !realWords.isEmpty
-    let words = real ? realWords : PiPEngine.estimateWords(s, lineStart, lineEnd)
+    let real = idx >= 0 && idx < lyrics.words.count && !lyrics.words[idx].isEmpty
+    let words = lineWords(idx, s, lineStart, lineEnd)
     if words.isEmpty { return }
     let (boxes, font) = layoutWords(words, in: rect, size: size, maxLines: maxLines, align: align)
     let fx = meta.effect
@@ -944,6 +1015,165 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
         ctx.restoreGState()
         put(b.w.text, b.x + jolt, b.y, age >= 0 ? .white : UIColor.white.withAlphaComponent(0.5))
       }
+    case "dissolve":
+      // lights up while sung, then blurs out and crumbles into specks of light that drift up
+      noShadow()
+      let fsz = font.pointSize
+      let sc = fsz / 25
+      for (i, b) in boxes.enumerated() {
+        let age = t - b.w.start
+        if age < 0 {
+          put(b.w.text, b.x, b.y, UIColor.white.withAlphaComponent(0.5))
+          continue
+        }
+        let raw = max(0, min(1, t - PiPEngine.dissolveAt(b.w)))
+        let k = CGFloat(raw * raw)
+        if k <= 0 {
+          ctx.saveGState()
+          ctx.setAlpha(CGFloat(0.5 + 0.5 * min(1, age / 0.18)))
+          ctx.setShadow(offset: .zero, blur: 16, color: accent.withAlphaComponent(0.8).cgColor)
+          put(b.w.text, b.x, b.y, .white)
+          ctx.restoreGState()
+          continue
+        }
+        // a faint trace keeps the line's shape
+        put(b.w.text, b.x, b.y, UIColor.white.withAlphaComponent(0.14 * k))
+        let dy: CGFloat = still ? 0 : -fsz * 0.22 * k
+        let crisp: CGFloat = k < 0.5 ? 1 - 1.6 * k : max(0, 0.2 - 0.4 * (k - 0.5))
+        let halo: CGFloat = k < 0.35 ? (k / 0.35) * 0.9 : 0.9 * (1 - (k - 0.35) / 0.65)
+        if halo > 0.01 {
+          PiPEngine.blurDraw(
+            ctx, b.w.text, font: font, at: CGPoint(x: b.x, y: b.y + dy),
+            color: accent.withAlphaComponent(halo), blur: 10)
+        }
+        if crisp > 0.01 {
+          ctx.saveGState()
+          ctx.setAlpha(crisp)
+          put(b.w.text, b.x, b.y + dy, .white)
+          ctx.restoreGState()
+        }
+        if still { continue }
+        var dust: CGFloat = 0
+        if k < 0.12 {
+          dust = k / 0.12
+        } else if k < 0.7 {
+          dust = 1 - ((k - 0.12) / 0.58) * 0.35
+        } else {
+          dust = 0.65 * (1 - (k - 0.7) / 0.3)
+        }
+        ctx.saveGState()
+        ctx.setShadow(offset: .zero, blur: 6, color: accent.cgColor)
+        ctx.setAlpha(max(0, dust))
+        let n = b.w.text.count > 3 ? 5 : 3
+        for j in 0..<n {
+          let p = DUST[j]
+          let flip: CGFloat = (i + j) % 2 == 1 ? 1 : -1
+          let r = max(0.6, p.r * sc * (0.6 - 0.4 * k) * 1.6)
+          let jitter = CGFloat((i * 7 + j * 5) % 9)
+          let cx = b.x + b.width * p.x / 100 + p.dx * flip * k * sc
+          let cy = b.y + fsz * 0.55 - (p.dy + jitter) * sc * k * 1.4
+          (p.accent ? accent : UIColor.white).setFill()
+          ctx.fillEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
+        }
+        ctx.restoreGState()
+      }
+    case "bloom":
+      // pops open while an accent copy of the word spreads out and fades, like a ripple
+      noShadow()
+      for b in boxes {
+        let age = t - b.w.start
+        if age < 0 {
+          put(b.w.text, b.x, b.y, dim)
+          continue
+        }
+        let cx = b.x + b.width / 2
+        let cy = b.y + lh * 0.5
+        let k = min(1, age / 0.72)
+        let e = CGFloat(1 - pow(1 - k, 3))
+        let ra = CGFloat(k < 0.1 ? (k / 0.1) * 0.5 : 0.5 * (1 - (k - 0.1) / 0.9))
+        if ra > 0.01 {
+          let rs: CGFloat = still ? 1 : 1 + 0.45 * e
+          ctx.saveGState()
+          ctx.translateBy(x: cx, y: cy)
+          ctx.scaleBy(x: rs, y: rs)
+          ctx.translateBy(x: -cx, y: -cy)
+          ctx.setAlpha(ra)
+          ctx.setShadow(offset: .zero, blur: 18, color: accent.cgColor)
+          put(b.w.text, b.x, b.y, accent)
+          ctx.restoreGState()
+        }
+        var popD = 1.0
+        if !still {
+          popD = age < 0.11
+            ? 1 + 0.16 * (age / 0.11)
+            : 1 + 0.16 * exp(-(age - 0.11) * 9) * cos((age - 0.11) * 16)
+        }
+        let pop = CGFloat(popD)
+        ctx.saveGState()
+        ctx.translateBy(x: cx, y: cy)
+        ctx.scaleBy(x: pop, y: pop)
+        ctx.translateBy(x: -cx, y: -cy)
+        ctx.setAlpha(CGFloat(0.42 + 0.58 * min(1, age / 0.16)))
+        ctx.setShadow(offset: .zero, blur: 14, color: accent.cgColor)
+        put(b.w.text, b.x, b.y, .white)
+        ctx.restoreGState()
+      }
+    case "spectrum":
+      // every word its own hue of a rainbow that starts at the accent, filling with the voice
+      for (i, b) in boxes.enumerated() {
+        noShadow()
+        put(b.w.text, b.x, b.y, UIColor.white.withAlphaComponent(0.4))
+        let f = CGFloat(frac(b.w))
+        if f <= 0 { continue }
+        let hue = PiPEngine.spectrum(accent, i)
+        let age = t - b.w.start
+        var lift = 0.0
+        if !still && age <= 0.6 {
+          lift = age < 0.11
+            ? -4 * (age / 0.11)
+            : -4 * exp(-(age - 0.11) * 9) * cos((age - 0.11) * 14)
+        }
+        ctx.saveGState()
+        ctx.clip(to: CGRect(x: b.x - 2, y: b.y - 10, width: (b.width + 4) * f, height: lh + 20))
+        ctx.setShadow(offset: .zero, blur: 12, color: hue.withAlphaComponent(0.7).cgColor)
+        put(b.w.text, b.x, b.y + CGFloat(lift), hue)
+        ctx.restoreGState()
+      }
+    case "rain":
+      // falls from above and lands with a bounce (a damped spring around the line)
+      for b in boxes {
+        noShadow()
+        let age = t - b.w.start
+        if age < 0 {
+          put(b.w.text, b.x, b.y, UIColor.white.withAlphaComponent(0.24))
+          continue
+        }
+        let spring = CGFloat(exp(-age * 7.5) * cos(age * 13))
+        let dy: CGFloat = still ? 0 : -font.pointSize * 0.8 * spring
+        let a = CGFloat(min(1, age / 0.2))
+        if a < 1 { put(b.w.text, b.x, b.y, UIColor.white.withAlphaComponent(0.24 * (1 - a))) }
+        ctx.saveGState()
+        ctx.setAlpha(a)
+        ctx.setShadow(offset: .zero, blur: 10, color: accent.withAlphaComponent(0.6).cgColor)
+        put(b.w.text, b.x, b.y + dy, .white)
+        ctx.restoreGState()
+      }
+    case "lift":
+      // brightens and rises a hair over the word's duration (Apple Music style)
+      for b in boxes {
+        noShadow()
+        let f = CGFloat(frac(b.w))
+        let e = 1 - (1 - f) * (1 - f)
+        if f < 1 { put(b.w.text, b.x, b.y, UIColor.white.withAlphaComponent(0.38 * (1 - f))) }
+        if f <= 0 { continue }
+        let up: CGFloat = still ? 0 : font.pointSize * 0.1 * e
+        ctx.saveGState()
+        ctx.setAlpha(e)
+        ctx.setShadow(
+          offset: .zero, blur: 10, color: UIColor.white.withAlphaComponent(0.55).cgColor)
+        put(b.w.text, b.x, b.y - up, .white)
+        ctx.restoreGState()
+      }
     case "glow":
       // the line grows in and glows (Lyrics screen: zoom + glow)
       let a = max(0, min(1, (t - lineStart) / 0.35))
@@ -996,8 +1226,8 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
     case "focus":
       color = UIColor.white.withAlphaComponent(d == 1 ? 0.6 : 0.4)
       blur = CGFloat(7 + d * 2)
-    case "typewriter":
-      color = UIColor.white.withAlphaComponent(d == 1 ? 0.22 : 0.14)
+    case "typewriter", "rain":
+      color = UIColor.white.withAlphaComponent(d == 1 ? 0.24 : 0.14)
     default:
       break
     }
@@ -1105,6 +1335,46 @@ private final class PiPEngine: NSObject, AVPictureInPictureControllerDelegate,
       acc += Double(p.count + 1)
       return PWord(text: p, start: st, end: start + dur * acc / total)
     }
+  }
+
+  /// dissolve: a word starts to fall apart once sung (+ a beat), same timing as the app
+  static func dissolveAt(_ w: PWord) -> Double {
+    w.start + max(0.12, min(0.7, w.end - w.start)) + 0.38
+  }
+
+  /// Is anything on the sung line moving at lyrics time `t`? (mirrors pipLyricsFx.fxBusy)
+  static func fxBusy(_ fx: String, _ words: [PWord], _ lineStart: Double, _ t: Double) -> Bool {
+    func within(_ after: Double) -> Bool {
+      words.contains { t >= $0.start && t < $0.start + after }
+    }
+    switch fx {
+    case "glow":
+      return t - lineStart < 0.4
+    case "karaoke", "marker", "typewriter", "lift":
+      return words.contains { t >= $0.start && t < $0.start + max(0.12, $0.end - $0.start) + 0.05 }
+    case "spectrum":
+      return words.contains { t >= $0.start && t < $0.start + max(0.5, $0.end - $0.start) + 0.05 }
+    case "wave": return within(0.6)
+    case "focus": return within(0.3)
+    case "glitch": return within(0.25)
+    case "bloom": return within(0.75)
+    case "rain": return within(0.7)
+    case "dissolve":
+      return words.contains { t >= $0.start && t < dissolveAt($0) + 1.05 }
+    default: return false
+    }
+  }
+
+  /// The i-th colour of the spectrum that starts at the accent's hue (32° a step; HSB s 0.53,
+  /// b 0.955 = the app's HSL s 0.85, l 0.7)
+  static func spectrum(_ accent: UIColor, _ i: Int) -> UIColor {
+    var h: CGFloat = 0
+    var s: CGFloat = 0
+    var v: CGFloat = 0
+    var a: CGFloat = 0
+    if !accent.getHue(&h, saturation: &s, brightness: &v, alpha: &a) { h = 265.0 / 360.0 }
+    let hh = (h + CGFloat(i) * 32.0 / 360.0).truncatingRemainder(dividingBy: 1)
+    return UIColor(hue: hh, saturation: 0.53, brightness: 0.955, alpha: 1)
   }
 
   static func width(_ s: String, _ font: UIFont) -> CGFloat {

@@ -22,8 +22,9 @@ import { HOLYSIC_COLORS, resolveFontFamily } from '../../constants/theme';
 import { useHolySic } from '../../context/HolySicContext';
 import { storedLyricsInfo, useStoredLyrics } from '../../services/lyrics/lyricsStore';
 import { openLyricsEditor, providerLabel } from './LyricsEditor';
-import { PlaybackClock, usePositionSec } from '../../services/audio/playbackClock';
-import { luminance } from '../../theme/colorMath';
+import { PlaybackClock } from '../../services/audio/playbackClock';
+import { AppActivity } from '../../services/appActivity';
+import { luminance, spectrumColor } from '../../theme/colorMath';
 import { Tap } from '../ui/Tap';
 import { perfCount } from '../../services/perfProbe';
 import { useActiveLyricIndex } from '../../services/lyrics/lyricClock';
@@ -574,6 +575,41 @@ export const LYRICS_EFFECTS: {
     descVi: 'Chữ chưa hát tách lớp đỏ–xanh, khớp lại khi được hát',
     descEn: 'Unsung words split into red and cyan, snapping together when sung',
   },
+  {
+    id: 'dissolve',
+    vi: 'Tan biến',
+    en: 'Dissolve',
+    descVi: 'Chữ bừng sáng khi được hát rồi tan thành bụi sáng, bay đi',
+    descEn: 'Words light up as they are sung, then crumble into glowing dust and drift away',
+  },
+  {
+    id: 'bloom',
+    vi: 'Bừng nở',
+    en: 'Bloom',
+    descVi: 'Chữ bật nở khi được hát, một vầng sáng màu nhấn lan toả ra',
+    descEn: 'Words pop open as they are sung, a ring of accent light spreading out',
+  },
+  {
+    id: 'spectrum',
+    vi: 'Sắc màu',
+    en: 'Spectrum',
+    descVi: 'Mỗi chữ một sắc cầu vồng bắt đầu từ màu nhấn, tô dần theo giọng hát',
+    descEn: 'Every word its own rainbow hue, starting from the accent, filling with the voice',
+  },
+  {
+    id: 'rain',
+    vi: 'Mưa chữ',
+    en: 'Rain',
+    descVi: 'Chữ rơi từ trên xuống và nảy nhẹ đúng lúc được hát',
+    descEn: 'Words fall into place and bounce as they are sung',
+  },
+  {
+    id: 'lift',
+    vi: 'Nâng chữ',
+    en: 'Lift',
+    descVi: 'Chữ sáng dần và nhích lên theo giọng hát, kiểu Apple Music',
+    descEn: 'Words brighten and rise slightly with the voice, Apple Music style',
+  },
 ];
 
 /** effects that run word by word (estimated timing when the lyrics have none) */
@@ -584,7 +620,19 @@ AccessibilityInfo.isReduceMotionEnabled?.()
   .catch(() => {});
 AccessibilityInfo.addEventListener?.('reduceMotionChanged', (v) => (calm = v));
 
-const FLOWING: LyricsEffect[] = ['karaoke', 'wave', 'focus', 'typewriter', 'marker', 'glitch'];
+const FLOWING: LyricsEffect[] = [
+  'karaoke',
+  'wave',
+  'focus',
+  'typewriter',
+  'marker',
+  'glitch',
+  'dissolve',
+  'bloom',
+  'spectrum',
+  'rain',
+  'lift',
+];
 
 const SIZES: Record<LyricsSize, { font: number; line: number }> = {
   S: { font: 21, line: 30 },
@@ -656,6 +704,31 @@ function lineLook(
         scale: active ? 1 : 0.9,
         opacity: 1,
       };
+    case 'dissolve':
+      // sung lines are gone (a faint trace), the ones ahead wait
+      return {
+        text: {
+          color: active ? '#FFFFFF' : past ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.5)',
+        },
+        scale: active ? 1 : 0.92,
+        opacity: 1,
+      };
+    case 'rain':
+      return {
+        text: {
+          color: active ? '#FFFFFF' : past ? 'rgba(255,255,255,0.36)' : 'rgba(255,255,255,0.26)',
+        },
+        scale: active ? 1 : 0.92,
+        opacity: 1,
+      };
+    case 'lift':
+      return {
+        text: active
+          ? { color: '#FFFFFF', textShadowColor: 'rgba(255,255,255,0.4)', textShadowRadius: 10 }
+          : { color: past ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.4)' },
+        scale: active ? 1 : 0.94,
+        opacity: 1,
+      };
     default:
       return {
         text: active
@@ -683,27 +756,47 @@ function estimateWords(line: LyricLine, endSec?: number): LyricWord[] {
   });
 }
 
-/** How many words are lit. Position arrives ~4×/s; between updates each next word is lit by a
- *  timer at its exact start, so words land on time without re-rendering every frame. */
+/** How many words are lit — re-renders only when that number changes. The clock reports ~4×/s;
+ *  between reports one timer wakes at the next word's exact start. (It used to re-render the whole
+ *  line on every clock report and re-arm a timer per upcoming word.) */
 function useLitCount(words: LyricWord[], offset: number, playing: boolean): number {
-  const pos = usePositionSec();
-  const t = pos - offset + 0.08;
-  let base = 0;
-  while (base < words.length && words[base].startSec <= t) base++;
-  const [extra, setExtra] = useState<{ at: number; n: number }>({ at: -1, n: 0 });
+  const count = useCallback(() => {
+    const t = PlaybackClock.now(playing) - offset + 0.08;
+    let n = 0;
+    while (n < words.length && words[n].startSec <= t) n++;
+    return n;
+  }, [words, offset, playing]);
+  const [lit, setLit] = useState(count);
   useEffect(() => {
-    if (!playing) return;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    for (let i = base; i < words.length; i++) {
-      const ms = (words[i].startSec - t) * 1000;
-      if (ms > 450) break;
-      const n = i - base + 1;
-      timers.push(setTimeout(() => setExtra({ at: pos, n }), Math.max(0, ms)));
-    }
-    return () => timers.forEach(clearTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pos, playing, words]);
-  return Math.min(words.length, base + (extra.at === pos ? extra.n : 0));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const update = () => {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      // off screen: nothing to draw (the catch-up runs when the app comes back)
+      if (!AppActivity.isActive()) return;
+      const n = count();
+      setLit(n); // same number: React skips the render
+      if (!playing || n >= words.length) return;
+      const ms = (words[n].startSec - (PlaybackClock.now(true) - offset + 0.08)) * 1000;
+      timer = setTimeout(update, Math.max(16, Math.min(1000, ms)));
+    };
+    update();
+    const a = PlaybackClock.subscribe(update);
+    const b = AppActivity.subscribe(update);
+    return () => {
+      if (timer) clearTimeout(timer);
+      a();
+      b();
+    };
+  }, [count, playing, offset, words]);
+  return lit;
+}
+
+/** Animated.Value made once (useRef(new …) builds — and throws away — one per render) */
+function useAnim(init: number): Animated.Value {
+  const r = useRef<Animated.Value | null>(null);
+  if (!r.current) r.current = new Animated.Value(init);
+  return r.current;
 }
 
 const ActiveLine: React.FC<{
@@ -737,11 +830,14 @@ const ActiveWords: React.FC<React.ComponentProps<typeof ActiveLine>> = ({
   align,
   gap,
 }) => {
+  perfCount('render:ActiveWords');
   const words = useMemo(
     () => (line.words && line.words.length ? line.words : estimateWords(line, endSec)),
     [line, endSec]
   );
   const lit = useLitCount(words, offset, playing);
+  // lyrics time when this line appeared: words finished well before it skip their entrance
+  const [shownAt] = useState(() => PlaybackClock.now(playing) - offset);
 
   if (effect === 'typewriter') {
     return (
@@ -755,13 +851,7 @@ const ActiveWords: React.FC<React.ComponentProps<typeof ActiveLine>> = ({
     );
   }
 
-  if (
-    effect === 'karaoke' ||
-    effect === 'wave' ||
-    effect === 'focus' ||
-    effect === 'marker' ||
-    effect === 'glitch'
-  ) {
+  if (isFlowFx(effect)) {
     return (
       <View
         style={[
@@ -780,6 +870,9 @@ const ActiveWords: React.FC<React.ComponentProps<typeof ActiveLine>> = ({
             ms={Math.max(120, Math.min(700, (w.endSec - w.startSec) * 1000))}
             effect={effect}
             accent={accent}
+            tint={effect === 'spectrum' ? spectrumColor(accent, i) : accent}
+            seed={i}
+            settled={w.endSec + 0.4 < shownAt}
             textStyle={textStyle}
             gap={gap}
           />
@@ -822,26 +915,39 @@ const TypeLine: React.FC<{
   textStyle: any;
   accent: string;
 }> = ({ words, offset, playing, textStyle, accent }) => {
-  const [, tick] = useState(0);
+  perfCount('render:TypeLine');
+  const full = useMemo(() => words.map((w) => w.text).join(' '), [words]);
+  const typed = useCallback(() => {
+    const t = PlaybackClock.now(playing) - offset + 0.08;
+    let shown = 0;
+    let pos = 0;
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      const span = Math.max(0.12, w.endSec - w.startSec);
+      const f = Math.max(0, Math.min(1, (t - w.startSec) / span));
+      if (f <= 0) break;
+      shown = pos + Math.ceil(w.text.length * f);
+      pos += w.text.length + 1;
+      if (f < 1) break;
+      shown = Math.min(full.length, pos); // the space after a finished word
+    }
+    return shown;
+  }, [words, offset, playing, full]);
+  // checked 20×/s, but the line only re-renders when another letter is typed
+  const [shown, setShown] = useState(typed);
   useEffect(() => {
-    if (!playing) return;
-    const id = setInterval(() => tick((n) => (n + 1) % 1e6), 50);
-    return () => clearInterval(id);
-  }, [playing]);
-  const t = PlaybackClock.now(playing) - offset + 0.08;
-  const full = words.map((w) => w.text).join(' ');
-  let shown = 0;
-  let pos = 0;
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i];
-    const span = Math.max(0.12, w.endSec - w.startSec);
-    const f = Math.max(0, Math.min(1, (t - w.startSec) / span));
-    if (f <= 0) break;
-    shown = pos + Math.ceil(w.text.length * f);
-    pos += w.text.length + 1;
-    if (f < 1) break;
-    shown = Math.min(full.length, pos); // the space after a finished word
-  }
+    const update = () => {
+      if (AppActivity.isActive()) setShown(typed());
+    };
+    update();
+    const unsub = PlaybackClock.subscribe(update);
+    if (!playing) return unsub;
+    const id = setInterval(update, 50);
+    return () => {
+      clearInterval(id);
+      unsub();
+    };
+  }, [typed, playing]);
   const done = shown >= full.length;
   const ink = luminance(accent) > 0.55 ? '#111116' : '#FFFFFF';
   return (
@@ -853,76 +959,279 @@ const TypeLine: React.FC<{
   );
 };
 
-type FlowFx = 'karaoke' | 'wave' | 'focus' | 'marker' | 'glitch';
+type FlowFx =
+  | 'karaoke'
+  | 'wave'
+  | 'focus'
+  | 'marker'
+  | 'glitch'
+  | 'dissolve'
+  | 'bloom'
+  | 'spectrum'
+  | 'rain'
+  | 'lift';
+const FLOW_FX = new Set<string>([
+  'karaoke',
+  'wave',
+  'focus',
+  'marker',
+  'glitch',
+  'dissolve',
+  'bloom',
+  'spectrum',
+  'rain',
+  'lift',
+]);
+const isFlowFx = (e: LyricsEffect): e is FlowFx => FLOW_FX.has(e);
 
-/** One word of a word-by-word line. Native-driven opacity / transform only:
- *  karaoke  the lit copy fades in over the word's own duration
- *  wave     the word hops
- *  focus    a soft, haloed copy pulls into a crisp one
- *  marker   an accent band sweeps under the word over its duration
- *  glitch   red / cyan copies split off the unsung word snap back with a short jolt */
+/** how long the lit copy takes to come in, per effect (karaoke-like fills use the word's length) */
+function litMs(effect: FlowFx, ms: number): number {
+  switch (effect) {
+    case 'karaoke':
+    case 'marker':
+    case 'spectrum':
+    case 'lift':
+      return ms;
+    case 'focus':
+      return 280;
+    case 'glitch':
+      return 220;
+    case 'rain':
+      return 200;
+    case 'dissolve':
+      return 180;
+    default:
+      return 160;
+  }
+}
+
+/** dust specks of a dissolving word: where they start (% across the word) and where they fly */
+const DUST = [
+  { x: 12, dx: -9, dy: 20, r: 3, accent: true },
+  { x: 34, dx: 4, dy: 30, r: 2.5, accent: false },
+  { x: 58, dx: -3, dy: 24, r: 3.5, accent: true },
+  { x: 80, dx: 10, dy: 32, r: 2.5, accent: false },
+  { x: 46, dx: 7, dy: 16, r: 2, accent: false },
+];
+
+const IN = { inputRange: [0, 1], extrapolate: 'clamp' as const };
+
+/** One word of a word-by-word line. Native-driven opacity / transform only — every moving part is
+ *  an interpolation of one or two values, built once per word (not on each render):
+ *  karaoke   the lit copy fades in over the word's own duration
+ *  wave      the word hops
+ *  focus     a soft, haloed copy pulls into a crisp one
+ *  marker    an accent band sweeps under the word over its duration
+ *  glitch    red / cyan copies split off the unsung word snap back with a short jolt
+ *  dissolve  lights up, holds, then blurs out and crumbles into specks of light that drift up
+ *  bloom     pops open while an accent copy of the word spreads out and fades, like a ripple
+ *  spectrum  fills with its own hue of a rainbow that starts at the accent
+ *  rain      drops in from above and lands with a little bounce
+ *  lift      brightens and rises a hair over its duration (Apple Music style) */
 const FlowWord: React.FC<{
   text: string;
   lit: boolean;
   ms: number;
   effect: FlowFx;
   accent: string;
+  /** this word's colour (the spectrum hue; the accent otherwise) */
+  tint: string;
+  /** the word's index (varies the dust) */
+  seed: number;
+  /** already sung (and over) when the line appeared: shown in its final state, no entrance */
+  settled: boolean;
   textStyle: any;
   gap: number;
-}> = React.memo(({ text, lit, ms, effect, accent, textStyle, gap }) => {
-  const v = useRef(new Animated.Value(lit ? 1 : 0)).current;
-  const hop = useRef(new Animated.Value(0)).current;
+}> = React.memo(({ text, lit, ms, effect, accent, tint, seed, settled, textStyle, gap }) => {
+  const done = settled && lit;
+  const v = useAnim(done ? 1 : 0);
+  const hop = useAnim(0);
+  // dissolve: 0 → 1 as the word falls apart; bloom: the ripple
+  const d = useAnim(done && effect === 'dissolve' ? 1 : 0);
+  const fs: number = (StyleSheet.flatten(textStyle)?.fontSize as number) || 25;
+
+  // a word long sung when the line appears (opened mid-line, a seek) just sits in its final
+  // state — no burst of every earlier word replaying its entrance at once
+  const fresh = useRef(true);
+  const doneRef = useRef(done);
   useEffect(() => {
-    if (!lit) {
-      Animated.timing(v, { toValue: 0, duration: 140, useNativeDriver: true }).start();
-      return;
+    const anims: Animated.CompositeAnimation[] = [];
+    const run = (a: Animated.CompositeAnimation) => {
+      anims.push(a);
+      a.start();
+    };
+    if (fresh.current) {
+      fresh.current = false;
+      if (doneRef.current) return;
     }
-    Animated.timing(v, {
-      toValue: 1,
-      duration:
-        effect === 'karaoke' || effect === 'marker'
-          ? ms
-          : effect === 'focus'
-            ? 280
-            : effect === 'glitch'
-              ? 220
-              : 160,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
-    if (calm) return;
-    if (effect === 'wave') {
+    if (!lit) {
+      d.stopAnimation();
+      d.setValue(0);
       hop.setValue(0);
-      Animated.sequence([
-        Animated.timing(hop, {
+      run(Animated.timing(v, { toValue: 0, duration: 140, useNativeDriver: true }));
+      return () => anims.forEach((a) => a.stop());
+    }
+    run(
+      Animated.timing(v, {
+        toValue: 1,
+        duration: litMs(effect, ms),
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      })
+    );
+    if (effect === 'dissolve') {
+      // stays lit while it is sung (+ a beat), then falls apart
+      d.setValue(0);
+      run(
+        Animated.timing(d, {
           toValue: 1,
-          duration: 130,
-          easing: Easing.out(Easing.quad),
+          delay: ms + 380,
+          duration: calm ? 600 : 1000,
+          easing: Easing.in(Easing.quad),
           useNativeDriver: true,
-        }),
-        Animated.spring(hop, { toValue: 0, useNativeDriver: true, speed: 14, bounciness: 10 }),
-      ]).start();
+        })
+      );
+      return () => anims.forEach((a) => a.stop());
+    }
+    if (effect === 'bloom') {
+      d.setValue(0);
+      run(
+        Animated.timing(d, {
+          toValue: 1,
+          duration: 720,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        })
+      );
+    }
+    if (calm) return () => anims.forEach((a) => a.stop());
+    if (effect === 'wave' || effect === 'bloom' || effect === 'spectrum') {
+      hop.setValue(0);
+      run(
+        Animated.sequence([
+          Animated.timing(hop, {
+            toValue: 1,
+            duration: effect === 'wave' ? 130 : 110,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.spring(hop, {
+            toValue: 0,
+            useNativeDriver: true,
+            speed: 14,
+            bounciness: effect === 'bloom' ? 12 : 10,
+          }),
+        ])
+      );
+    } else if (effect === 'rain') {
+      // from above, landing with a bounce (the spring overshoots below the line and back)
+      hop.setValue(1);
+      run(Animated.spring(hop, { toValue: 0, useNativeDriver: true, speed: 11, bounciness: 13 }));
     } else if (effect === 'glitch') {
       // a few frames of jolt as the layers lock together
       hop.setValue(0);
-      Animated.sequence(
-        [1, -0.7, 0.45, -0.2, 0].map((x) =>
-          Animated.timing(hop, { toValue: x, duration: 36, useNativeDriver: true })
+      run(
+        Animated.sequence(
+          [1, -0.7, 0.45, -0.2, 0].map((x) =>
+            Animated.timing(hop, { toValue: x, duration: 36, useNativeDriver: true })
+          )
         )
-      ).start();
+      );
     }
-  }, [lit, ms, effect, v, hop]);
+    return () => anims.forEach((a) => a.stop());
+  }, [lit, ms, effect, v, hop, d]);
+
+  // interpolation nodes, built once per word / effect
+  const n = useMemo(() => {
+    const off = v.interpolate({ ...IN, outputRange: [1, 0] });
+    switch (effect) {
+      case 'glitch': {
+        const split = off;
+        return {
+          off,
+          splitOpacity: Animated.multiply(split, 0.6),
+          splitL: Animated.multiply(split, -2.5),
+          splitR: Animated.multiply(split, 2.5),
+          jolt: hop.interpolate({ inputRange: [-1, 1], outputRange: [-4, 4] }),
+        };
+      }
+      case 'dissolve':
+        return {
+          dustXY: DUST.map((p, k) => {
+            // each word scatters a little differently
+            const flip = (seed + k) % 2 ? 1 : -1;
+            return {
+              x: d.interpolate({ ...IN, outputRange: [0, p.dx * flip] }),
+              y: d.interpolate({
+                ...IN,
+                outputRange: [0, -(p.dy + ((seed * 7 + k * 5) % 9)) * (fs / 25)],
+              }),
+            };
+          }),
+          dustScale: d.interpolate({ ...IN, outputRange: [0.6, 0.2] }),
+          // the unsung word, then (once gone) a faint trace so the line keeps its shape
+          base: Animated.add(off, d.interpolate({ ...IN, outputRange: [0, 0.28] })),
+          crisp: Animated.multiply(
+            v,
+            d.interpolate({
+              inputRange: [0, 0.5, 1],
+              outputRange: [1, 0.2, 0],
+              extrapolate: 'clamp',
+            })
+          ),
+          halo: d.interpolate({
+            inputRange: [0, 0.35, 1],
+            outputRange: [0, 0.9, 0],
+            extrapolate: 'clamp',
+          }),
+          rise: d.interpolate({ ...IN, outputRange: [0, calm ? 0 : -fs * 0.22] }),
+          grow: d.interpolate({ ...IN, outputRange: [1, calm ? 1 : 1.07] }),
+          dust: d.interpolate({
+            inputRange: [0, 0.12, 0.7, 1],
+            outputRange: [0, 1, 0.65, 0],
+            extrapolate: 'clamp',
+          }),
+        };
+      case 'bloom':
+        return {
+          off,
+          pop: hop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.16] }),
+          ripple: d.interpolate({
+            inputRange: [0, 0.1, 1],
+            outputRange: [0, 0.5, 0],
+            extrapolate: 'clamp',
+          }),
+          rippleScale: d.interpolate({ ...IN, outputRange: [1, calm ? 1 : 1.45] }),
+        };
+      case 'rain':
+        return { off, drop: hop.interpolate({ inputRange: [0, 1], outputRange: [0, -fs * 0.8] }) };
+      case 'lift':
+        return { off, lift: v.interpolate({ ...IN, outputRange: [0, calm ? 0 : -fs * 0.1] }) };
+      case 'spectrum':
+        return {
+          off,
+          lift: hop.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }),
+          pop: hop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] }),
+        };
+      case 'focus':
+        return {
+          off,
+          scale: v.interpolate({ ...IN, outputRange: [calm ? 1 : 0.96, 1] }),
+        };
+      case 'wave':
+        return {
+          off,
+          hopY: hop.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }),
+          hopS: hop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }),
+        };
+      default:
+        return { off };
+    }
+  }, [effect, v, hop, d, fs, seed]) as Record<string, any>;
 
   if (effect === 'focus') {
     return (
-      <Animated.View
-        style={{
-          marginRight: gap,
-          transform: [
-            { scale: v.interpolate({ inputRange: [0, 1], outputRange: [calm ? 1 : 0.96, 1] }) },
-          ],
-        }}
-      >
+      <Animated.View style={{ marginRight: gap, transform: [{ scale: n.scale }] }}>
         <Animated.Text
           style={[
             textStyle,
@@ -931,7 +1240,7 @@ const FlowWord: React.FC<{
               color: 'rgba(255,255,255,0.3)',
               textShadowColor: 'rgba(255,255,255,0.75)',
               textShadowRadius: 9,
-              opacity: v.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+              opacity: n.off,
             },
             // the web can really blur
             Platform.OS === 'web' && ({ filter: 'blur(2.5px)' } as any),
@@ -972,26 +1281,14 @@ const FlowWord: React.FC<{
   }
 
   if (effect === 'glitch') {
-    const split = v.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
     return (
-      <Animated.View
-        style={{
-          marginRight: gap,
-          transform: [
-            { translateX: hop.interpolate({ inputRange: [-1, 1], outputRange: [-4, 4] }) },
-          ],
-        }}
-      >
+      <Animated.View style={{ marginRight: gap, transform: [{ translateX: n.jolt }] }}>
         <Animated.Text
           style={[
             textStyle,
             styles.wordText,
             styles.wordLit,
-            {
-              color: '#FF2D55',
-              opacity: Animated.multiply(split, 0.6),
-              transform: [{ translateX: Animated.multiply(split, -2.5) }],
-            },
+            { color: '#FF2D55', opacity: n.splitOpacity, transform: [{ translateX: n.splitL }] },
           ]}
         >
           {text}
@@ -1001,11 +1298,7 @@ const FlowWord: React.FC<{
             textStyle,
             styles.wordText,
             styles.wordLit,
-            {
-              color: '#22E4FF',
-              opacity: Animated.multiply(split, 0.6),
-              transform: [{ translateX: Animated.multiply(split, 2.5) }],
-            },
+            { color: '#22E4FF', opacity: n.splitOpacity, transform: [{ translateX: n.splitR }] },
           ]}
         >
           {text}
@@ -1020,20 +1313,172 @@ const FlowWord: React.FC<{
     );
   }
 
-  const litColor = effect === 'karaoke' ? accent : '#FFFFFF';
+  if (effect === 'dissolve') {
+    const moving = { transform: [{ translateY: n.rise }, { scale: n.grow }] };
+    return (
+      <View style={{ marginRight: gap }}>
+        <Animated.Text
+          style={[textStyle, styles.wordText, { color: 'rgba(255,255,255,0.5)', opacity: n.base }]}
+        >
+          {text}
+        </Animated.Text>
+        {/* breaking up: a soft, glowing copy takes over from the crisp one, then fades */}
+        <Animated.Text
+          style={[
+            textStyle,
+            styles.wordText,
+            styles.wordLit,
+            moving,
+            {
+              color: 'rgba(255,255,255,0.4)',
+              textShadowColor: tint,
+              textShadowRadius: 16,
+              opacity: n.halo,
+            },
+            Platform.OS === 'web' && ({ filter: 'blur(3px)' } as any),
+          ]}
+        >
+          {text}
+        </Animated.Text>
+        <Animated.Text
+          style={[
+            textStyle,
+            styles.wordText,
+            styles.wordLit,
+            moving,
+            {
+              color: '#FFFFFF',
+              textShadowColor: accent + 'CC',
+              textShadowRadius: 14,
+              opacity: n.crisp,
+            },
+          ]}
+        >
+          {text}
+        </Animated.Text>
+        {lit &&
+          !calm &&
+          DUST.slice(0, text.length > 3 ? 5 : 3).map((p, k) => (
+            <Animated.View
+              key={k}
+              pointerEvents="none"
+              style={[
+                styles.dust,
+                {
+                  left: `${p.x}%`,
+                  width: p.r * 2,
+                  height: p.r * 2,
+                  borderRadius: p.r,
+                  backgroundColor: p.accent ? accent : '#FFFFFF',
+                  shadowColor: accent,
+                  opacity: n.dust,
+                  transform: [
+                    { translateX: n.dustXY[k].x },
+                    { translateY: n.dustXY[k].y },
+                    { scale: n.dustScale },
+                  ],
+                },
+              ]}
+            />
+          ))}
+      </View>
+    );
+  }
+
+  if (effect === 'bloom') {
+    return (
+      <Animated.View style={{ marginRight: gap, transform: [{ scale: n.pop }] }}>
+        <Animated.Text
+          style={[textStyle, styles.wordText, { color: 'rgba(255,255,255,0.42)', opacity: n.off }]}
+        >
+          {text}
+        </Animated.Text>
+        {/* the ripple: an accent copy of the word that spreads out and fades */}
+        <Animated.Text
+          style={[
+            textStyle,
+            styles.wordText,
+            styles.wordLit,
+            {
+              color: accent,
+              textShadowColor: accent,
+              textShadowRadius: 18,
+              opacity: n.ripple,
+              transform: [{ scale: n.rippleScale }],
+            },
+          ]}
+        >
+          {text}
+        </Animated.Text>
+        <Animated.Text
+          style={[
+            textStyle,
+            styles.wordText,
+            styles.wordLit,
+            { color: '#FFFFFF', textShadowColor: accent, textShadowRadius: 14, opacity: v },
+          ]}
+        >
+          {text}
+        </Animated.Text>
+      </Animated.View>
+    );
+  }
+
+  if (effect === 'rain') {
+    return (
+      <View style={{ marginRight: gap }}>
+        <Animated.Text
+          style={[textStyle, styles.wordText, { color: 'rgba(255,255,255,0.24)', opacity: n.off }]}
+        >
+          {text}
+        </Animated.Text>
+        <Animated.Text
+          style={[
+            textStyle,
+            styles.wordText,
+            styles.wordLit,
+            {
+              color: '#FFFFFF',
+              textShadowColor: accent + '99',
+              textShadowRadius: 10,
+              opacity: v,
+              transform: [{ translateY: n.drop }],
+            },
+          ]}
+        >
+          {text}
+        </Animated.Text>
+      </View>
+    );
+  }
+
+  const litColor = effect === 'karaoke' ? accent : effect === 'spectrum' ? tint : '#FFFFFF';
+  const glow =
+    effect === 'karaoke'
+      ? accent + 'AA'
+      : effect === 'spectrum'
+        ? tint + 'AA'
+        : effect === 'lift'
+          ? 'rgba(255,255,255,0.55)'
+          : accent + '88';
   return (
     <Animated.View
       style={[
         { marginRight: gap },
-        effect === 'wave' && {
-          transform: [
-            { translateY: hop.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }) },
-            { scale: hop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) },
-          ],
-        },
+        effect === 'wave' && { transform: [{ translateY: n.hopY }, { scale: n.hopS }] },
+        effect === 'spectrum' && { transform: [{ translateY: n.lift }, { scale: n.pop }] },
+        effect === 'lift' && { transform: [{ translateY: n.lift }] },
       ]}
     >
-      <Text style={[textStyle, styles.wordText, { color: 'rgba(255,255,255,0.4)' }]}>{text}</Text>
+      <Text
+        style={[
+          textStyle,
+          styles.wordText,
+          { color: effect === 'lift' ? 'rgba(255,255,255,0.38)' : 'rgba(255,255,255,0.4)' },
+        ]}
+      >
+        {text}
+      </Text>
       <Animated.Text
         style={[
           textStyle,
@@ -1042,8 +1487,8 @@ const FlowWord: React.FC<{
           {
             color: litColor,
             opacity: v,
-            textShadowColor: effect === 'karaoke' ? accent + 'AA' : accent + '88',
-            textShadowRadius: 12,
+            textShadowColor: glow,
+            textShadowRadius: effect === 'lift' ? 10 : 12,
           },
         ]}
       >
@@ -1151,8 +1596,8 @@ const LineScale: React.FC<{
   origin: 'left' | 'center' | 'right';
   children: React.ReactNode;
 }> = ({ scale, opacity, origin, children }) => {
-  const s = useRef(new Animated.Value(scale)).current;
-  const o = useRef(new Animated.Value(opacity)).current;
+  const s = useAnim(scale);
+  const o = useAnim(opacity);
   useEffect(() => {
     Animated.parallel([
       Animated.spring(s, { toValue: scale, useNativeDriver: true, speed: 20, bounciness: 3 }),
@@ -1319,6 +1764,14 @@ const styles = StyleSheet.create({
   wordText: { textAlign: 'left' },
   wordLit: { position: 'absolute', left: 0, top: 0 },
   // a highlighter stroke: the lower ⅔ of the line, slightly past the word's start
+  // a speck of a dissolving word (starts on the word's middle, flies up as it fades)
+  dust: {
+    position: 'absolute',
+    top: '46%',
+    shadowOpacity: 0.9,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 0 },
+  },
   markerBand: {
     position: 'absolute',
     left: -3,

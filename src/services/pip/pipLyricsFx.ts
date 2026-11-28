@@ -24,7 +24,117 @@ export function estimateWords(text: string, start: number, end: number): PipWord
 }
 
 /** effects that move between frames (the render loop runs faster for them) */
-export const ANIMATED_FX = new Set(['glow', 'wave', 'focus', 'typewriter', 'glitch']);
+export const ANIMATED_FX = new Set([
+  'glow',
+  'wave',
+  'focus',
+  'typewriter',
+  'glitch',
+  'dissolve',
+  'bloom',
+  'spectrum',
+  'rain',
+  'lift',
+]);
+
+/** The words of the sung line — real timing, or estimated (cached: asked for every frame) */
+let wordsMemo: { text: string; start: number; end: number; words: PipWord[] } | null = null;
+export function lineWords(
+  text: string,
+  real: PipWord[] | null | undefined,
+  start: number,
+  end: number
+): PipWord[] {
+  if (real && real.length) return real;
+  const m = wordsMemo;
+  if (m && m.text === text && m.start === start && m.end === end) return m.words;
+  const words = estimateWords(text, start, end);
+  wordsMemo = { text, start, end, words };
+  return words;
+}
+
+const clampMs = (w: PipWord) => Math.max(0.12, Math.min(0.7, w.end - w.start));
+/** dissolve: when a word starts to fall apart (it stays lit while sung, + a beat), and how long */
+const dissolveAt = (w: PipWord) => w.start + clampMs(w) + 0.38;
+const DISSOLVE_S = 1;
+
+/**
+ * Is anything on the sung line moving at lyrics time `t`? The render loop only draws a new frame
+ * while it is (plus on word starts / progress steps) — a still line costs nothing between words.
+ */
+export function fxBusy(fx: string, words: PipWord[], lineStart: number, t: number): boolean {
+  const within = (after: number) => words.some((w) => t >= w.start && t < w.start + after);
+  switch (fx) {
+    case 'glow':
+      return t - lineStart < 0.4;
+    case 'karaoke':
+    case 'marker':
+    case 'typewriter':
+    case 'lift':
+      return words.some(
+        (w) => t >= w.start && t < w.start + Math.max(0.12, w.end - w.start) + 0.05
+      );
+    case 'spectrum':
+      return words.some((w) => t >= w.start && t < w.start + Math.max(0.5, w.end - w.start) + 0.05);
+    case 'wave':
+      return within(0.6);
+    case 'focus':
+      return within(0.3);
+    case 'glitch':
+      return within(0.25);
+    case 'bloom':
+      return within(0.75);
+    case 'rain':
+      return within(0.7);
+    case 'dissolve':
+      return words.some((w) => t >= w.start && t < dissolveAt(w) + DISSOLVE_S + 0.05);
+    default:
+      return false;
+  }
+}
+
+/** how many words have started (line-level effects only change then) */
+export function wordsStarted(words: PipWord[], t: number): number {
+  let n = 0;
+  while (n < words.length && words[n].start <= t) n++;
+  return n;
+}
+
+/** The i-th spectrum colour from the accent's hue (same as the app's spectrumColor) */
+function spectrumHex(accent: string, i: number): string {
+  const [r, g, b] = hexRgb(accent).map((c) => c / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 265;
+  if (d > 0) {
+    h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  h = (((h + i * 32) % 360) + 360) % 360;
+  const l = 0.7;
+  const c = (1 - Math.abs(2 * l - 1)) * 0.85;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [R, G, B] =
+    h < 60
+      ? [c, x, 0]
+      : h < 120
+        ? [x, c, 0]
+        : h < 180
+          ? [0, c, x]
+          : h < 240
+            ? [0, x, c]
+            : h < 300
+              ? [x, 0, c]
+              : [c, 0, x];
+  const hx = (v: number) =>
+    Math.round((v + m) * 255)
+      .toString(16)
+      .padStart(2, '0');
+  return `#${hx(R)}${hx(G)}${hx(B)}`;
+}
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif';
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -187,7 +297,33 @@ interface Box {
   gap: number;
 }
 
+/** the last layout (re-measuring every word of the line each frame was most of a frame's cost) */
+let layoutMemo: {
+  key: string;
+  words: PipWord[];
+  out: { boxes: Box[]; fs: number };
+} | null = null;
+
 function layout(
+  ctx: CanvasRenderingContext2D,
+  words: PipWord[],
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  size: number,
+  maxLines: number,
+  align: CanvasTextAlign
+): { boxes: Box[]; fs: number } {
+  const key = `${x}|${y}|${w}|${h}|${size}|${maxLines}|${align}`;
+  const m = layoutMemo;
+  if (m && m.words === words && m.key === key) return m.out;
+  const out = measureLayout(ctx, words, x, y, w, h, size, maxLines, align);
+  layoutMemo = { key, words, out };
+  return out;
+}
+
+function measureLayout(
   ctx: CanvasRenderingContext2D,
   words: PipWord[],
   x: number,
@@ -284,12 +420,16 @@ export interface SungOpts {
 
 /** The sung line with the chosen lyrics effect. */
 /** Reduce Motion (web): no hops, jolts or zoom — colour and fades only */
-const calm = () =>
-  typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+let calmQuery: MediaQueryList | null = null;
+const calm = () => {
+  if (typeof matchMedia !== 'function') return false;
+  if (!calmQuery) calmQuery = matchMedia('(prefers-reduced-motion: reduce)');
+  return calmQuery.matches;
+};
 
 export function drawSung(ctx: CanvasRenderingContext2D, o: SungOpts) {
   const real = !!(o.words && o.words.length);
-  const words = real ? (o.words as PipWord[]) : estimateWords(o.text, o.lineStart, o.lineEnd);
+  const words = lineWords(o.text, o.words, o.lineStart, o.lineEnd);
   if (!words.length) return;
   const { boxes, fs } = layout(ctx, words, o.x, o.y, o.w, o.h, o.size, o.maxLines, o.align);
   const fx = o.effect;
@@ -461,6 +601,177 @@ export function drawSung(ctx: CanvasRenderingContext2D, o: SungOpts) {
       ctx.fillStyle = age >= 0 ? '#FFFFFF' : 'rgba(255,255,255,0.5)';
       ctx.fillText(b.w.text, b.x + jolt, b.y);
     }
+  } else if (fx === 'dissolve') {
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      const age = t - b.w.start;
+      if (age < 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillText(b.w.text, b.x, b.y);
+        continue;
+      }
+      const raw = clamp01((t - dissolveAt(b.w)) / DISSOLVE_S);
+      const k = raw * raw; // eases in, like the app
+      if (k <= 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.5 + 0.5 * clamp01(age / 0.18);
+        ctx.shadowColor = rgba(o.accent, 0.8);
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(b.w.text, b.x, b.y);
+        ctx.restore();
+        continue;
+      }
+      // a faint trace keeps the line's shape
+      ctx.fillStyle = `rgba(255,255,255,${0.14 * k})`;
+      ctx.fillText(b.w.text, b.x, b.y);
+      const dy = still ? 0 : -fs * 0.22 * k;
+      const crisp = k < 0.5 ? 1 - 1.6 * k : Math.max(0, 0.2 - 0.4 * (k - 0.5));
+      const halo = k < 0.35 ? (k / 0.35) * 0.9 : 0.9 * (1 - (k - 0.35) / 0.65);
+      if (halo > 0.01) blurText(ctx, b.w.text, b.x, b.y + dy, rgba(o.accent, halo), 10);
+      if (crisp > 0.01) {
+        ctx.save();
+        ctx.globalAlpha = crisp;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(b.w.text, b.x, b.y + dy);
+        ctx.restore();
+      }
+      if (still) continue;
+      // specks of light drift up and away
+      const dust =
+        k < 0.12
+          ? k / 0.12
+          : k < 0.7
+            ? 1 - ((k - 0.12) / 0.58) * 0.35
+            : 0.65 * (1 - (k - 0.7) / 0.3);
+      ctx.save();
+      ctx.shadowColor = o.accent;
+      ctx.shadowBlur = 6;
+      const n = b.w.text.length > 3 ? 5 : 3;
+      for (let j = 0; j < n; j++) {
+        const p = DUST[j];
+        const flip = (i + j) % 2 ? 1 : -1;
+        const r = p.r * (fs / 25) * (0.6 - 0.4 * k) * 1.6;
+        ctx.globalAlpha = Math.max(0, dust);
+        ctx.fillStyle = p.accent ? o.accent : '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(
+          b.x + (b.width * p.x) / 100 + p.dx * flip * k * (fs / 25),
+          b.y + fs * 0.55 - (p.dy + ((i * 7 + j * 5) % 9)) * (fs / 25) * k * 1.4,
+          Math.max(0.6, r),
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  } else if (fx === 'bloom') {
+    for (const b of boxes) {
+      const age = t - b.w.start;
+      if (age < 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.42)';
+        ctx.fillText(b.w.text, b.x, b.y);
+        continue;
+      }
+      const cx = b.x + b.width / 2;
+      const cy = b.y + fs * 0.6;
+      // the ripple: an accent copy that spreads out and fades
+      const k = clamp01(age / 0.72);
+      const e = 1 - Math.pow(1 - k, 3);
+      const ra = k < 0.1 ? (k / 0.1) * 0.5 : 0.5 * (1 - (k - 0.1) / 0.9);
+      if (ra > 0.01) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        const rs = still ? 1 : 1 + 0.45 * e;
+        ctx.scale(rs, rs);
+        ctx.translate(-cx, -cy);
+        ctx.globalAlpha = ra;
+        ctx.shadowColor = o.accent;
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = o.accent;
+        ctx.fillText(b.w.text, b.x, b.y);
+        ctx.restore();
+      }
+      // the pop: up to 1.16×, settling with a little spring
+      const pop = still
+        ? 1
+        : age < 0.11
+          ? 1 + 0.16 * (age / 0.11)
+          : 1 + 0.16 * Math.exp(-(age - 0.11) * 9) * Math.cos((age - 0.11) * 16);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(pop, pop);
+      ctx.translate(-cx, -cy);
+      ctx.globalAlpha = 0.42 + 0.58 * clamp01(age / 0.16);
+      ctx.shadowColor = o.accent;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(b.w.text, b.x, b.y);
+      ctx.restore();
+    }
+  } else if (fx === 'spectrum') {
+    boxes.forEach((b, i) => {
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText(b.w.text, b.x, b.y);
+      const f = frac(b.w);
+      if (f <= 0) return;
+      const hue = spectrumHex(o.accent, i);
+      const age = t - b.w.start;
+      const lift =
+        still || age > 0.6
+          ? 0
+          : age < 0.11
+            ? -4 * (age / 0.11)
+            : -4 * Math.exp(-(age - 0.11) * 9) * Math.cos((age - 0.11) * 14);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(b.x - 2, b.y - 10, (b.width + 4) * f, fs * 1.2 + 20);
+      ctx.clip();
+      ctx.shadowColor = rgba(hue, 0.7);
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = hue;
+      ctx.fillText(b.w.text, b.x, b.y + lift);
+      ctx.restore();
+    });
+  } else if (fx === 'rain') {
+    for (const b of boxes) {
+      const age = t - b.w.start;
+      if (age < 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.24)';
+        ctx.fillText(b.w.text, b.x, b.y);
+        continue;
+      }
+      // falls from above and lands with a bounce (a damped spring around the line)
+      const dy = still ? 0 : -fs * 0.8 * Math.exp(-age * 7.5) * Math.cos(age * 13);
+      const a = clamp01(age / 0.2);
+      if (a < 1) {
+        ctx.fillStyle = `rgba(255,255,255,${0.24 * (1 - a)})`;
+        ctx.fillText(b.w.text, b.x, b.y);
+      }
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.shadowColor = rgba(o.accent, 0.6);
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(b.w.text, b.x, b.y + dy);
+      ctx.restore();
+    }
+  } else if (fx === 'lift') {
+    for (const b of boxes) {
+      const f = frac(b.w);
+      const e = 1 - (1 - f) * (1 - f);
+      ctx.fillStyle = `rgba(255,255,255,${0.38 * (1 - f)})`;
+      if (f < 1) ctx.fillText(b.w.text, b.x, b.y);
+      if (f <= 0) continue;
+      ctx.save();
+      ctx.globalAlpha = e;
+      ctx.shadowColor = 'rgba(255,255,255,0.55)';
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(b.w.text, b.x, b.y - (still ? 0 : fs * 0.1 * e));
+      ctx.restore();
+    }
   } else {
     // depth / minimal: bright and dim (depth adds a soft white halo to the sung words)
     for (const b of boxes) {
@@ -475,6 +786,15 @@ export function drawSung(ctx: CanvasRenderingContext2D, o: SungOpts) {
   }
   ctx.restore();
 }
+
+/** dust specks of a dissolving word (same as the app's): x % across, drift, radius */
+const DUST = [
+  { x: 12, dx: -9, dy: 20, r: 3, accent: true },
+  { x: 34, dx: 4, dy: 30, r: 2.5, accent: false },
+  { x: 58, dx: -3, dy: 24, r: 3.5, accent: true },
+  { x: 80, dx: 10, dy: 32, r: 2.5, accent: false },
+  { x: 46, dx: 7, dy: 16, r: 2, accent: false },
+];
 
 /** How a neighbouring (not sung) line looks in this effect */
 export function contextLine(
@@ -491,7 +811,8 @@ export function contextLine(
     case 'focus':
       return { color: `rgba(255,255,255,${d === 1 ? 0.6 : 0.4})`, blur: 7 + d * 2 };
     case 'typewriter':
-      return { color: `rgba(255,255,255,${d === 1 ? 0.22 : 0.14})`, blur: 0 };
+    case 'rain':
+      return { color: `rgba(255,255,255,${d === 1 ? 0.24 : 0.14})`, blur: 0 };
     default:
       return { color: `rgba(255,255,255,${d === 1 ? 0.5 : 0.28})`, blur: 0 };
   }

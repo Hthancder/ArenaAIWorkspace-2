@@ -26,7 +26,7 @@ export interface PipMeta {
   /** "Up next · Title — Artist" — shown when there are no lyrics on screen ('' = none) */
   upNext: string;
   /** the lyrics effect (LyricsEffect id: glow, karaoke, wave, depth, neon, minimal, focus,
-   *  typewriter, marker, glitch) — older builds ignore it */
+   *  typewriter, marker, glitch, dissolve, bloom, spectrum, rain, lift) — older builds ignore it */
   effect?: string;
   /** the player's ambient light: #rrggbb × 6 — primary, dark base, then the cover's four corners
    *  (top-left, top-right, bottom-left, bottom-right); [] = plain accent gradient */

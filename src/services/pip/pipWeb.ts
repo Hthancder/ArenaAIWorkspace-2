@@ -15,6 +15,9 @@ import {
   drawAmbient,
   drawSeekBar,
   drawSung,
+  fxBusy,
+  lineWords,
+  wordsStarted,
   type PipWord,
 } from './pipLyricsFx';
 
@@ -506,8 +509,26 @@ class WebPip {
       fill = Math.max(0, Math.min(1, (pos - start) / Math.max(0.3, Math.min(end - start, 12))));
     }
     const progressPx = m.duration > 0 ? Math.floor((pos / m.duration) * 600) : 0;
-    const anim = idx >= 0 && ANIMATED_FX.has(m.effect || 'glow') ? Math.floor(pos * 20) : 0;
-    const key = `${idx}|${Math.floor(fill * 60)}|${progressPx}|${this.playing}|${Math.floor(pos)}|${anim}`;
+    // a new frame only when something changes: a word starts, an effect is mid-motion, the bar
+    // moves a pixel step, the second ticks — a still line between words costs nothing
+    let anim = 0;
+    let started = 0;
+    if (idx >= 0) {
+      const l = this.lyr;
+      const ls = l.starts[idx];
+      const le =
+        idx + 1 < l.starts.length
+          ? l.starts[idx + 1]
+          : m.duration > 0
+            ? Math.min(ls + 8, m.duration - l.offset - 0.3)
+            : ls + 5;
+      const words = lineWords(l.texts[idx] || '', this.words[idx], ls, le);
+      const t = pos - l.offset + LEAD;
+      started = wordsStarted(words, t);
+      if (ANIMATED_FX.has(m.effect || 'glow') && fxBusy(m.effect || 'glow', words, ls, t))
+        anim = Math.floor(pos * 20);
+    }
+    const key = `${idx}|${started}|${progressPx}|${this.playing}|${Math.floor(pos)}|${anim}`;
     this.updateDocUi(pos);
     if (!force && key === this.lastKey) return;
     this.lastKey = key;

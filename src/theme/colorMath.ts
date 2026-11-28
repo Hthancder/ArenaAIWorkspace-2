@@ -100,6 +100,15 @@ export function backgroundTone(hex: string, scheme: UiScheme, depth = 1): string
   return toHex(hslToRgb(h, Math.min(s, 0.62) * d, 0.045 + (L - 0.045) * d));
 }
 
+/** The i-th colour of a bright spectrum that starts at `hex`'s hue (Sắc màu lyrics effect):
+ *  each step turns the hue by 32°, always vivid and light enough to read on the dark player.
+ *  (The iOS PiP renderer uses the same steps: HSB s 0.53, b 0.955 ≈ HSL s 0.85, l 0.7.) */
+export function spectrumColor(hex: string, i: number): string {
+  const c = parseHex(hex);
+  const h0 = c ? rgbToHsl(c)[0] : 265;
+  return toHex(hslToRgb((((h0 + i * 32) % 360) + 360) % 360, 0.85, 0.7));
+}
+
 /** Relative luminance 0..1 (for picking a readable tint) */
 export function luminance(hex: string): number {
   const c = parseHex(hex);

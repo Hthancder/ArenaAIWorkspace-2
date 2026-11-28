@@ -33,7 +33,13 @@ export type LyricsEffect =
   | 'focus'
   | 'typewriter'
   | 'marker'
-  | 'glitch';
+  | 'glitch'
+  // Phase 22 — word by word: dissolve to dust, bloom, spectrum, falling words, Apple-style lift
+  | 'dissolve'
+  | 'bloom'
+  | 'spectrum'
+  | 'rain'
+  | 'lift';
 export type LyricsSize = 'S' | 'M' | 'L';
 
 /** Background colour presets for the 'color' backdrop (dark tone, light tone) */

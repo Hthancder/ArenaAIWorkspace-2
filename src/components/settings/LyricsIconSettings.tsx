@@ -18,7 +18,7 @@ import {
 } from '../../services/lyrics/lyricsStore';
 import { T as UI, themedSheet } from '../../theme/ui';
 import { LYRICS_EFFECTS } from '../player/LyricsView';
-import { luminance } from '../../theme/colorMath';
+import { luminance, spectrumColor } from '../../theme/colorMath';
 import { Tap } from '../ui/Tap';
 import { Pip, usePipState } from '../../services/pip/pip';
 import type { HolySicShortcutsNative } from '../../../modules/holysic-shortcuts';
@@ -135,6 +135,117 @@ const EffectSample: React.FC<{ id: LyricsEffect; accent: string }> = ({ id, acce
             </Text>
             <Text style={[base, { color: dim }]}>nào</Text>
           </View>
+        </View>
+      );
+    case 'dissolve':
+      return (
+        <View style={{ flexDirection: 'row' }}>
+          <View>
+            <Text style={[base, { color: 'rgba(255,255,255,0.14)' }]}>Hát </Text>
+            {[
+              [8, -2, 3],
+              [16, -8, 2],
+              [4, -12, 2],
+              [20, -15, 1.5],
+            ].map(([x, y, r], k) => (
+              <View
+                key={k}
+                style={{
+                  position: 'absolute',
+                  left: x,
+                  top: 8 + y,
+                  width: r * 2,
+                  height: r * 2,
+                  borderRadius: r,
+                  backgroundColor: k % 2 ? '#FFF' : accent,
+                  opacity: 0.85 - k * 0.15,
+                }}
+              />
+            ))}
+          </View>
+          <Text style={[base, { color: '#FFF', textShadowColor: accent, textShadowRadius: 10 }]}>
+            lên{' '}
+          </Text>
+          <Text style={[base, { color: 'rgba(255,255,255,0.5)' }]}>nào</Text>
+        </View>
+      );
+    case 'bloom':
+      return (
+        <View style={{ flexDirection: 'row' }}>
+          <Text style={[base, { color: '#FFF' }]}>Hát </Text>
+          <View>
+            <Text
+              style={[
+                base,
+                {
+                  color: accent,
+                  opacity: 0.45,
+                  position: 'absolute',
+                  textShadowColor: accent,
+                  textShadowRadius: 10,
+                  transform: [{ scale: 1.35 }],
+                },
+              ]}
+            >
+              lên
+            </Text>
+            <Text style={[base, { color: '#FFF', textShadowColor: accent, textShadowRadius: 8 }]}>
+              lên{' '}
+            </Text>
+          </View>
+          <Text style={[base, { color: dim }]}>nào</Text>
+        </View>
+      );
+    case 'spectrum':
+      return (
+        <Text style={base}>
+          {['Hát', 'lên', 'nào'].map((w, i) => (
+            <Text
+              key={w}
+              style={
+                i < 2
+                  ? {
+                      color: spectrumColor(accent, i),
+                      textShadowColor: spectrumColor(accent, i) + '99',
+                      textShadowRadius: 8,
+                    }
+                  : { color: dim }
+              }
+            >
+              {w}
+              {i < 2 ? ' ' : ''}
+            </Text>
+          ))}
+        </Text>
+      );
+    case 'rain':
+      return (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+          <Text style={[base, { color: '#FFF' }]}>Hát lên </Text>
+          <Text
+            style={[base, { color: 'rgba(255,255,255,0.55)', transform: [{ translateY: -7 }] }]}
+          >
+            nào
+          </Text>
+        </View>
+      );
+    case 'lift':
+      return (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+          <Text
+            style={[
+              base,
+              {
+                color: '#FFF',
+                textShadowColor: 'rgba(255,255,255,0.5)',
+                textShadowRadius: 8,
+                transform: [{ translateY: -2 }],
+              },
+            ]}
+          >
+            Hát lên{' '}
+          </Text>
+          <Text style={[base, { color: 'rgba(255,255,255,0.38)' }]}>nào</Text>
         </View>
       );
     default:
