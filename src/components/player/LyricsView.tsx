@@ -66,12 +66,13 @@ export const LyricsView: React.FC = () => {
     isPlaying,
     showToast,
     isOnline,
+    isPlayerOpen,
   } = useHolySic();
   const clockIndex = useActiveLyricIndex();
   const vi = prefs.language === 'vi';
   const effect = effectOf(prefs.lyricsEffect);
   // depth on the lyrics page: the sung line floats in front (Settings › Motion effects)
-  const lyricsTilt = useTilt(prefs.motionLyrics !== false && !!lyrics?.synced);
+  const lyricsTilt = useTilt(prefs.motionLyrics !== false && !!lyrics?.synced && isPlayerOpen);
   useStoredLyrics();
   const stored = storedLyricsInfo(currentTrack);
   const openEditor = (tab?: 'search' | 'write') => {

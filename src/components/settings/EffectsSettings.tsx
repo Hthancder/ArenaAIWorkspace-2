@@ -725,6 +725,31 @@ export const EffectsSettings: React.FC<{ fontFamily?: string; part?: 'backdrop' 
                       ? 'Hiệu ứng tự canh tâm theo cách bạn đang cầm máy. Cảm biến chỉ chạy khi hiệu ứng đang hiện và tắt khi app chạy nền.'
                       : 'It re-centres on however you hold the phone. The sensor runs only while an effect is on screen and stops in the background.'}
                 </Text>
+                <Tap
+                  onPress={() => {
+                    const d = DEFAULT_PREFERENCES;
+                    set({
+                      motionFx: d.motionFx,
+                      motionCover: d.motionCover,
+                      motionCoverEdge: d.motionCoverEdge,
+                      motionLyrics: d.motionLyrics,
+                      motionTabs: d.motionTabs,
+                      motionTabScenes: { ...d.motionTabScenes },
+                      motionTabLevel: d.motionTabLevel,
+                      motionVinyl: d.motionVinyl,
+                      motionDust: d.motionDust,
+                      motionBackdrop: d.motionBackdrop,
+                    });
+                    showToast(vi ? 'Đã đặt lại hiệu ứng chuyển động' : 'Motion effects reset');
+                  }}
+                  style={styles.resetLink}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="refresh" size={13} color={palette.accent} />
+                  <Text style={[styles.resetLinkText, { color: palette.accent }]}>
+                    {vi ? 'Đặt lại mặc định' : 'Reset to defaults'}
+                  </Text>
+                </Tap>
               </>
             )}
           </View>
@@ -873,6 +898,14 @@ const styles = themedSheet(() => ({
     borderWidth: 1,
   },
   tabChipText: { fontSize: 12.5, fontWeight: '700' },
+  resetLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    paddingVertical: 10,
+  },
+  resetLinkText: { fontSize: 13, fontWeight: '700' },
   note: { color: HOLYSIC_COLORS.aacAmber, fontSize: 12, lineHeight: 17, marginTop: 10 },
   switchRow: {
     flexDirection: 'row',

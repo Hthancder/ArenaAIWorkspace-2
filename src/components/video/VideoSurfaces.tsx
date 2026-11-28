@@ -256,12 +256,12 @@ export const MusicVideoStage: React.FC<{
               }
             >
               {st.synced && <View style={[styles.dot, { backgroundColor: accent }]} />}
-              {st.local && <Ionicons name="arrow-down-circle" size={11} color="#fff" />}
+              {st.local && <Ionicons name="arrow-down-circle" size={12} color="#fff" />}
               <Text style={styles.badgeText}>
                 {st.height ? `MV · ${st.height >= 1080 ? '1080p' : `${st.height}p`}` : 'MV'}
               </Text>
               {onBadgePress && (
-                <Ionicons name="chevron-down" size={10} color="rgba(255,255,255,0.8)" />
+                <Ionicons name="chevron-down" size={11} color="rgba(255,255,255,0.85)" />
               )}
             </Tap>
           </Animated.View>
@@ -287,7 +287,7 @@ export const MusicVideoStage: React.FC<{
                   >
                     <Ionicons
                       name={lyricsOn ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
-                      size={14}
+                      size={16}
                       color="#fff"
                     />
                   </Tap>
@@ -296,7 +296,7 @@ export const MusicVideoStage: React.FC<{
               {onExpand && (
                 <Animated.View
                   style={{
-                    opacity: chromeOp.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }),
+                    opacity: chromeOp.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }),
                   }}
                 >
                   <Tap
@@ -310,7 +310,7 @@ export const MusicVideoStage: React.FC<{
                     accessibilityRole="button"
                     accessibilityLabel={vi ? 'Xem MV toàn màn hình' : 'Watch full screen'}
                   >
-                    <Ionicons name="expand" size={15} color="#fff" />
+                    <Ionicons name="expand" size={16} color="#fff" />
                   </Tap>
                 </Animated.View>
               )}
@@ -441,26 +441,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  // Crisp controls over a moving picture (Phase 26): a solid, darker disc with a clean hairline
+  // (no half-transparent wash that blurs into the video), icons drawn on whole pixel sizes
   cornerBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(12,12,16,0.72)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.25)',
+    borderColor: 'rgba(255,255,255,0.32)',
   },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 99,
-    borderWidth: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(12,12,16,0.72)',
   },
   dot: { width: 6, height: 6, borderRadius: 3 },
-  badgeText: { color: '#fff', fontSize: 10.5, fontWeight: '800', letterSpacing: 0.6 },
+  badgeText: { color: '#fff', fontSize: 11.5, fontWeight: '800', letterSpacing: 0.5 },
 });

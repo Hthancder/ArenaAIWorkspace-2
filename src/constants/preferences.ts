@@ -424,7 +424,7 @@ export const DEFAULT_PREFERENCES: HolySicPreferences = {
   videoAmbientApp: true,
   videoAmbientWhenHidden: true,
   videoAmbientLevel: 0.6,
-  videoQuality: 720,
+  videoQuality: 1080,
   videoAudio: true,
   videoWifiOnly: false,
   videoAutoPlay: true,
